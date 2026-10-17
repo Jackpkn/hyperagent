@@ -7,22 +7,32 @@ import {
   ChevronDown,
   ChevronUp,
   Circle,
+  Database,
+  FileCheck2,
   Info,
   ListChecks,
   MessageSquare,
 } from "lucide-react";
-import type { Approval, Frame, PlanItem, StepRecord } from "@/lib/protocol";
+import type { Approval, Finding, Frame, PlanItem, RunResult, StepRecord, Usage } from "@/lib/protocol";
 import type { FeedItem } from "@/lib/agent-state";
 import { ApprovalCard } from "./ApprovalCard";
+import { FindingCard } from "./ResultsPanel";
+import { ResultReport } from "./ResultReport";
 import { StepCard } from "./StepCard";
 
-const NEAR_BOTTOM_PX = 80;
+const NEAR_BOTTOM_PX = 100;
 
 interface TimelineProps {
   plan: PlanItem[];
   steps: StepRecord[];
   feed: FeedItem[];
   approvals: Record<string, Approval>;
+  findings?: Finding[];
+  result?: RunResult | null;
+  previousResult?: RunResult | null;
+  usage?: Usage | null;
+  finished?: boolean;
+  endedWithoutResult?: string | null;
   stepFrames?: Record<string, Frame>;
   selectedStepId?: string | null;
   now: number;
@@ -43,6 +53,12 @@ export function Timeline({
   steps,
   feed,
   approvals,
+  findings = [],
+  result = null,
+  previousResult = null,
+  usage = null,
+  finished = false,
+  endedWithoutResult = null,
   stepFrames,
   selectedStepId,
   now,
@@ -51,8 +67,10 @@ export function Timeline({
   onReject,
 }: TimelineProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const resultAnchorRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
   const [planOpen, setPlanOpen] = useState(false);
+  const [findingsOpen, setFindingsOpen] = useState(true);
 
   const stepById = useMemo(() => new Map(steps.map((step) => [step.id, step])), [steps]);
   const doneCount = useMemo(
@@ -64,12 +82,24 @@ export function Timeline({
     [plan],
   );
 
+  // Collapse intermediate findings drawer automatically once the final report arrives so the report is front-and-center.
+  useEffect(() => {
+    if (result) {
+      setFindingsOpen(false);
+      requestAnimationFrame(() => {
+        resultAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      });
+    } else {
+      setFindingsOpen(true);
+    }
+  }, [result]);
+
   useEffect(() => {
     const element = scrollRef.current;
     if (element && stickToBottom.current) {
       element.scrollTop = element.scrollHeight;
     }
-  }, [feed.length, steps, approvals]);
+  }, [feed.length, steps, approvals, findings.length, result]);
 
   const onScroll = () => {
     const element = scrollRef.current;
@@ -129,76 +159,136 @@ export function Timeline({
         }}
         onTouchStart={releaseStick}
       >
-        {feed.length === 0 ? (
+        {feed.length === 0 && !result && findings.length === 0 ? (
           <div className="empty-state">
             <Circle size={20} className="empty-icon" aria-hidden="true" />
             <p className="empty-title">Starting run</p>
-            <p className="empty-sub">The agent&apos;s actions and reasoning will stream here live.</p>
+            <p className="empty-sub">The agent&apos;s actions, thinking, findings, and final report will stream here live.</p>
           </div>
         ) : (
-          <div className="feed">
-            {feed.map((item) => {
-              if (item.kind === "notice") {
-                return (
-                  <div key={item.key} className="feed-row feed-notice">
-                    <div
-                      className="notice"
-                      data-level={item.level}
-                      role={item.level === "error" ? "alert" : "status"}
-                    >
-                      {item.level === "error" || item.level === "warn" ? (
-                        <AlertTriangle size={14} className="notice-icon" aria-hidden="true" />
-                      ) : (
-                        <Info size={14} className="notice-icon" aria-hidden="true" />
-                      )}
-                      <span>{item.message}</span>
-                    </div>
-                  </div>
-                );
-              }
-              if (item.kind === "guidance") {
-                return (
-                  <div key={item.key} className="feed-row feed-guidance">
-                    <div className="guidance-bubble">
-                      <span className="guidance-meta">
-                        <MessageSquare size={11} aria-hidden="true" /> You
-                      </span>
-                      {item.text}
-                    </div>
-                  </div>
-                );
-              }
-              const step = stepById.get(item.stepId);
-              if (!step) return null;
-              const approval = approvals[step.id];
-              const hasSnapshot = Boolean(stepFrames?.[step.id]);
-              const selected = selectedStepId === step.id;
-              return (
-                <div key={item.key} className="feed-row" data-status={step.status}>
-                  <span className="spine-dot" aria-hidden="true" />
-                  <StepCard
-                    step={step}
-                    now={now}
-                    selected={selected}
-                    hasSnapshot={hasSnapshot}
-                    onSelect={
-                      onSelectStep
-                        ? () => onSelectStep(selected ? null : step.id)
-                        : undefined
-                    }
-                  />
-                  {approval ? (
-                    <div style={{ marginTop: 10 }}>
-                      <ApprovalCard
-                        approval={approval}
-                        onApprove={onApprove}
-                        onReject={onReject}
+          <div className="stream-stack">
+            {feed.length > 0 ? (
+              <div className="feed">
+                {feed.map((item) => {
+                  if (item.kind === "notice") {
+                    return (
+                      <div key={item.key} className="feed-row feed-notice">
+                        <div
+                          className="notice"
+                          data-level={item.level}
+                          role={item.level === "error" ? "alert" : "status"}
+                        >
+                          {item.level === "error" || item.level === "warn" ? (
+                            <AlertTriangle size={14} className="notice-icon" aria-hidden="true" />
+                          ) : (
+                            <Info size={14} className="notice-icon" aria-hidden="true" />
+                          )}
+                          <span>{item.message}</span>
+                        </div>
+                      </div>
+                    );
+                  }
+                  if (item.kind === "guidance") {
+                    return (
+                      <div key={item.key} className="feed-row feed-guidance">
+                        <div className="guidance-bubble">
+                          <span className="guidance-meta">
+                            <MessageSquare size={11} aria-hidden="true" /> You
+                          </span>
+                          {item.text}
+                        </div>
+                      </div>
+                    );
+                  }
+                  const step = stepById.get(item.stepId);
+                  if (!step) return null;
+                  const approval = approvals[step.id];
+                  const hasSnapshot = Boolean(stepFrames?.[step.id]);
+                  const selected = selectedStepId === step.id;
+                  return (
+                    <div key={item.key} className="feed-row" data-status={step.status}>
+                      <span className="spine-dot" aria-hidden="true" />
+                      <StepCard
+                        step={step}
+                        now={now}
+                        selected={selected}
+                        hasSnapshot={hasSnapshot}
+                        onSelect={
+                          onSelectStep
+                            ? () => onSelectStep(selected ? null : step.id)
+                            : undefined
+                        }
                       />
+                      {approval ? (
+                        <div style={{ marginTop: 10 }}>
+                          <ApprovalCard
+                            approval={approval}
+                            onApprove={onApprove}
+                            onReject={onReject}
+                          />
+                        </div>
+                      ) : null}
                     </div>
-                  ) : null}
+                  );
+                })}
+              </div>
+            ) : null}
+
+            {findings.length > 0 ? (
+              <Collapsible.Root
+                open={findingsOpen}
+                onOpenChange={setFindingsOpen}
+                className="stream-section-card"
+              >
+                <Collapsible.Trigger asChild>
+                  <button type="button" className="stream-section-trigger">
+                    <span className="stream-section-title">
+                      <Database size={13} aria-hidden="true" />
+                      <span>Collected Findings ({findings.length})</span>
+                      <span className="verify-badge is-verified">
+                        {findings.some((f) => (f.unverified?.length ?? 0) > 0)
+                          ? "⚠ Check flags"
+                          : "✓ Grounded"}
+                      </span>
+                    </span>
+                    {findingsOpen ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                  </button>
+                </Collapsible.Trigger>
+                <Collapsible.Content className="stream-section-body">
+                  <ul className="findings-list" aria-label="Collected data">
+                    {findings.map((finding, index) => (
+                      <li key={`${index}-${finding.source_url}`}>
+                        <FindingCard finding={finding} index={index + 1} />
+                      </li>
+                    ))}
+                  </ul>
+                </Collapsible.Content>
+              </Collapsible.Root>
+            ) : null}
+
+            {result ? (
+              <section
+                ref={resultAnchorRef}
+                className="stream-result-block"
+                aria-label="Final result in stream"
+              >
+                <div className="stream-result-header">
+                  <FileCheck2 size={14} aria-hidden="true" />
+                  <span>Final Deliverable</span>
                 </div>
-              );
-            })}
+                <ResultReport
+                  result={result}
+                  previousResult={previousResult}
+                  usage={usage}
+                  findings={findings}
+                />
+              </section>
+            ) : finished && endedWithoutResult ? (
+              <div className="notice" data-level="warn" role="status">
+                <AlertTriangle size={14} className="notice-icon" aria-hidden="true" />
+                <span>{endedWithoutResult}</span>
+              </div>
+            ) : null}
           </div>
         )}
       </div>

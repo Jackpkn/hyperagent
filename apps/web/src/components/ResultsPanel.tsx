@@ -90,7 +90,7 @@ export function ResultsPanel({
   );
 }
 
-function FindingCard({ finding, index }: { finding: Finding; index: number }) {
+export function FindingCard({ finding, index }: { finding: Finding; index: number }) {
   const entries = Object.entries(finding.data).slice(0, PREVIEW_FIELDS);
   const hidden = Object.keys(finding.data).length - entries.length;
   const isWeb = /^https?:\/\//i.test(finding.source_url);

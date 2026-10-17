@@ -78,6 +78,8 @@ export function AgentApp() {
 
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("steps");
   const [resultExpanded, setResultExpanded] = useState(false);
+  const [sidebarWidth, setSidebarWidth] = useState<number>(540);
+  const [isResizing, setIsResizing] = useState(false);
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
   const [pinMode, setPinMode] = useState(false);
   const [pinnedPoint, setPinnedPoint] = useState<{ x: number; y: number } | null>(null);
@@ -87,7 +89,6 @@ export function AgentApp() {
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showHistoryModal, setShowHistoryModal] = useState(false);
 
-  const hadResultRef = useRef(false);
   const lastApprovalStepRef = useRef<string | null>(null);
   const savedRunAtRef = useRef<number | null>(null);
 
@@ -95,7 +96,48 @@ export function AgentApp() {
     setProfile(loadOperatorProfile());
     setHistory(loadRunHistory());
     setPersistSession(loadPersistSession());
+    try {
+      const savedWidth = Number(window.localStorage.getItem("hyperagent.sidebarWidth.v1"));
+      if (Number.isFinite(savedWidth) && savedWidth >= 380 && savedWidth <= 1100) {
+        setSidebarWidth(savedWidth);
+      }
+    } catch {
+      // Ignore storage access errors
+    }
   }, []);
+
+  const startResize = (event: React.PointerEvent<HTMLDivElement>) => {
+    event.preventDefault();
+    setResultExpanded(false);
+    setIsResizing(true);
+    const onMove = (moveEvent: PointerEvent) => {
+      const maxW = Math.max(460, Math.round(window.innerWidth * 0.72));
+      const next = Math.min(maxW, Math.max(380, Math.round(moveEvent.clientX)));
+      setSidebarWidth(next);
+      try {
+        window.localStorage.setItem("hyperagent.sidebarWidth.v1", String(next));
+      } catch {
+        // Ignore storage errors
+      }
+    };
+    const onUp = () => {
+      setIsResizing(false);
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+  };
+
+  const resetSidebarWidth = () => {
+    setResultExpanded(false);
+    setSidebarWidth(540);
+    try {
+      window.localStorage.setItem("hyperagent.sidebarWidth.v1", "540");
+    } catch {
+      // Ignore
+    }
+  };
 
   const current = currentStep(state.steps);
   const currentApproval = current ? state.approvals[current.id] : undefined;
@@ -104,8 +146,7 @@ export function AgentApp() {
   const elapsedS = state.runStartedAt ? Math.max(0, now - state.runStartedAt) : 0;
   const endedWithoutResult = finished && !state.result ? endedMessage(state) : null;
 
-  // Automatically switch to the Final Result tab as soon as the report arrives,
-  // and reset back to Steps when a new run starts.
+  // Keep the operator in the unified Live Stream by default; reset state when starting a new run.
   useEffect(() => {
     if (!showRun) {
       setActiveTab("steps");
@@ -113,17 +154,9 @@ export function AgentApp() {
       setSelectedStepId(null);
       setPinMode(false);
       setPinnedPoint(null);
-      hadResultRef.current = false;
       lastApprovalStepRef.current = null;
-      return;
     }
-    if (state.result && !hadResultRef.current) {
-      hadResultRef.current = true;
-      setActiveTab("result");
-    } else if (!state.result) {
-      hadResultRef.current = false;
-    }
-  }, [showRun, state.result]);
+  }, [showRun]);
 
   // Persist completed runs to local history automatically.
   useEffect(() => {
@@ -144,7 +177,7 @@ export function AgentApp() {
     setHistory(upsertRunHistory(entry));
   }, [finished, state.goal, state.runStartedAt, state.run, state.stepNumber, state.steps.length, state.usage, elapsedS, state.findings, state.result]);
 
-  // If a new approval arrives while the operator is on another tab, bring them to Steps.
+  // If a new approval arrives while the operator is on another tab, bring them to Live Stream.
   useEffect(() => {
     if (currentApproval && currentApproval.step_id !== lastApprovalStepRef.current) {
       lastApprovalStepRef.current = currentApproval.step_id;
@@ -298,10 +331,11 @@ export function AgentApp() {
           />
 
           <div
-            className={
-              activeTab === "result" && resultExpanded
-                ? "run-workspace is-result-expanded"
-                : "run-workspace"
+            className={`run-workspace${resultExpanded ? " is-result-expanded" : ""}${isResizing ? " is-resizing" : ""}`}
+            style={
+              !resultExpanded
+                ? ({ "--sidebar-w": `${sidebarWidth}px` } as React.CSSProperties)
+                : undefined
             }
           >
             <Tabs.Root
@@ -311,17 +345,17 @@ export function AgentApp() {
             >
               <div className="sidebar-tabs-bar">
                 <Tabs.List className="sidebar-tabs-list" aria-label="Agent workspace views">
-                  <Tabs.Trigger value="steps" className="sidebar-tab">
+                  <Tabs.Trigger value="steps" className="sidebar-tab" title="Unified live stream: plan, steps, findings, and final report">
                     <ListTodo size={14} aria-hidden="true" />
-                    <span>Steps</span>
+                    <span>Live Stream</span>
                     <span
-                      className={`tab-badge${approvalCount > 0 ? " is-wait" : ""}`}
+                      className={`tab-badge${approvalCount > 0 ? " is-wait" : state.result ? " is-ok" : ""}`}
                     >
                       {state.steps.length}
                     </span>
                   </Tabs.Trigger>
 
-                  <Tabs.Trigger value="findings" className="sidebar-tab">
+                  <Tabs.Trigger value="findings" className="sidebar-tab" title="Focus only on collected findings">
                     <Database size={14} aria-hidden="true" />
                     <span>Findings</span>
                     {state.findings.length > 0 ? (
@@ -329,9 +363,9 @@ export function AgentApp() {
                     ) : null}
                   </Tabs.Trigger>
 
-                  <Tabs.Trigger value="result" className="sidebar-tab">
+                  <Tabs.Trigger value="result" className="sidebar-tab" title="Focus only on the final report">
                     <FileCheck2 size={14} aria-hidden="true" />
-                    <span>Final Result</span>
+                    <span>Report Only</span>
                     {state.result ? (
                       <span
                         className={`tab-badge ${state.result.success ? "is-ok" : "is-wait"}`}
@@ -342,17 +376,15 @@ export function AgentApp() {
                   </Tabs.Trigger>
                 </Tabs.List>
 
-                {activeTab === "result" ? (
-                  <button
-                    type="button"
-                    className="tab-expand-btn"
-                    onClick={() => setResultExpanded((prev) => !prev)}
-                    title={resultExpanded ? "Restore split size" : "Widen report panel"}
-                    aria-label={resultExpanded ? "Restore split size" : "Widen report panel"}
-                  >
-                    {resultExpanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
-                  </button>
-                ) : null}
+                <button
+                  type="button"
+                  className="tab-expand-btn"
+                  onClick={() => setResultExpanded((prev) => !prev)}
+                  title={resultExpanded ? "Restore split size" : "Widen left stream panel"}
+                  aria-label={resultExpanded ? "Restore split size" : "Widen left stream panel"}
+                >
+                  {resultExpanded ? <Minimize2 size={13} /> : <Maximize2 size={13} />}
+                </button>
               </div>
 
               <Tabs.Content value="steps" className="sidebar-tab-content">
@@ -361,6 +393,12 @@ export function AgentApp() {
                   steps={state.steps}
                   feed={state.feed}
                   approvals={state.approvals}
+                  findings={state.findings}
+                  result={state.result}
+                  previousResult={previousResult}
+                  usage={state.usage}
+                  finished={finished}
+                  endedWithoutResult={endedWithoutResult}
                   stepFrames={state.stepFrames}
                   selectedStepId={selectedStepId}
                   now={now}
@@ -432,6 +470,16 @@ export function AgentApp() {
                 }}
               />
             </Tabs.Root>
+
+            <div
+              className={`run-resizer${isResizing ? " is-active" : ""}`}
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize left stream panel"
+              title="Drag to resize left panel · Double-click to reset width"
+              onPointerDown={startResize}
+              onDoubleClick={resetSidebarWidth}
+            />
 
             <div className="run-stage">
               <BrowserView
