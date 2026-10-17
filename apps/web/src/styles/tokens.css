@@ -1,0 +1,93 @@
+/*
+ * Design tokens. Crisp modern operator palette (Linear / Devin / Manus inspired):
+ * clean neutral surfaces, high-contrast typography, and semantic status accents.
+ */
+:root {
+  color-scheme: light;
+  --paper: #f8fafc;
+  --surface: #ffffff;
+  --surface-sunk: #f1f5f9;
+  --surface-hover: #f8fafc;
+  --ink: #0f172a;
+  --ink-soft: #334155;
+  --muted: #64748b;
+  --hairline: #e2e8f0;
+  --hairline-strong: #cbd5e1;
+
+  --signal: #2563eb;
+  --signal-soft: #eff6ff;
+  --signal-ink: #1d4ed8;
+
+  --ok: #059669;
+  --ok-soft: #ecfdf5;
+  --wait: #d97706;
+  --wait-soft: #fffbeb;
+  --error: #dc2626;
+  --error-soft: #fef2f2;
+
+  --font-display: "Newsreader", "Iowan Old Style", Georgia, serif;
+  --font-body: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --radius: 12px;
+  --radius-sm: 8px;
+  --radius-xs: 6px;
+  --shadow-sm: 0 1px 2px rgba(15, 23, 42, 0.04);
+  --shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 4px 12px rgba(15, 23, 42, 0.04);
+  --shadow-lg: 0 10px 30px -5px rgba(15, 23, 42, 0.08), 0 4px 12px -2px rgba(15, 23, 42, 0.04);
+  --focus: 0 0 0 3px rgba(37, 99, 235, 0.25);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --paper: #090d16;
+    --surface: #0f1523;
+    --surface-sunk: #060911;
+    --surface-hover: #161f33;
+    --ink: #f1f5f9;
+    --ink-soft: #cbd5e1;
+    --muted: #64748b;
+    --hairline: #1e293b;
+    --hairline-strong: #334155;
+    --signal: #60a5fa;
+    --signal-soft: rgba(59, 130, 246, 0.14);
+    --signal-ink: #93c5fd;
+    --ok: #34d399;
+    --ok-soft: rgba(16, 185, 129, 0.14);
+    --wait: #fbbf24;
+    --wait-soft: rgba(245, 158, 11, 0.14);
+    --error: #f87171;
+    --error-soft: rgba(239, 68, 68, 0.14);
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+    --shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+    --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
+    --focus: 0 0 0 3px rgba(96, 165, 250, 0.35);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #090d16;
+  --surface: #0f1523;
+  --surface-sunk: #060911;
+  --surface-hover: #161f33;
+  --ink: #f1f5f9;
+  --ink-soft: #cbd5e1;
+  --muted: #64748b;
+  --hairline: #1e293b;
+  --hairline-strong: #334155;
+  --signal: #60a5fa;
+  --signal-soft: rgba(59, 130, 246, 0.14);
+  --signal-ink: #93c5fd;
+  --ok: #34d399;
+  --ok-soft: rgba(16, 185, 129, 0.14);
+  --wait: #fbbf24;
+  --wait-soft: rgba(245, 158, 11, 0.14);
+  --error: #f87171;
+  --error-soft: rgba(239, 68, 68, 0.14);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.45);
+  --shadow-lg: 0 12px 32px rgba(0, 0, 0, 0.6);
+  --focus: 0 0 0 3px rgba(96, 165, 250, 0.35);
+}
