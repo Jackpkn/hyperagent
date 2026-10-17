@@ -545,20 +545,22 @@
   min-height: 0;
   overflow: auto;
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 12px;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding: 0;
+  background: #fff;
 }
 
 .viewport-inner {
   position: relative;
   width: 100%;
   max-width: 100%;
+  min-height: 100%;
   line-height: 0;
-  border-radius: var(--radius-sm);
+  border-radius: 0;
   overflow: hidden;
-  box-shadow: var(--shadow-lg);
-  border: 1px solid var(--hairline);
+  box-shadow: none;
+  border: 0;
   background: #fff;
 }
 

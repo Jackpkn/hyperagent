@@ -23,7 +23,7 @@ from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import TimeoutError as PlaywrightTimeout
 
 OBSERVE_JS = Path(__file__).with_name("dom.js").read_text()
-VIEWPORT = {"width": 1280, "height": 800}
+VIEWPORT = {"width": 1280, "height": 960}
 USER_AGENT = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36"
