@@ -7,6 +7,7 @@ interface DataTableProps {
   columns: string[];
   rows: Record<string, unknown>[];
   compareRows?: Record<string, unknown>[];
+  unverifiedValues?: Set<string>;
 }
 
 type SortState = { column: string; direction: "asc" | "desc" } | null;
@@ -25,7 +26,7 @@ function compareValues(a: unknown, b: unknown): number {
   return formatCell(a).localeCompare(formatCell(b), undefined, { numeric: true });
 }
 
-export function DataTable({ columns, rows, compareRows }: DataTableProps) {
+export function DataTable({ columns, rows, compareRows, unverifiedValues }: DataTableProps) {
   const [sort, setSort] = useState<SortState>(null);
   const keyColumn = columns[0] ?? "";
 
@@ -96,8 +97,14 @@ export function DataTable({ columns, rows, compareRows }: DataTableProps) {
                   const changed = Boolean(
                     compareLookup && prevRow && column in prevRow && prevText !== currText,
                   );
+                  const isSuspect = Boolean(
+                    currText && unverifiedValues?.has(currText.trim().toLowerCase()),
+                  );
                   return (
-                    <td key={column} className={changed ? "is-diff-cell" : undefined}>
+                    <td
+                      key={column}
+                      className={`${changed ? "is-diff-cell " : ""}${isSuspect ? "is-suspect-cell" : ""}`.trim() || undefined}
+                    >
                       {colIdx === 0 && isNewRow ? (
                         <span className="diff-badge diff-new">New</span>
                       ) : null}
@@ -112,6 +119,14 @@ export function DataTable({ columns, rows, compareRows }: DataTableProps) {
                       ) : (
                         currText
                       )}
+                      {isSuspect ? (
+                        <span
+                          className="suspect-inline"
+                          title="Value was not found verbatim in observed page text"
+                        >
+                          ⚠ unverified
+                        </span>
+                      ) : null}
                     </td>
                   );
                 })}

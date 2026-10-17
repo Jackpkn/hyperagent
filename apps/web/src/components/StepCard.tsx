@@ -103,8 +103,20 @@ export function StepCard({ step, now, selected, hasSnapshot, onSelect }: StepCar
   const duration = end > step.started_at ? formatDuration(end - step.started_at) : null;
   const actionLabel = step.action?.label ?? "";
   const nextGoal = step.thought?.next_goal?.trim() || "";
+  const evaluation = step.thought?.evaluation?.trim() || "";
+  const memory = step.thought?.memory?.trim() || "";
   const showThinking = step.status === "thinking";
   const isFast = step.system === "fast";
+  const showEvaluation =
+    !isFast &&
+    Boolean(evaluation) &&
+    evaluation.toLowerCase() !== "ok" &&
+    evaluation.toLowerCase() !== actionLabel.toLowerCase();
+  const showNextGoal =
+    !isFast &&
+    Boolean(nextGoal) &&
+    nextGoal.toLowerCase() !== actionLabel.toLowerCase() &&
+    nextGoal.toLowerCase() !== evaluation.toLowerCase();
   const resultText = cleanStepResult(step);
 
   // Only show a colored status pill when the step is active, waiting, or failed.
@@ -183,6 +195,12 @@ export function StepCard({ step, now, selected, hasSnapshot, onSelect }: StepCar
         </div>
       ) : null}
 
+      {showEvaluation ? (
+        <p className="step-reasoning" title="Model reasoning">
+          {evaluation}
+        </p>
+      ) : null}
+
       {step.action ? (
         <div className="step-action-row">
           <ActionIcon name={step.action.name} isFast={isFast} />
@@ -190,9 +208,7 @@ export function StepCard({ step, now, selected, hasSnapshot, onSelect }: StepCar
         </div>
       ) : null}
 
-      {!isFast && nextGoal && nextGoal.toLowerCase() !== actionLabel.toLowerCase() ? (
-        <p className="step-next">{nextGoal}</p>
-      ) : null}
+      {showNextGoal ? <p className="step-next">{nextGoal}</p> : null}
 
       {isFast && step.confidence !== undefined ? (
         <details className="reasoning">
@@ -217,31 +233,15 @@ export function StepCard({ step, now, selected, hasSnapshot, onSelect }: StepCar
         </details>
       ) : null}
 
-      {step.thought && !isFast && (step.thought.evaluation || step.thought.memory) ? (
+      {!isFast && memory && memory !== "m" ? (
         <details className="reasoning">
           <summary>
             <ChevronRight size={11} className="reasoning-chevron" aria-hidden="true" />
-            <span>Thinking &amp; memory</span>
+            <span>Working memory</span>
           </summary>
           <dl>
-            {step.thought.next_goal ? (
-              <>
-                <dt>Goal</dt>
-                <dd>{step.thought.next_goal}</dd>
-              </>
-            ) : null}
-            {step.thought.evaluation ? (
-              <>
-                <dt>Eval</dt>
-                <dd>{step.thought.evaluation}</dd>
-              </>
-            ) : null}
-            {step.thought.memory ? (
-              <>
-                <dt>Memory</dt>
-                <dd>{step.thought.memory}</dd>
-              </>
-            ) : null}
+            <dt>Memory</dt>
+            <dd>{memory}</dd>
           </dl>
         </details>
       ) : null}

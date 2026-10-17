@@ -53,7 +53,12 @@ export function ResultsPanel({
   return (
     <div className="panel-body">
       {result ? (
-        <ResultReport result={result} previousResult={previousResult} usage={usage} />
+        <ResultReport
+          result={result}
+          previousResult={previousResult}
+          usage={usage}
+          findings={findings}
+        />
       ) : (
         <div className="empty-state">
           <FileCheck2 size={20} className="empty-icon" aria-hidden="true" />
@@ -89,11 +94,28 @@ function FindingCard({ finding, index }: { finding: Finding; index: number }) {
   const entries = Object.entries(finding.data).slice(0, PREVIEW_FIELDS);
   const hidden = Object.keys(finding.data).length - entries.length;
   const isWeb = /^https?:\/\//i.test(finding.source_url);
+  const unverifiedSet = new Set(finding.unverified ?? []);
+  const suspectCount = unverifiedSet.size;
 
   return (
     <article className="finding">
       <div className="finding-head">
         <span className="finding-index">#{index}</span>
+        {suspectCount > 0 ? (
+          <span
+            className="verify-badge is-suspect"
+            title={`Unverified in page text: ${Array.from(unverifiedSet).join(", ")}`}
+          >
+            ⚠ Unverified ({suspectCount})
+          </span>
+        ) : (
+          <span
+            className="verify-badge is-verified"
+            title="All extracted fields were verified against the observed page text"
+          >
+            ✓ Grounded
+          </span>
+        )}
         {isWeb ? (
           <a
             href={finding.source_url}
@@ -112,12 +134,25 @@ function FindingCard({ finding, index }: { finding: Finding; index: number }) {
         )}
       </div>
       <dl>
-        {entries.map(([key, value]) => (
-          <div key={key} style={{ display: "contents" }}>
-            <dt>{key}</dt>
-            <dd>{formatCell(value)}</dd>
-          </div>
-        ))}
+        {entries.map(([key, value]) => {
+          const isSuspect = unverifiedSet.has(key);
+          return (
+            <div key={key} style={{ display: "contents" }}>
+              <dt>{key}</dt>
+              <dd className={isSuspect ? "is-suspect-val" : undefined}>
+                {formatCell(value)}
+                {isSuspect ? (
+                  <span
+                    className="suspect-inline"
+                    title="Value did not appear verbatim in the observed page text"
+                  >
+                    ⚠ unverified
+                  </span>
+                ) : null}
+              </dd>
+            </div>
+          );
+        })}
       </dl>
       {hidden > 0 ? (
         <p className="hint" style={{ marginTop: 6 }}>

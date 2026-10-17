@@ -12,9 +12,9 @@ import {
   GitCompare,
   Zap,
 } from "lucide-react";
-import type { RunResult, Usage } from "@/lib/protocol";
+import type { Finding, RunResult, Usage } from "@/lib/protocol";
 import { copyText, downloadText, resultToCsv, resultToMarkdown } from "@/lib/export";
-import { domainOf, formatCost } from "@/lib/format";
+import { domainOf, formatCell, formatCost } from "@/lib/format";
 import { DataTable } from "./DataTable";
 import { Markdown } from "./Markdown";
 
@@ -22,6 +22,7 @@ interface ResultReportProps {
   result: RunResult;
   previousResult?: RunResult | null;
   usage?: Usage | null;
+  findings?: Finding[];
 }
 
 function isWebUrl(url: string): boolean {
@@ -32,7 +33,7 @@ function stamp(): string {
   return new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
 }
 
-export function ResultReport({ result, previousResult, usage }: ResultReportProps) {
+export function ResultReport({ result, previousResult, usage, findings }: ResultReportProps) {
   const [copied, setCopied] = useState<"idle" | "copied" | "failed">("idle");
   const [showDiff, setShowDiff] = useState(false);
   const hasTable = result.columns.length > 0 && result.rows.length > 0;
@@ -40,6 +41,13 @@ export function ResultReport({ result, previousResult, usage }: ResultReportProp
   const fastCalls = usage?.fast_calls ?? 0;
   const avgFastMs = fastCalls > 0 ? Math.round((usage?.fast_ms_total ?? 0) / fastCalls) : 0;
   const estTokensSaved = fastCalls * 4000;
+  const unverifiedValues = new Set<string>();
+  for (const f of findings ?? []) {
+    for (const k of f.unverified ?? []) {
+      const val = formatCell(f.data[k]).trim();
+      if (val) unverifiedValues.add(val.toLowerCase());
+    }
+  }
 
   const onCopy = async () => {
     const ok = await copyText(resultToMarkdown(result));
@@ -153,6 +161,7 @@ export function ResultReport({ result, previousResult, usage }: ResultReportProp
             columns={result.columns}
             rows={result.rows}
             compareRows={showDiff && previousResult ? previousResult.rows : undefined}
+            unverifiedValues={unverifiedValues}
           />
         </div>
       ) : null}
