@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import re
 from typing import Any
 
 import anthropic
@@ -15,6 +16,68 @@ PRICES = {
     "claude-sonnet-5-5": (2.00, 10.00),
     "claude-opus-5-5": (4.00, 20.00),
 }
+
+_XML_PARAM_RE = re.compile(
+    r'<parameter\s+name=["\']([^"\']+)["\']\s*>([\s\S]*?)(?:</parameter>|(?=<parameter\b)|$)',
+    re.I,
+)
+_XML_TAG_SPLIT_RE = re.compile(r"</(?:evaluation|memory|next_goal|plan)>|<parameter\b", re.I)
+_INT_FIELDS = {"element_id", "tab_index"}
+_NUM_FIELDS = {"pages", "seconds"}
+_BOOL_FIELDS = {"press_enter", "irreversible", "success"}
+_JSON_FIELDS = {"plan", "items", "rows", "columns", "sources", "issues", "urls"}
+
+
+def _recover_xml_params(inputs: dict[str, Any]) -> dict[str, Any]:
+    """Recover parameters if the model leaked <parameter name='...'> XML tags into a string argument."""
+    out = dict(inputs)
+    for key, val in list(out.items()):
+        if not isinstance(val, str):
+            continue
+        if "<parameter" in val or "</evaluation>" in val or "</memory>" in val or "</next_goal>" in val:
+            for match in _XML_PARAM_RE.finditer(val):
+                pname = match.group(1).strip()
+                raw_pval = re.sub(r"</[a-zA-Z0-9_]+>\s*$", "", match.group(2).strip()).strip()
+                if not raw_pval or out.get(pname) not in (None, ""):
+                    continue
+                if pname in _INT_FIELDS:
+                    m = re.search(r"-?\d+", raw_pval)
+                    if m:
+                        out[pname] = int(m.group(0))
+                elif pname in _NUM_FIELDS:
+                    m = re.search(r"-?\d+(?:\.\d+)?", raw_pval)
+                    if m:
+                        out[pname] = float(m.group(0))
+                elif pname in _BOOL_FIELDS:
+                    out[pname] = raw_pval.lower() in ("true", "1", "yes")
+                elif pname in _JSON_FIELDS:
+                    try:
+                        out[pname] = json.loads(raw_pval)
+                    except ValueError:
+                        pass
+                else:
+                    out[pname] = raw_pval
+            out[key] = _XML_TAG_SPLIT_RE.split(val)[0].strip()
+    for int_key in _INT_FIELDS:
+        raw_int = out.get(int_key)
+        if isinstance(raw_int, str):
+            m = re.search(r"-?\d+", raw_int)
+            if m:
+                out[int_key] = int(m.group(0))
+    return out
+
+
+def extract_partial_thought(partial_json: str) -> dict[str, str]:
+    """Extract in-flight evaluation / next_goal strings from a streaming partial JSON buffer."""
+    out: dict[str, str] = {}
+    for field in ("evaluation", "next_goal", "memory"):
+        m = re.search(rf'"{field}"\s*:\s*"((?:[^"\\]|\\.)*)', partial_json)
+        if m:
+            raw = m.group(1).replace('\\"', '"').replace("\\n", " ").replace("\\\\", "\\")
+            cleaned = _XML_TAG_SPLIT_RE.split(raw)[0].strip()
+            if cleaned:
+                out[field] = cleaned
+    return out
 
 
 class AnthropicError(RuntimeError):
@@ -76,8 +139,10 @@ class AnthropicBackend:
         # The agent reports each retry to the operator, so the SDK's silent retries are turned off.
         self.client = client or anthropic.AsyncAnthropic(api_key=api_key, max_retries=0, timeout=90)
 
-    async def decide(self, model: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]], *,
-                     force: str | None = None, on_retry: Any = None) -> tuple[str, dict[str, Any], int, int, float]:
+    async def decide(
+        self, model: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]], *,
+        force: str | None = None, on_retry: Any = None, on_delta: Any = None,
+    ) -> tuple[str, dict[str, Any], int, int, float]:
         system, converted = convert_messages(messages)
         if force:
             # Forced tool_choice is rejected on current models; instruct instead and verify the result.
@@ -86,11 +151,39 @@ class AnthropicBackend:
         wait = 0.0
         for attempt in range(5):
             try:
-                response = await self.client.messages.create(
+                req_kwargs = dict(
                     model=model, max_tokens=4096, system=system, messages=converted, tools=convert_tools(tools),
                     tool_choice={"type": "auto", "disable_parallel_tool_use": True},
                     **speed_settings(model, for_planner=True),
                 )
+                if on_delta is not None and hasattr(self.client.messages, "stream"):
+                    thinking_buf = ""
+                    text_buf = ""
+                    json_buf = ""
+                    async with self.client.messages.stream(**req_kwargs) as stream:
+                        async for event in stream:
+                            if getattr(event, "type", None) == "content_block_delta":
+                                delta = getattr(event, "delta", None)
+                                dtype = getattr(delta, "type", None)
+                                if dtype == "thinking_delta":
+                                    thinking_buf += getattr(delta, "thinking", "") or ""
+                                elif dtype == "text_delta":
+                                    text_buf += getattr(delta, "text", "") or ""
+                                elif dtype == "input_json_delta":
+                                    json_buf += getattr(delta, "partial_json", "") or ""
+                                else:
+                                    continue
+                                partial_thought = extract_partial_thought(json_buf)
+                                combined_thinking = "\n\n".join(
+                                    p.strip() for p in (thinking_buf, text_buf) if p and p.strip()
+                                )
+                                if combined_thinking:
+                                    partial_thought["thinking"] = combined_thinking
+                                if partial_thought:
+                                    await on_delta(partial_thought)
+                        response = await stream.get_final_message()
+                else:
+                    response = await self.client.messages.create(**req_kwargs)
             except anthropic.AuthenticationError:
                 raise AnthropicError("Anthropic rejected the API key.") from None
             except anthropic.PermissionDeniedError:
@@ -130,7 +223,7 @@ class AnthropicBackend:
                     native_thinking = "\n\n".join(
                         p.strip() for p in (*thinking_parts, *text_parts) if p and p.strip()
                     )
-                    inputs = dict(call.input)
+                    inputs = _recover_xml_params(dict(call.input))
                     if native_thinking:
                         inputs["_thinking"] = native_thinking
                     return call.name, inputs, usage.input_tokens, usage.output_tokens, spent

@@ -4,7 +4,15 @@ import anthropic
 import httpx
 import pytest
 
-from hyperagent.anthropic_backend import AnthropicBackend, AnthropicError, convert_messages, convert_tools, cost
+from hyperagent.anthropic_backend import (
+    AnthropicBackend,
+    AnthropicError,
+    _recover_xml_params,
+    convert_messages,
+    convert_tools,
+    cost,
+    extract_partial_thought,
+)
 from hyperagent.tools import TOOLS
 
 
@@ -77,4 +85,25 @@ async def test_forced_done_is_an_instruction_and_credit_errors_are_clear():
     b, _ = backend([error])
     with pytest.raises(AnthropicError, match="out of credit"):
         await b.decide("claude-haiku-5-5", [{"role": "user", "content": "x"}], TOOLS)
+
+
+def test_recover_xml_params_and_extract_partial_thought():
+    leaked = {
+        "evaluation": (
+            'Page 1 of Historical Fiction is read and saved.</evaluation> '
+            '<parameter name="memory">Science top 2 saved.</parameter> '
+            '<parameter name="next_goal">Open page 2 of Historical Fiction.</parameter> '
+            '<parameter name="element_id">115'
+        )
+    }
+    recovered = _recover_xml_params(leaked)
+    assert recovered["evaluation"] == "Page 1 of Historical Fiction is read and saved."
+    assert recovered["memory"] == "Science top 2 saved."
+    assert recovered["next_goal"] == "Open page 2 of Historical Fiction."
+    assert recovered["element_id"] == 115
+
+    partial = '{"evaluation": "Scanning 14 books on page 1", "next_goal": "Click next'
+    thought = extract_partial_thought(partial)
+    assert thought["evaluation"] == "Scanning 14 books on page 1"
+    assert thought["next_goal"] == "Click next"
 

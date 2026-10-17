@@ -13,7 +13,7 @@ from typing import Any
 
 import httpx
 
-from .anthropic_backend import AnthropicBackend, AnthropicError
+from .anthropic_backend import AnthropicBackend, AnthropicError, _recover_xml_params
 
 ANTHROPIC_MODELS = "claude-sonnet-5-5,claude-haiku-5-5,claude-opus-5-5"
 DEFAULT_MODELS = "anthropic/claude-sonnet-5.5,anthropic/claude-haiku-5.5,inception/mercury-2.5,google/gemini-3.7-flash"
@@ -73,14 +73,14 @@ class LLMClient:
 
     async def decide(
         self, model: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]],
-        *, force: str | None = None, on_retry: Any = None,
+        *, force: str | None = None, on_retry: Any = None, on_delta: Any = None,
     ) -> Decision:
         if not self.config.api_key:
             raise LLMError("No model API key is configured on the server (set ANTHROPIC_API_KEY or LLM_API_KEY).")
         if self.anthropic:
             try:
                 name, args, tokens_in, tokens_out, spent = await self.anthropic.decide(
-                    model, messages, tools, force=force, on_retry=on_retry)
+                    model, messages, tools, force=force, on_retry=on_retry, on_delta=on_delta)
             except AnthropicError as exc:
                 raise LLMError(str(exc)) from None
             native_thinking = str(args.pop("_thinking", "") or "").strip()
@@ -192,6 +192,7 @@ def parse_decision(payload: dict[str, Any]) -> Decision:
         raise LLMError("The action arguments were not valid JSON") from None
     if not isinstance(args, dict):
         raise LLMError("The action arguments were not an object")
+    args = _recover_xml_params(args)
     usage = payload.get("usage") or {}
     return Decision(
         name=fn.get("name", ""),

@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from playwright.async_api import Error as PlaywrightError
 
+from .anthropic_backend import _recover_xml_params
 from .browser import ActionError, BrowserSession, Observation
 from .fast import FastPolicy
 from .llm import Decision, LLMClient, LLMError
@@ -197,7 +198,7 @@ class Agent(FastLoopMixin):
         step["url"] = page.url
         await self.send_step(step)
         version = self.guidance_version
-        decision = await self._decide(page)
+        decision = await self._decide(page, step)
         if decision is None:
             step.update(status="skipped", result="Could not reach the model.", ended_at=time.time())
             await self.send_step(step)
@@ -214,7 +215,7 @@ class Agent(FastLoopMixin):
             return
         await self._handle(step, decision, page)
 
-    async def _decide(self, page: Observation) -> Decision | None:
+    async def _decide(self, page: Observation, step: dict[str, Any] | None = None) -> Decision | None:
         events, self.browser.events = self.browser.events, []
         domain = (urlsplit(page.url).hostname or "").lower().removeprefix("www.")
         domain_notes = self.domain_memory.get(domain, []) if domain else []
@@ -230,7 +231,22 @@ class Agent(FastLoopMixin):
         if page.screenshot:
             content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{page.screenshot}"}})
         messages = [{"role": "system", "content": self.system_prompt}, {"role": "user", "content": content}]
-        call = asyncio.create_task(self.llm.decide(self.model, messages, self.tools, on_retry=self._retry_notice))
+        last_delta_at = 0.0
+
+        async def _on_delta(partial: dict[str, str]) -> None:
+            nonlocal last_delta_at
+            if step is None or self.stopped or step.get("status") != "thinking":
+                return
+            now = time.monotonic()
+            if now - last_delta_at < 0.08:
+                return
+            last_delta_at = now
+            step["thought"] = {**step.get("thought", {}), **partial}
+            await self.send_step(step)
+
+        call = asyncio.create_task(
+            self.llm.decide(self.model, messages, self.tools, on_retry=self._retry_notice, on_delta=_on_delta)
+        )
         stop_watch = asyncio.create_task(self._until_stopped())
         try:
             done, _ = await asyncio.wait({call, stop_watch}, return_when=asyncio.FIRST_COMPLETED)
@@ -264,7 +280,7 @@ class Agent(FastLoopMixin):
 
     async def _handle(self, step: dict[str, Any], d: Decision, page: Observation) -> None:
         await self.send_usage()
-        args = d.args
+        args = _recover_xml_params(d.args)
         if d.name not in TOOL_NAMES:
             await self._fail_step(step, f"The model chose an unknown action {d.name!r}; nothing was executed.")
             return

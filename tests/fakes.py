@@ -71,7 +71,7 @@ class ScriptedLLM:
         self.requests: list[dict[str, Any]] = []
 
     async def decide(self, model: str, messages: list, tools: list, *, force: str | None = None,
-                     on_retry: Any = None) -> Decision:
+                     on_retry: Any = None, on_delta: Any = None) -> Decision:
         self.requests.append({"messages": messages, "force": force})
         if force == "done":
             return decision("done", success=True, summary="Partial summary", columns=[], rows=[], sources=[],

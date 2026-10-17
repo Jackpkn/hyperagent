@@ -196,10 +196,10 @@ export function StepCard({ step, now, selected, hasSnapshot, onSelect }: StepCar
         </div>
       ) : null}
 
-      {!isFast && nativeThinking ? (
-        <div className="step-reasoning" title="Claude native thinking block">
+      {showThinking && !isFast && nativeThinking ? (
+        <div className="step-reasoning" title="Live streaming thinking tokens">
           <strong style={{ display: "block", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 2 }}>
-            Thinking
+            Thinking (live)
           </strong>
           <span>{nativeThinking}</span>
         </div>
@@ -243,15 +243,31 @@ export function StepCard({ step, now, selected, hasSnapshot, onSelect }: StepCar
         </details>
       ) : null}
 
-      {!isFast && memory && memory !== "m" ? (
+      {!showThinking && !isFast && (nativeThinking || (memory && memory !== "m")) ? (
         <details className="reasoning">
           <summary>
             <ChevronRight size={11} className="reasoning-chevron" aria-hidden="true" />
-            <span>Working memory</span>
+            <span>
+              {nativeThinking && memory && memory !== "m"
+                ? "Thinking & memory"
+                : nativeThinking
+                  ? "Thinking"
+                  : "Working memory"}
+            </span>
           </summary>
           <dl>
-            <dt>Memory</dt>
-            <dd>{memory}</dd>
+            {nativeThinking ? (
+              <>
+                <dt>Thinking</dt>
+                <dd>{nativeThinking}</dd>
+              </>
+            ) : null}
+            {memory && memory !== "m" ? (
+              <>
+                <dt>Memory</dt>
+                <dd>{memory}</dd>
+              </>
+            ) : null}
           </dl>
         </details>
       ) : null}
