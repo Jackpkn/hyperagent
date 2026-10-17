@@ -69,6 +69,7 @@ class Agent(FastLoopMixin):
         self._last_page_sig: str | None = None
         self._consecutive_errors = 0
         self.memory = ""
+        self._observed_corpus = ""
 
     # ---------- operator controls (called from the socket handler) ----------
 
@@ -175,6 +176,12 @@ class Agent(FastLoopMixin):
             return False
         return True
 
+    def _remember_text(self, text: str) -> None:
+        if not text:
+            return
+        combined = f"{self._observed_corpus}\n{text}"
+        self._observed_corpus = combined[-200000:]
+
     async def _step(self) -> None:
         self.n += 1
         step: dict[str, Any] = {"id": f"s{self.n}", "n": self.n, "status": "thinking", "system": "planner",
@@ -185,6 +192,7 @@ class Agent(FastLoopMixin):
         except (ActionError, PlaywrightError) as exc:
             await self._fail_step(step, _browser_error(exc))
             return
+        self._remember_text(f"{page.title}\n{page.text}")
         self._mark_no_change(page)
         step["url"] = page.url
         await self.send_step(step)
@@ -393,11 +401,13 @@ class Agent(FastLoopMixin):
                 return await b.close_tab()
             case "read_page":
                 self.read_output = await b.read_page()
+                self._remember_text(str(self.read_output.get("text", "")))
                 return f"Read {self.read_output['length']:,} characters of page text."
             case "read_urls_parallel":
                 raw_urls = args.get("urls") if isinstance(args.get("urls"), list) else []
                 clean_urls = [str(u) for u in raw_urls[:4] if str(u).strip()]
                 self.read_output = await b.read_urls_parallel(clean_urls)
+                self._remember_text(str(self.read_output.get("text", "")))
                 return f"Read {len(clean_urls)} pages in parallel ({self.read_output['length']:,} characters)."
             case "record_findings":
                 return await self._record(args)
@@ -419,15 +429,25 @@ class Agent(FastLoopMixin):
         items = args.get("items") if isinstance(args.get("items"), list) else []
         source = str(args.get("source_url") or self.browser.page.url)
         added = 0
+        suspect_fields: list[str] = []
         for item in items:
             if not isinstance(item, dict) or not item:
                 continue
-            entry = {"source_url": source, "data": {str(k)[:60]: _text(v) for k, v in item.items()}}
-            if entry not in self.findings:
+            data = {str(k)[:60]: _text(v) for k, v in item.items()}
+            unverified = [k for k, v in data.items() if not _verify_field(v, self._observed_corpus)]
+            entry: dict[str, Any] = {"source_url": source, "data": data}
+            if unverified:
+                entry["unverified"] = unverified
+                for k in unverified:
+                    if k not in suspect_fields:
+                        suspect_fields.append(k)
+            if not any(f["source_url"] == source and f["data"] == data for f in self.findings):
                 self.findings.append(entry)
                 added += 1
         await self.emit({"type": "findings", "items": self.findings})
-        return f"Saved {added} new finding{'s' if added != 1 else ''} ({len(self.findings)} total)."
+        suffix = (f" (⚠ unverified in page text: {', '.join(suspect_fields[:3])})"
+                  if suspect_fields else " (✓ verified against page text)")
+        return f"Saved {added} new finding{'s' if added != 1 else ''} ({len(self.findings)} total){suffix}."
 
     async def _ask(self, question: str, step: dict[str, Any]) -> str:
         self._question = asyncio.get_running_loop().create_future()
@@ -603,3 +623,25 @@ def _text(value: Any) -> str:
     if value is None:
         return ""
     return json.dumps(value, ensure_ascii=False)[:2000] if isinstance(value, (dict, list)) else str(value)
+
+
+def _verify_field(value: str, corpus: str) -> bool:
+    """Layer 3 anti-hallucination check: verify an extracted field value appears in observed page text."""
+    clean = value.strip().lower()
+    if not clean or not corpus.strip():
+        return True
+    if clean in ("not_found", "not found", "n/a", "na", "none", "null", "unknown", "true", "false", "-", "—"):
+        return True
+    if clean.startswith(("http://", "https://")):
+        return True
+    norm_corpus = re.sub(r"\s+", " ", corpus.lower())
+    norm_val = re.sub(r"\s+", " ", clean)
+    if norm_val in norm_corpus:
+        return True
+    tokens = [t for t in re.findall(r"[a-z0-9$€£¥.%+-]{2,}", norm_val)
+              if t not in ("the", "and", "for", "with", "from", "per", "usd", "inc")]
+    if not tokens:
+        return True
+    matched = sum(1 for t in tokens if t in norm_corpus)
+    return (matched / len(tokens)) >= 0.6
+

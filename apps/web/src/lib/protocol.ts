@@ -89,6 +89,8 @@ export interface PlanItem {
 export interface Finding {
   source_url: string;
   data: Record<string, unknown>;
+  /** Field keys whose values could not be grounded in the observed page text. */
+  unverified?: string[];
 }
 
 export interface Approval {

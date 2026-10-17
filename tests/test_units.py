@@ -138,3 +138,15 @@ def test_bot_wall_ignores_recaptcha_footer():
     )
     assert _page_warnings(obs) == []
 
+
+def test_grounded_field_verification_checks_page_corpus():
+    from hyperagent.agent import _verify_field
+    corpus = "Wayfair Accent Chair $219.00 — Rating 4.3 out of 5 — Ships by 2026-10-22"
+    assert _verify_field("$219", corpus)
+    assert _verify_field("Wayfair Accent Chair", corpus)
+    assert _verify_field("not_found", corpus)
+    assert _verify_field("https://wayfair.com/p/1", corpus)
+    assert not _verify_field("$999.00", corpus)
+    assert not _verify_field("Completely Hallucinated Product", corpus)
+
+

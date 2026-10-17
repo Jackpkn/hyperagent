@@ -62,7 +62,7 @@ A complete step record; sent when created and whenever it changes (same `id`, re
 `{ type, items: { text: string, status: "pending" | "active" | "done" | "skipped" }[] }`: the agent's own evolving plan.
 
 ### `findings`
-`{ type, items: { source_url: string, data: object }[] }`: the full list of structured data recorded so far (replace, don't append).
+`{ type, items: { source_url: string, data: object, unverified?: string[] }[] }`: the full list of structured data recorded so far (replace, don't append). `unverified` lists any field keys whose extracted values could not be verified directly against the observed page text.
 
 ### `approval`
 `{ type, step_id, reason, action_label, target_label?, args }`: a risky step waits. Cleared by a later `step` update for that id.

@@ -64,6 +64,7 @@ def settings() -> dict[str, Any]:
         "max_sockets_per_ip": int(os.environ.get("MAX_SOCKETS_PER_IP", "4")),
         "storage_state_path": Path(os.environ.get("STORAGE_STATE_PATH", ".hyperagent/storage_state.json")),
         "domain_memory_path": Path(os.environ.get("DOMAIN_MEMORY_PATH", ".hyperagent/domain_memory.json")),
+        "runs_dir": Path(os.environ.get("RUNS_DIR", ".hyperagent/runs")),
     }
 
 
@@ -93,6 +94,7 @@ class Session:
     def __init__(self, ws: WebSocket, llm: LLMClient, slots: asyncio.Semaphore, fast: FastPolicy | None = None):
         self.ws, self.llm, self.slots, self.fast = ws, llm, slots, fast
         self.cfg = settings()
+        self.session_id = hex(id(self))[2:]
         self.browser: BrowserSession | None = None
         self.agent: Agent | None = None
         self.task: asyncio.Task | None = None
@@ -102,7 +104,18 @@ class Session:
         self.persist_session = False
         self.idle_timer: asyncio.TimerHandle | None = None
 
+    def _append_journal(self, message: dict[str, Any]) -> None:
+        if message.get("type") == "frame":
+            return
+        with contextlib.suppress(OSError):
+            runs_dir: Path = self.cfg["runs_dir"]
+            runs_dir.mkdir(parents=True, exist_ok=True)
+            journal = runs_dir / f"{self.session_id}.jsonl"
+            with journal.open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(message, ensure_ascii=False) + "\n")
+
     async def send(self, message: dict[str, Any]) -> None:
+        self._append_journal(message)
         if self.closed:
             return
         async with self.lock:
@@ -116,7 +129,7 @@ class Session:
 
     async def _emit_hello(self) -> None:
         state_path: Path = self.cfg["storage_state_path"]
-        await self.send({"type": "hello", "session_id": hex(id(self))[2:], "model": self.llm.config.default_model,
+        await self.send({"type": "hello", "session_id": self.session_id, "model": self.llm.config.default_model,
                          "models": list(self.llm.config.models), "max_steps": self.cfg["max_steps"],
                          "configured": bool(self.llm.config.api_key),
                          "fast_model": self.fast.config.model if self.fast else None,
