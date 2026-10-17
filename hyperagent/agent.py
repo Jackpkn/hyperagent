@@ -1,0 +1,605 @@
+"""The observe → decide → (approve) → act loop, with live events and operator control."""
+
+from __future__ import annotations
+
+import asyncio
+import hashlib
+import json
+import re
+import time
+from collections.abc import Awaitable, Callable
+from datetime import datetime
+from typing import Any
+from urllib.parse import quote_plus, urlsplit
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+from playwright.async_api import Error as PlaywrightError
+
+from .browser import ActionError, BrowserSession, Observation
+from .fast import FastPolicy
+from .llm import Decision, LLMClient, LLMError
+from .prompts import SYSTEM, SYSTEM_FAST, step_context
+from .system1 import FastLoopMixin
+from .tools import TOOL_NAMES, TOOLS, TOOLS_WITH_FAST, label, missing_args, needs_approval
+
+Emit = Callable[[dict[str, Any]], Awaitable[None]]
+SEARCH_URL = "https://www.bing.com/search?q={}"
+MAX_CONSECUTIVE_ERRORS = 3
+
+
+class Stopped(Exception):
+    """The operator stopped the run."""
+
+
+class Agent(FastLoopMixin):
+    def __init__(
+        self, *, browser: BrowserSession, llm: LLMClient, emit: Emit, goal: str, model: str,
+        approval_mode: str = "risky", max_steps: int = 40, vision: bool = True, search_url: str = SEARCH_URL,
+        max_cost_usd: float = 3.0, fast: FastPolicy | None = None, timezone: str | None = None,
+        domain_memory: dict[str, list[str]] | None = None,
+    ):
+        self.browser, self.llm, self.emit = browser, llm, emit
+        self.goal, self.model, self.approval_mode = goal, model, approval_mode
+        self.max_steps, self.vision, self.search_url = max_steps, vision, search_url
+        self.max_cost_usd = max_cost_usd
+        self.timezone = timezone
+        self.domain_memory = domain_memory or {}
+        self.fast = fast if fast and fast.config.enabled else None
+        self.tools = TOOLS_WITH_FAST if self.fast else TOOLS
+        self.system_prompt = SYSTEM + (SYSTEM_FAST if self.fast else "")
+        self.detached = False  # the operator's socket closed; skip anything that only serves them
+        self.plan: list[dict[str, str]] = []
+        self.history: list[dict[str, Any]] = []
+        self.findings: list[dict[str, Any]] = []
+        self.guidance: list[str] = []
+        self.guidance_version = 0
+        self.read_output: dict[str, Any] | None = None
+        self.paused = False
+        self.stopped = False
+        self._wake = asyncio.Event()
+        self._approval: tuple[str, asyncio.Future] | None = None
+        self._question: asyncio.Future | None = None
+        self.state = "idle"
+        self.n = 0
+        self.actions_taken = 0
+        self.usage = {"llm_calls": 0, "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0,
+                      "fast_calls": 0, "fast_ms_total": 0, "text_calls": 0}
+        self.started = time.time()
+        self.result: dict[str, Any] | None = None
+        self._last_page_sig: str | None = None
+        self._consecutive_errors = 0
+        self.memory = ""
+
+    # ---------- operator controls (called from the socket handler) ----------
+
+    async def pause(self) -> None:
+        if not self.paused and not self.stopped:
+            self.paused = True
+            await self.notice("info", "Pausing. I'll finish the current action, then wait for you.")
+            if self.state in ("thinking", "running", "acting", "awaiting_approval", "awaiting_user", "starting"):
+                return
+            await self.set_state("paused")
+
+    async def resume(self) -> None:
+        if self.paused:
+            self.paused = False
+            self._consecutive_errors = 0
+            self._wake.set()
+            await self.notice("info", "Resuming.")
+
+    async def stop(self) -> None:
+        self.stopped = True
+        self._wake.set()
+        for fut in (self._approval[1] if self._approval else None, self._question):
+            if fut and not fut.done():
+                fut.set_exception(Stopped())
+
+    async def guide(self, text: str) -> None:
+        if self._question and not self._question.done():
+            self._question.set_result(text)
+            return
+        self.guidance.append(text)
+        self.guidance_version += 1
+        await self.notice("info", "Got it. I'll take that into account from the next step.")
+
+    def resolve_approval(self, step_id: str, approved: bool, reason: str = "") -> bool:
+        if not self._approval or self._approval[0] != step_id or self._approval[1].done():
+            return False
+        self._approval[1].set_result((approved, reason))
+        return True
+
+    async def operator_action(self, description: str) -> None:
+        """Record a manual takeover so the model knows the page was changed by the person."""
+        self.history.append({"n": self.n, "label": "Operator took over", "result": description})
+        await self.notice("info", description)
+
+    # ---------- events ----------
+
+    async def set_state(self, state: str, detail: str = "") -> None:
+        self.state = state
+        await self.emit({"type": "status", "state": state, "step": self.actions_taken, "detail": detail})
+
+    async def notice(self, level: str, message: str) -> None:
+        await self.emit({"type": "notice", "level": level, "message": message})
+
+    async def send_step(self, step: dict[str, Any]) -> None:
+        await self.emit({"type": "step", **step})
+
+    async def send_usage(self) -> None:
+        await self.emit({"type": "usage", **self.usage, "cost_usd": round(self.usage["cost_usd"], 5),
+                         "elapsed_s": round(time.time() - self.started, 1)})
+
+    # ---------- main loop ----------
+
+    async def run(self) -> dict[str, Any]:
+        try:
+            while not self.stopped and self.result is None:
+                if self.actions_taken >= self.max_steps:
+                    await self.notice("warn", f"Reached the {self.max_steps}-step limit. Wrapping up with what I have.")
+                    break
+                if self.usage["cost_usd"] >= self.max_cost_usd:
+                    await self.notice("warn", f"Reached the ${self.max_cost_usd:.2f} cost limit for one task. "
+                                              "Wrapping up with what I have.")
+                    break
+                await self._wait_if_paused()
+                if self.stopped:
+                    break
+                await self._step()
+        except Stopped:
+            pass
+        if self.result is None:
+            reason = ("Stopped before the task finished." if self.stopped
+                      else f"Hit the cost limit (${self.max_cost_usd:.2f}) before finishing."
+                      if self.usage["cost_usd"] >= self.max_cost_usd
+                      else f"Ran out of steps ({self.max_steps}) before finishing.")
+            await self._finalize(reason)
+        return self.result
+
+    async def _wait_if_paused(self) -> None:
+        while self.paused and not self.stopped:
+            self._wake.clear()  # before any await, so a resume() during set_state is not lost
+            await self.set_state("paused", "Paused. Take over in the browser, give guidance, or resume.")
+            if self.paused and not self.stopped:
+                await self._wake.wait()
+
+    def _needs_vision(self) -> bool:
+        """Attach a screenshot only when visual layout changed or a step had trouble."""
+        if not self.vision:
+            return False
+        if not self.history or self._consecutive_errors > 0:
+            return True
+        last = self.history[-1]
+        if last.get("error") or "did not visibly change" in str(last.get("result", "")):
+            return True
+        if last.get("name") in ("record_findings", "read_page", "read_urls_parallel", "type_text", "select_option"):
+            return False
+        return True
+
+    async def _step(self) -> None:
+        self.n += 1
+        step: dict[str, Any] = {"id": f"s{self.n}", "n": self.n, "status": "thinking", "system": "planner",
+                                "started_at": time.time()}
+        await self.set_state("thinking", "The planner is deciding the next step…")
+        try:
+            page = await self.browser.observe(screenshot=self._needs_vision())
+        except (ActionError, PlaywrightError) as exc:
+            await self._fail_step(step, _browser_error(exc))
+            return
+        self._mark_no_change(page)
+        step["url"] = page.url
+        await self.send_step(step)
+        version = self.guidance_version
+        decision = await self._decide(page)
+        if decision is None:
+            step.update(status="skipped", result="Could not reach the model.", ended_at=time.time())
+            await self.send_step(step)
+            return
+        if self.stopped:
+            step.update(status="skipped", result="Stopped before acting.", ended_at=time.time())
+            await self.send_step(step)
+            raise Stopped()
+        if self.guidance_version != version or self.paused:
+            why = "New guidance arrived; re-planning with it." if self.guidance_version != version else \
+                "Paused before acting; this decision was discarded so nothing stale runs."
+            step.update(status="skipped", result=why, ended_at=time.time())
+            await self.send_step(step)
+            return
+        await self._handle(step, decision, page)
+
+    async def _decide(self, page: Observation) -> Decision | None:
+        events, self.browser.events = self.browser.events, []
+        domain = (urlsplit(page.url).hostname or "").lower().removeprefix("www.")
+        domain_notes = self.domain_memory.get(domain, []) if domain else []
+        context = step_context(
+            goal=self.goal, guidance=self.guidance, plan=self.plan, history=self.history, findings=self.findings,
+            page=page, read_output=self.read_output, warnings=self._loop_warnings() + _page_warnings(page),
+            step=self.actions_taken + 1,
+            max_steps=self.max_steps, events=events, memory=self.memory, now=local_now(self.timezone),
+            domain_notes=domain_notes,
+        )
+        self.read_output = None
+        content: list[dict[str, Any]] = [{"type": "text", "text": context}]
+        if page.screenshot:
+            content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{page.screenshot}"}})
+        messages = [{"role": "system", "content": self.system_prompt}, {"role": "user", "content": content}]
+        call = asyncio.create_task(self.llm.decide(self.model, messages, self.tools, on_retry=self._retry_notice))
+        stop_watch = asyncio.create_task(self._until_stopped())
+        try:
+            done, _ = await asyncio.wait({call, stop_watch}, return_when=asyncio.FIRST_COMPLETED)
+        finally:
+            stop_watch.cancel()
+            if not call.done():
+                call.cancel()  # never leave a billed request running for a decision nobody will use
+        if call not in done:
+            return None
+        try:
+            decision = call.result()
+        except LLMError as exc:
+            await self.notice("error", f"{exc} I've paused; press Resume to try again.")
+            self.paused = True
+            return None
+        self._count(decision)
+        return decision
+
+    async def _until_stopped(self) -> None:
+        while not self.stopped:
+            await asyncio.sleep(0.1)
+
+    async def _retry_notice(self, message: str) -> None:
+        await self.notice("warn", message)
+
+    def _count(self, d: Decision) -> None:
+        self.usage["llm_calls"] += 1
+        self.usage["input_tokens"] += d.input_tokens
+        self.usage["output_tokens"] += d.output_tokens
+        self.usage["cost_usd"] += d.cost_usd
+
+    async def _handle(self, step: dict[str, Any], d: Decision, page: Observation) -> None:
+        await self.send_usage()
+        args = d.args
+        if d.name not in TOOL_NAMES:
+            await self._fail_step(step, f"The model chose an unknown action {d.name!r}; nothing was executed.")
+            return
+        missing = missing_args(d.name, args)
+        if missing:
+            step.update(thought=_thought(args), action=_action(d.name, args, ""))
+            await self._fail_step(step, f"{d.name} was chosen without {', '.join(missing)}; nothing was executed.")
+            return
+        if args.get("memory"):
+            self.memory = _text(args["memory"])[:1500]
+        if isinstance(args.get("plan"), list) and args["plan"]:
+            self.plan = [{"text": str(p.get("text", ""))[:160], "status": p.get("status", "pending")}
+                         for p in args["plan"] if isinstance(p, dict)][:10]
+            await self.emit({"type": "plan", "items": self.plan})
+        target_label = ""
+        secret = False
+        if "element_id" in args:
+            try:
+                element = page.element(int(args["element_id"]))
+                target_label = element["label"] or element["tag"]
+                secret = d.name == "type_text" and element.get("type") == "password"
+                rect = await self.browser.element_rect(int(args["element_id"]))
+                step["target"] = {"label": target_label, "rect": rect or element["rect"]}
+            except (ActionError, PlaywrightError, ValueError, TypeError) as exc:
+                step.update(thought=_thought(args), action=_action(d.name, args, ""))
+                await self._fail_step(step, _browser_error(exc))
+                return
+        shown = {**args, "text": "••••••••"} if secret else args
+        step.update(thought=_thought(args), action=_action(d.name, shown, target_label), status="planned")
+        risky, reason = needs_approval(d.name, args, target_label, self.approval_mode)
+        if secret:
+            # Credentials are always the operator's call, whatever the approval mode; the value is never displayed.
+            step["secret"] = True
+            risky, reason = True, "This is a password field. The agent only types into it with your approval."
+        if risky:
+            step["risk"] = {"risky": True, "reason": reason}
+            if not await self._approve(step, reason):
+                return
+        if self.stopped:
+            step.update(status="skipped", result="Stopped before acting.", ended_at=time.time())
+            await self.send_step(step)
+            raise Stopped()
+        await self._execute(step, d.name, args)
+
+    async def _approve(self, step: dict[str, Any], reason: str) -> bool:
+        fut: asyncio.Future = asyncio.get_running_loop().create_future()
+        self._approval = (step["id"], fut)  # registered before any await so stop() can always cancel it
+        if self.stopped:
+            fut.set_exception(Stopped())
+        step["status"] = "awaiting_approval"
+        await self.send_step(step)
+        await self.emit({"type": "approval", "step_id": step["id"], "reason": reason,
+                         "action_label": step["action"]["label"],
+                         "target_label": step.get("target", {}).get("label"),
+                         "args": {k: v for k, v in step["action"]["args"].items() if k != "element_id"}})
+        await self.set_state("awaiting_approval", reason)
+        try:
+            approved, why = await fut
+        except Stopped:
+            step.update(status="skipped", result="Stopped while waiting for your approval.", ended_at=time.time())
+            await self.send_step(step)
+            raise
+        finally:
+            self._approval = None
+        if not approved:
+            text = "You rejected this step" + (f": {why}" if why else ".")
+            step.update(status="rejected", result=text, ended_at=time.time())
+            await self.send_step(step)
+            self.history.append({"n": step["n"], "label": step["action"]["label"],
+                                 "result": f"REJECTED by the operator. {why}".strip()})
+            return False
+        return True
+
+    async def _execute(self, step: dict[str, Any], name: str, args: dict[str, Any]) -> None:
+        step["status"] = "running"
+        await self.send_step(step)
+        await self.set_state("acting", step["action"]["label"])
+        if step.get("target") and getattr(self.browser, "on_frame", None) is not None:
+            await asyncio.sleep(0.22)
+        try:
+            result = await self._run_tool(name, args, step)
+        except ActionError as exc:
+            await self._fail_step(step, str(exc))
+            return
+        except Stopped:
+            step.update(status="skipped", result="Stopped.", ended_at=time.time())
+            await self.send_step(step)
+            raise
+        except PlaywrightError as exc:
+            await self._fail_step(step, _browser_error(exc))
+            return
+        except Exception as exc:  # noqa: BLE001 - any browser failure becomes a visible, recoverable step error
+            await self._fail_step(step, f"Unexpected browser error: {type(exc).__name__}: {str(exc)[:160]}")
+            return
+        if getattr(self.browser, "on_frame", None) is not None and hasattr(self.browser, "send_frame"):
+            try:
+                await self.browser.send_frame()
+            except Exception:  # noqa: BLE001
+                pass
+        self._consecutive_errors = 0
+        self.actions_taken += 1
+        step.update(status="ok", result=result, ended_at=time.time())
+        await self.send_step(step)
+        if name == "done":
+            await self._publish_result()
+        self.history.append({"n": step["n"], "label": step["action"]["label"], "result": result,
+                             "name": name, "url": step.get("url", ""),
+                             "sig": _signature(name, args, step.get("url", ""))})
+
+    async def _run_tool(self, name: str, args: dict[str, Any], step: dict[str, Any]) -> str:
+        b = self.browser
+        eid = lambda: int(args["element_id"])  # noqa: E731
+        match name:
+            case "search":
+                return await b.navigate(self.search_url.format(quote_plus(str(args.get("query", "")))))
+            case "navigate":
+                return await b.navigate(str(args.get("url", "")))
+            case "click":
+                return await b.click(eid())
+            case "type_text":
+                return await b.type_text(eid(), str(args.get("text", "")), bool(args.get("press_enter")),
+                                         secret_ok=bool(step.get("secret")))
+            case "select_option":
+                return await b.select_option(eid(), str(args.get("option", "")))
+            case "press_key":
+                return await b.press_key(str(args.get("key", "Enter")))
+            case "scroll":
+                return await b.scroll(str(args.get("direction", "down")), float(args.get("pages") or 1))
+            case "go_back":
+                return await b.go_back()
+            case "switch_tab":
+                return await b.switch_tab(int(args.get("tab_index", 0)))
+            case "close_tab":
+                return await b.close_tab()
+            case "read_page":
+                self.read_output = await b.read_page()
+                return f"Read {self.read_output['length']:,} characters of page text."
+            case "read_urls_parallel":
+                raw_urls = args.get("urls") if isinstance(args.get("urls"), list) else []
+                clean_urls = [str(u) for u in raw_urls[:4] if str(u).strip()]
+                self.read_output = await b.read_urls_parallel(clean_urls)
+                return f"Read {len(clean_urls)} pages in parallel ({self.read_output['length']:,} characters)."
+            case "record_findings":
+                return await self._record(args)
+            case "wait":
+                await asyncio.sleep(max(1.0, min(float(args.get("seconds") or 2), 10.0)))
+                return "Waited."
+            case "delegate":
+                if not self.fast:
+                    raise ActionError("The fast System 1 policy is not configured on this server.")
+                return await self._delegate(str(args.get("subgoal", "")), step)
+            case "ask_user":
+                return await self._ask(str(args.get("question", "")), step)
+            case "done":
+                self.result = self._build_result(args)
+                return "Delivered the result."
+        raise ActionError(f"Unsupported action {name}")
+
+    async def _record(self, args: dict[str, Any]) -> str:
+        items = args.get("items") if isinstance(args.get("items"), list) else []
+        source = str(args.get("source_url") or self.browser.page.url)
+        added = 0
+        for item in items:
+            if not isinstance(item, dict) or not item:
+                continue
+            entry = {"source_url": source, "data": {str(k)[:60]: _text(v) for k, v in item.items()}}
+            if entry not in self.findings:
+                self.findings.append(entry)
+                added += 1
+        await self.emit({"type": "findings", "items": self.findings})
+        return f"Saved {added} new finding{'s' if added != 1 else ''} ({len(self.findings)} total)."
+
+    async def _ask(self, question: str, step: dict[str, Any]) -> str:
+        self._question = asyncio.get_running_loop().create_future()
+        if self.stopped:
+            raise Stopped()
+        await self.emit({"type": "question", "step_id": step["id"], "question": question})
+        await self.set_state("awaiting_user", question)
+        try:
+            answer = await self._question
+        finally:
+            self._question = None
+        self.guidance.append(f"Answer to your question {question!r}: {answer}")
+        return f"You answered: {answer}"
+
+    async def _fail_step(self, step: dict[str, Any], error: str) -> None:
+        self._consecutive_errors += 1
+        step.update(status="error", error=error, ended_at=time.time())
+        await self.send_step(step)
+        self.history.append({"n": step["n"], "label": step.get("action", {}).get("label", "Read the page"),
+                             "error": error})
+        if self._consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+            self.paused = True
+            await self.notice("error", f"I'm stuck: {MAX_CONSECUTIVE_ERRORS} actions in a row failed. Last error: "
+                                       f"{error} Give me a hint, take over in the browser, or stop.")
+
+    # ---------- recovery signals ----------
+
+    def _mark_no_change(self, page: Observation) -> None:
+        sig = hashlib.sha1(f"{page.url}\n{page.text}".encode()).hexdigest()
+        last = self.history[-1] if self.history else None
+        if last and sig == self._last_page_sig and last.get("name") in ("click", "press_key", "select_option"):
+            last["result"] += " (but the page did not visibly change)"
+        self._last_page_sig = sig
+
+    def _loop_warnings(self) -> list[str]:
+        recent = [h.get("sig") for h in self.history[-8:] if h.get("sig")]
+        if not recent:
+            return []
+        top = max(set(recent), key=recent.count)
+        count = recent.count(top)
+        if count >= 3:
+            return [f"You have repeated the same action {count} times recently without finishing. "
+                    "Change approach: different element, different page, or call done/ask_user."]
+        return []
+
+    # ---------- results ----------
+
+    def _build_result(self, args: dict[str, Any], *, partial_reason: str = "") -> dict[str, Any]:
+        rows = [r for r in (args.get("rows") or []) if isinstance(r, dict)]
+        columns = [str(c) for c in (args.get("columns") or []) if str(c).strip()]
+        if not rows and self.findings and partial_reason:
+            rows = [f["data"] for f in self.findings]
+        if rows and not columns:
+            columns = list(dict.fromkeys(k for r in rows for k in r))
+        rows = [{c: _text(r.get(c, "")) for c in columns} for r in rows]
+        sources = [{"title": _text(s.get("title") or s.get("url")), "url": str(s.get("url"))}
+                   for s in (args.get("sources") or []) if isinstance(s, dict)
+                   and str(s.get("url", "")).startswith(("http://", "https://"))]
+        known = {s["url"] for s in sources}
+        for f in self.findings:
+            if f["source_url"] not in known and f["source_url"].startswith("http"):
+                sources.append({"title": f["source_url"], "url": f["source_url"]})
+                known.add(f["source_url"])
+        issues = [_text(i) for i in (args.get("issues") or []) if _text(i)]
+        if partial_reason:
+            issues.insert(0, partial_reason)
+        return {
+            "success": bool(args.get("success")) and not partial_reason,
+            "summary": str(args.get("summary") or "").strip() or "No summary was produced.",
+            "columns": columns, "rows": rows, "sources": sources[:30], "issues": issues,
+        }
+
+    async def _publish_result(self) -> None:
+        await self.emit({"type": "result", **self.result})
+        await self.send_usage()
+
+    async def _finalize(self, reason: str) -> None:
+        """Produce an honest partial result from the evidence gathered so far."""
+        await self.set_state("finishing", "Writing up what I found so far.")
+        args: dict[str, Any] = {}
+        if self.llm.config.api_key and (self.findings or self.history) and not self.detached:
+            context = (f"<goal>\n{self.goal}\n</goal>\n<history>\n"
+                       + "\n".join(f"{h['n']}. {h['label']} → {h.get('error') or h.get('result', '')}"
+                                   for h in self.history[-40:])
+                       + f"\n</history>\n<findings_saved>\n{json.dumps(self.findings, ensure_ascii=False)[:20000]}"
+                       f"\n</findings_saved>\nThe task ended early: {reason} Call done now with success=false, "
+                       "summarising only what the findings and history support.")
+            messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": context}]
+            try:
+                decision = await self.llm.decide(self.model, messages, TOOLS, force="done")
+                self._count(decision)
+                args = decision.args
+            except LLMError as exc:
+                await self.notice("error", f"Could not write a summary: {exc}")
+        if not args:
+            args = {"summary": "The task ended before a result was produced. Saved findings are listed below."}
+        self.result = self._build_result(args, partial_reason=reason)
+        await self._publish_result()
+
+    def distill_domain_notes(self) -> dict[str, list[str]]:
+        """Extract concise per-domain workflow notes from successful actions in this run."""
+        if not self.result or not (self.result.get("success") or self.findings):
+            return {}
+        by_domain: dict[str, list[str]] = {}
+        for h in self.history:
+            if h.get("error") or h.get("name") in ("done", "wait", "record_findings", "ask_user", None):
+                continue
+            domain = (urlsplit(str(h.get("url") or "")).hostname or "").lower().removeprefix("www.")
+            if not domain or domain in ("bing.com", "google.com", "duckduckgo.com"):
+                continue
+            by_domain.setdefault(domain, []).append(str(h.get("label", ""))[:80])
+        notes: dict[str, list[str]] = {}
+        for domain, actions in by_domain.items():
+            deduped = list(dict.fromkeys(a for a in actions if a))[:6]
+            if deduped:
+                notes[domain] = [f"Working flow on {domain}: {' → '.join(deduped)}"[:240]]
+        return notes
+
+
+BOT_WALL = re.compile(r"verify (that )?you are (a )?human|are you a robot|unusual traffic|\bcaptcha\b"
+                      r"|press (and|&) hold|checking your browser|just a moment\.\.\.|access denied|request blocked",
+                      re.I)
+
+
+def _page_warnings(page: Observation) -> list[str]:
+    title_hit = bool(BOT_WALL.search(page.title or ""))
+    body_hit = len(page.elements) < 20 and bool(BOT_WALL.search((page.text or "")[:2000]))
+    if title_hit or body_hit:
+        return ["This page looks like a bot check or block page. Do not try to solve it: get the same information "
+                "from a different site or search engine, or ask_user to solve it via takeover."]
+    return []
+
+
+def local_now(timezone: str | None) -> str:
+    """The operator's current date and time, with the weekday spelled out so the model never has to infer it."""
+    try:
+        zone = ZoneInfo(timezone) if timezone else None
+    except (ZoneInfoNotFoundError, ValueError):
+        zone = None
+    now = datetime.now(zone) if zone else datetime.now().astimezone()
+    return now.strftime("%A %d %B %Y, %H:%M") + f" ({timezone if zone else now.tzname()})"
+
+
+def _browser_error(exc: Exception) -> str:
+    if isinstance(exc, ActionError):
+        return str(exc)
+    first = (str(exc).splitlines() or [""])[0][:160]
+    if "context was destroyed" in first or "navigat" in first:
+        return "The page navigated while I was acting on it. I'll look again."
+    return f"Browser error: {first}"
+
+
+def _thought(args: dict[str, Any]) -> dict[str, str]:
+    return {k: _text(args.get(k, "")) for k in ("evaluation", "memory", "next_goal")}
+
+
+def _public_args(args: dict[str, Any]) -> dict[str, Any]:
+    hidden = {"evaluation", "memory", "next_goal", "plan", "irreversible"}
+    return {k: v for k, v in args.items() if k not in hidden}
+
+
+def _action(name: str, args: dict[str, Any], target_label: str) -> dict[str, Any]:
+    return {"name": name, "args": _public_args(args), "label": label(name, args, target_label)}
+
+
+def _signature(name: str, args: dict[str, Any], url: str) -> str:
+    return f"{url}|{name}|{json.dumps(_public_args(args), sort_keys=True)}"
+
+
+def _text(value: Any) -> str:
+    if isinstance(value, str):
+        return value.strip()[:2000]
+    if value is None:
+        return ""
+    return json.dumps(value, ensure_ascii=False)[:2000] if isinstance(value, (dict, list)) else str(value)
