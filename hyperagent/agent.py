@@ -270,7 +270,7 @@ class Agent(FastLoopMixin):
             return
         missing = missing_args(d.name, args)
         if missing:
-            step.update(thought=_thought(args), action=_action(d.name, args, ""))
+            step.update(thought=_thought(args, d.thinking), action=_action(d.name, args, ""))
             await self._fail_step(step, f"{d.name} was chosen without {', '.join(missing)}; nothing was executed.")
             return
         if args.get("memory"):
@@ -289,11 +289,11 @@ class Agent(FastLoopMixin):
                 rect = await self.browser.element_rect(int(args["element_id"]))
                 step["target"] = {"label": target_label, "rect": rect or element["rect"]}
             except (ActionError, PlaywrightError, ValueError, TypeError) as exc:
-                step.update(thought=_thought(args), action=_action(d.name, args, ""))
+                step.update(thought=_thought(args, d.thinking), action=_action(d.name, args, ""))
                 await self._fail_step(step, _browser_error(exc))
                 return
         shown = {**args, "text": "••••••••"} if secret else args
-        step.update(thought=_thought(args), action=_action(d.name, shown, target_label), status="planned")
+        step.update(thought=_thought(args, d.thinking), action=_action(d.name, shown, target_label), status="planned")
         risky, reason = needs_approval(d.name, args, target_label, self.approval_mode)
         if secret:
             # Credentials are always the operator's call, whatever the approval mode; the value is never displayed.
@@ -600,12 +600,15 @@ def _browser_error(exc: Exception) -> str:
     return f"Browser error: {first}"
 
 
-def _thought(args: dict[str, Any]) -> dict[str, str]:
-    return {k: _text(args.get(k, "")) for k in ("evaluation", "memory", "next_goal")}
+def _thought(args: dict[str, Any], native_thinking: str = "") -> dict[str, str]:
+    out = {k: _text(args.get(k, "")) for k in ("evaluation", "memory", "next_goal")}
+    if native_thinking:
+        out["thinking"] = _text(native_thinking)
+    return out
 
 
 def _public_args(args: dict[str, Any]) -> dict[str, Any]:
-    hidden = {"evaluation", "memory", "next_goal", "plan", "irreversible"}
+    hidden = {"evaluation", "memory", "next_goal", "plan", "irreversible", "_thinking"}
     return {k: v for k, v in args.items() if k not in hidden}
 
 

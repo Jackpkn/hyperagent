@@ -42,7 +42,7 @@ A complete step record; sent when created and whenever it changes (same `id`, re
   type: "step",
   id: "s3", n: 3,
   status: "thinking" | "planned" | "awaiting_approval" | "running" | "ok" | "error" | "rejected" | "skipped",
-  thought?: { evaluation: string, memory: string, next_goal: string },
+  thought?: { evaluation: string, memory: string, next_goal: string, thinking?: string },
   action?: { name: string, args: object, label: string /* human sentence, e.g. 'Click "Search"' */ },
   target?: { label: string, rect: {x,y,w,h} } /* frame pixel space, if the action targets an element */,
   risk?: { risky: boolean, reason: string },

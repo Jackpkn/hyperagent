@@ -53,11 +53,17 @@ def convert_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
              "input_schema": t["function"]["parameters"]} for t in tools]
 
 
-def speed_settings(model: str) -> dict[str, Any]:
-    """Each decision is one small step: keep latency low without breaking per-model thinking rules."""
-    if model.startswith("claude-haiku") and os.environ.get("PLANNER_THINKING", "1") == "0":
-        return {"thinking": {"type": "disabled"}}
-    return {"output_config": {"effort": "low"}}
+def speed_settings(model: str, *, for_planner: bool = True) -> dict[str, Any]:
+    """Configure Claude's native adaptive thinking with display='summarized' for the planner."""
+    if not for_planner or os.environ.get("PLANNER_THINKING", "1") == "0":
+        if model.startswith("claude-haiku"):
+            return {"thinking": {"type": "disabled"}}
+        return {"output_config": {"effort": "low"}}
+    effort = os.environ.get("PLANNER_EFFORT", "high")
+    return {
+        "thinking": {"type": "adaptive", "display": "summarized"},
+        "output_config": {"effort": effort},
+    }
 
 
 def cost(model: str, input_tokens: int, output_tokens: int) -> float:
@@ -82,7 +88,8 @@ class AnthropicBackend:
             try:
                 response = await self.client.messages.create(
                     model=model, max_tokens=4096, system=system, messages=converted, tools=convert_tools(tools),
-                    tool_choice={"type": "auto", "disable_parallel_tool_use": True}, **speed_settings(model),
+                    tool_choice={"type": "auto", "disable_parallel_tool_use": True},
+                    **speed_settings(model, for_planner=True),
                 )
             except anthropic.AuthenticationError:
                 raise AnthropicError("Anthropic rejected the API key.") from None
@@ -110,7 +117,23 @@ class AnthropicBackend:
                 spent = cost(model, usage.input_tokens, usage.output_tokens)
                 call = next((b for b in response.content if b.type == "tool_use"), None)
                 if call is not None and (not force or call.name == force):
-                    return call.name, dict(call.input), usage.input_tokens, usage.output_tokens, spent
+                    thinking_parts = [
+                        getattr(b, "thinking", "") or ""
+                        for b in response.content
+                        if getattr(b, "type", None) == "thinking"
+                    ]
+                    text_parts = [
+                        getattr(b, "text", "") or ""
+                        for b in response.content
+                        if getattr(b, "type", None) == "text"
+                    ]
+                    native_thinking = "\n\n".join(
+                        p.strip() for p in (*thinking_parts, *text_parts) if p and p.strip()
+                    )
+                    inputs = dict(call.input)
+                    if native_thinking:
+                        inputs["_thinking"] = native_thinking
+                    return call.name, inputs, usage.input_tokens, usage.output_tokens, spent
                 last = "the reply did not choose an action"
                 converted = [*converted,
                              {"role": "assistant", "content": [b.model_dump(exclude_none=True)
@@ -132,7 +155,7 @@ class AnthropicBackend:
         try:
             response = await self.client.messages.create(
                 model=model, max_tokens=400, system=system, messages=[{"role": "user", "content": user}],
-                **speed_settings(model),
+                **speed_settings(model, for_planner=False),
             )
         except anthropic.APIError as exc:
             raise AnthropicError(f"The text helper failed: {type(exc).__name__}") from None

@@ -41,6 +41,8 @@ export interface Thought {
   evaluation: string;
   memory: string;
   next_goal: string;
+  /** Native model thinking block (e.g. Claude ThinkingBlock.thinking / OpenRouter reasoning). */
+  thinking?: string;
 }
 
 export interface StepAction {

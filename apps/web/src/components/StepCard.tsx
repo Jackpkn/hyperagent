@@ -104,6 +104,7 @@ export function StepCard({ step, now, selected, hasSnapshot, onSelect }: StepCar
   const actionLabel = step.action?.label ?? "";
   const nextGoal = step.thought?.next_goal?.trim() || "";
   const evaluation = step.thought?.evaluation?.trim() || "";
+  const nativeThinking = step.thought?.thinking?.trim() || "";
   const memory = step.thought?.memory?.trim() || "";
   const showThinking = step.status === "thinking";
   const isFast = step.system === "fast";
@@ -195,8 +196,17 @@ export function StepCard({ step, now, selected, hasSnapshot, onSelect }: StepCar
         </div>
       ) : null}
 
+      {!isFast && nativeThinking ? (
+        <div className="step-reasoning" title="Claude native thinking block">
+          <strong style={{ display: "block", fontSize: 10, textTransform: "uppercase", letterSpacing: "0.04em", marginBottom: 2 }}>
+            Thinking
+          </strong>
+          <span>{nativeThinking}</span>
+        </div>
+      ) : null}
+
       {showEvaluation ? (
-        <p className="step-reasoning" title="Model reasoning">
+        <p className="step-reasoning" title="Model evaluation">
           {evaluation}
         </p>
       ) : null}

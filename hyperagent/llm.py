@@ -60,6 +60,7 @@ class Decision:
     input_tokens: int
     output_tokens: int
     cost_usd: float
+    thinking: str = ""
 
 
 class LLMClient:
@@ -82,7 +83,9 @@ class LLMClient:
                     model, messages, tools, force=force, on_retry=on_retry)
             except AnthropicError as exc:
                 raise LLMError(str(exc)) from None
-            return Decision(name=name, args=args, input_tokens=tokens_in, output_tokens=tokens_out, cost_usd=spent)
+            native_thinking = str(args.pop("_thinking", "") or "").strip()
+            return Decision(name=name, args=args, input_tokens=tokens_in, output_tokens=tokens_out,
+                            cost_usd=spent, thinking=native_thinking)
         if model in self.text_only:
             messages = strip_images(messages)
         body = {
@@ -148,6 +151,31 @@ def strip_images(messages: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return stripped
 
 
+def _extract_message_thinking(message: dict[str, Any]) -> str:
+    parts: list[str] = []
+    for key in ("thinking", "reasoning", "reasoning_content"):
+        val = message.get(key)
+        if isinstance(val, str) and val.strip():
+            parts.append(val.strip())
+    details = message.get("reasoning_details")
+    if isinstance(details, list):
+        for item in details:
+            if isinstance(item, dict):
+                txt = item.get("text") or item.get("summary")
+                if isinstance(txt, str) and txt.strip():
+                    parts.append(txt.strip())
+    content = message.get("content")
+    if isinstance(content, str) and content.strip():
+        parts.append(content.strip())
+    elif isinstance(content, list):
+        for block in content:
+            if isinstance(block, dict):
+                txt = block.get("thinking") or block.get("text")
+                if isinstance(txt, str) and txt.strip():
+                    parts.append(txt.strip())
+    return "\n\n".join(dict.fromkeys(parts))
+
+
 def parse_decision(payload: dict[str, Any]) -> Decision:
     try:
         message = payload["choices"][0]["message"]
@@ -171,4 +199,5 @@ def parse_decision(payload: dict[str, Any]) -> Decision:
         input_tokens=int(usage.get("prompt_tokens") or 0),
         output_tokens=int(usage.get("completion_tokens") or 0),
         cost_usd=float(usage.get("cost") or 0.0),
+        thinking=_extract_message_thinking(message),
     )

@@ -50,20 +50,26 @@ def test_message_and_tool_conversion():
 
 async def test_decide_uses_auto_tool_choice_and_retries_without_tool_call():
     b, calls = backend([reply(block(type="text", text="thinking aloud"), stop="end_turn"),
-                        reply(block(type="tool_use", name="navigate", input={"url": "https://x.test"}))])
+                        reply(block(type="thinking", thinking="Need to open x.test first."),
+                              block(type="tool_use", name="navigate", input={"url": "https://x.test"}))])
     name, args, tokens_in, _, spent = await b.decide("claude-haiku-5-5", [{"role": "user", "content": "go"}], TOOLS)
-    assert (name, args, tokens_in) == ("navigate", {"url": "https://x.test"}, 1000)
+    assert (name, args, tokens_in) == (
+        "navigate",
+        {"url": "https://x.test", "_thinking": "Need to open x.test first."},
+        1000,
+    )
     assert spent == pytest.approx(0.00015)
     first = calls.calls[0]
     assert first["tool_choice"] == {"type": "auto", "disable_parallel_tool_use": True}
-    assert first["output_config"] == {"effort": "low"}
+    assert first["thinking"] == {"type": "adaptive", "display": "summarized"}
+    assert first["output_config"] == {"effort": "high"}
     assert calls.calls[1]["messages"][-1]["content"][0]["text"].startswith("Call exactly one tool")
 
 
 async def test_forced_done_is_an_instruction_and_credit_errors_are_clear():
     b, calls = backend([reply(block(type="tool_use", name="done", input={"success": False}))])
     name, *_ = await b.decide("claude-sonnet-5-5", [{"role": "user", "content": "x"}], TOOLS, force="done")
-    assert name == "done" and calls.calls[0]["output_config"] == {"effort": "low"}
+    assert name == "done" and calls.calls[0]["thinking"] == {"type": "adaptive", "display": "summarized"}
     assert "Call the `done` tool now." in str(calls.calls[0]["messages"][-1]["content"])
     request = httpx.Request("POST", "https://api.anthropic.com/v1/messages")
     error = anthropic.BadRequestError("Your credit balance is too low", response=httpx.Response(400, request=request),
@@ -71,3 +77,4 @@ async def test_forced_done_is_an_instruction_and_credit_errors_are_clear():
     b, _ = backend([error])
     with pytest.raises(AnthropicError, match="out of credit"):
         await b.decide("claude-haiku-5-5", [{"role": "user", "content": "x"}], TOOLS)
+
