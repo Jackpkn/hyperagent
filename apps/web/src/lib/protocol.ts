@@ -93,6 +93,9 @@ export interface Finding {
   data: Record<string, unknown>;
   /** Field keys whose values could not be grounded in the observed page text. */
   unverified?: string[];
+  /** Step ID and step number where this finding was captured, for click-to-verify visual receipt. */
+  step_id?: string;
+  step_n?: number;
 }
 
 export interface Approval {

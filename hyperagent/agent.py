@@ -71,6 +71,7 @@ class Agent(FastLoopMixin):
         self._consecutive_errors = 0
         self.memory = ""
         self._observed_corpus = ""
+        self._learned_domain_rules: dict[str, list[str]] = {}
 
     # ---------- operator controls (called from the socket handler) ----------
 
@@ -96,13 +97,28 @@ class Agent(FastLoopMixin):
             if fut and not fut.done():
                 fut.set_exception(Stopped())
 
+    def _remember_domain_rule(self, rule_text: str, url: str = "") -> str | None:
+        raw_url = url or str(getattr(getattr(self.browser, "page", None), "url", "") or "")
+        domain = (urlsplit(raw_url).hostname or "").lower().removeprefix("www.")
+        if not domain or domain in ("bing.com", "google.com", "duckduckgo.com", "localhost"):
+            return None
+        clean = rule_text.strip()[:160]
+        if not clean:
+            return None
+        note = f"Operator rule on {domain}: {clean}"
+        self._learned_domain_rules.setdefault(domain, []).append(note)
+        self.domain_memory.setdefault(domain, []).append(note)
+        return domain
+
     async def guide(self, text: str) -> None:
         if self._question and not self._question.done():
             self._question.set_result(text)
             return
         self.guidance.append(text)
         self.guidance_version += 1
-        await self.notice("info", "Got it. I'll take that into account from the next step.")
+        domain = self._remember_domain_rule(text)
+        suffix = f" (Remembered rule for {domain})" if domain else ""
+        await self.notice("info", f"Got it. I'll take that into account from the next step.{suffix}")
 
     def resolve_approval(self, step_id: str, approved: bool, reason: str = "") -> bool:
         if not self._approval or self._approval[0] != step_id or self._approval[1].done():
@@ -349,6 +365,8 @@ class Agent(FastLoopMixin):
             text = "You rejected this step" + (f": {why}" if why else ".")
             step.update(status="rejected", result=text, ended_at=time.time())
             await self.send_step(step)
+            if why:
+                self._remember_domain_rule(f"Do not {step['action']['label']} ({why})", str(step.get("url") or ""))
             self.history.append({"n": step["n"], "label": step["action"]["label"],
                                  "result": f"REJECTED by the operator. {why}".strip()})
             return False
@@ -426,7 +444,7 @@ class Agent(FastLoopMixin):
                 self._remember_text(str(self.read_output.get("text", "")))
                 return f"Read {len(clean_urls)} pages in parallel ({self.read_output['length']:,} characters)."
             case "record_findings":
-                return await self._record(args)
+                return await self._record(args, step)
             case "wait":
                 await asyncio.sleep(max(1.0, min(float(args.get("seconds") or 2), 10.0)))
                 return "Waited."
@@ -441,7 +459,7 @@ class Agent(FastLoopMixin):
                 return "Delivered the result."
         raise ActionError(f"Unsupported action {name}")
 
-    async def _record(self, args: dict[str, Any]) -> str:
+    async def _record(self, args: dict[str, Any], step: dict[str, Any] | None = None) -> str:
         items = args.get("items") if isinstance(args.get("items"), list) else []
         source = str(args.get("source_url") or self.browser.page.url)
         added = 0
@@ -452,6 +470,10 @@ class Agent(FastLoopMixin):
             data = {str(k)[:60]: _text(v) for k, v in item.items()}
             unverified = [k for k, v in data.items() if not _verify_field(v, self._observed_corpus)]
             entry: dict[str, Any] = {"source_url": source, "data": data}
+            if step and step.get("id"):
+                entry["step_id"] = str(step["id"])
+            if step and step.get("n") is not None:
+                entry["step_n"] = int(step["n"])
             if unverified:
                 entry["unverified"] = unverified
                 for k in unverified:
@@ -564,9 +586,11 @@ class Agent(FastLoopMixin):
         await self._publish_result()
 
     def distill_domain_notes(self) -> dict[str, list[str]]:
-        """Extract concise per-domain workflow notes from successful actions in this run."""
+        """Extract concise per-domain workflow notes and operator rules from this run."""
+        notes: dict[str, list[str]] = {d: list(dict.fromkeys(rules))[:5]
+                                       for d, rules in self._learned_domain_rules.items() if rules}
         if not self.result or not (self.result.get("success") or self.findings):
-            return {}
+            return notes
         by_domain: dict[str, list[str]] = {}
         for h in self.history:
             if h.get("error") or h.get("name") in ("done", "wait", "record_findings", "ask_user", None):
@@ -575,11 +599,10 @@ class Agent(FastLoopMixin):
             if not domain or domain in ("bing.com", "google.com", "duckduckgo.com"):
                 continue
             by_domain.setdefault(domain, []).append(str(h.get("label", ""))[:80])
-        notes: dict[str, list[str]] = {}
         for domain, actions in by_domain.items():
             deduped = list(dict.fromkeys(a for a in actions if a))[:6]
             if deduped:
-                notes[domain] = [f"Working flow on {domain}: {' → '.join(deduped)}"[:240]]
+                notes.setdefault(domain, []).append(f"Working flow on {domain}: {' → '.join(deduped)}"[:240])
         return notes
 
 

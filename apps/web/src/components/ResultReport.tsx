@@ -12,7 +12,7 @@ import {
   GitCompare,
   Zap,
 } from "lucide-react";
-import type { Finding, RunResult, Usage } from "@/lib/protocol";
+import type { Finding, RunResult, StepRecord, Usage } from "@/lib/protocol";
 import { copyText, downloadText, resultToCsv, resultToMarkdown } from "@/lib/export";
 import { domainOf, formatCell, formatCost } from "@/lib/format";
 import { DataTable } from "./DataTable";
@@ -23,6 +23,10 @@ interface ResultReportProps {
   previousResult?: RunResult | null;
   usage?: Usage | null;
   findings?: Finding[];
+  goal?: string;
+  steps?: StepRecord[];
+  selectedStepId?: string | null;
+  onInspectStep?: (stepId: string | null) => void;
 }
 
 function isWebUrl(url: string): boolean {
@@ -33,7 +37,16 @@ function stamp(): string {
   return new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
 }
 
-export function ResultReport({ result, previousResult, usage, findings }: ResultReportProps) {
+export function ResultReport({
+  result,
+  previousResult,
+  usage,
+  findings,
+  goal,
+  steps,
+  selectedStepId,
+  onInspectStep,
+}: ResultReportProps) {
   const [copied, setCopied] = useState<"idle" | "copied" | "failed">("idle");
   const [showDiff, setShowDiff] = useState(false);
   const hasTable = result.columns.length > 0 && result.rows.length > 0;
@@ -99,15 +112,38 @@ export function ResultReport({ result, previousResult, usage, findings }: Result
             className="btn btn-sm"
             onClick={() =>
               downloadText(
-                `hyperagent-${stamp()}.json`,
-                JSON.stringify(result, null, 2),
+                `hyperagent-audit-${stamp()}.json`,
+                JSON.stringify(
+                  {
+                    exported_at: new Date().toISOString(),
+                    goal: goal ?? "",
+                    usage: usage ?? null,
+                    result,
+                    findings: findings ?? [],
+                    audit_steps: (steps ?? []).map((s) => ({
+                      id: s.id,
+                      n: s.n,
+                      status: s.status,
+                      system: s.system,
+                      url: s.url,
+                      action: s.action,
+                      thought: s.thought,
+                      result: s.result,
+                      error: s.error,
+                      started_at: s.started_at,
+                      ended_at: s.ended_at,
+                    })),
+                  },
+                  null,
+                  2,
+                ),
                 "application/json",
               )
             }
-            title="Download full JSON result"
+            title="Download complete verified audit trail (goal, steps, findings, and result)"
           >
             <FileJson size={13} />
-            JSON
+            Audit JSON
           </button>
         </div>
       </div>
@@ -162,6 +198,9 @@ export function ResultReport({ result, previousResult, usage, findings }: Result
             rows={result.rows}
             compareRows={showDiff && previousResult ? previousResult.rows : undefined}
             unverifiedValues={unverifiedValues}
+            findings={findings}
+            selectedStepId={selectedStepId}
+            onInspectStep={onInspectStep}
           />
         </div>
       ) : null}

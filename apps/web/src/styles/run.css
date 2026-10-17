@@ -1047,6 +1047,34 @@
   color: var(--wait);
 }
 
+.receipt-inline-btn {
+  margin-left: 6px;
+  vertical-align: middle;
+}
+
+.table-reconcile-row td {
+  background: var(--surface-sunk);
+  border-top: 1.5px solid var(--hairline-strong);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.reconcile-label {
+  color: var(--ink-soft);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.reconcile-stat {
+  color: var(--ink);
+}
+
+.reconcile-avg {
+  color: var(--muted);
+  font-size: 11px;
+}
+
 /* Borderless CLI-style ○ Thought / ● Action step stream */
 
 .stream-step {

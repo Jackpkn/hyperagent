@@ -420,6 +420,8 @@ export function AgentApp() {
                   result={state.result}
                   finished={finished}
                   endedWithoutResult={endedWithoutResult}
+                  selectedStepId={selectedStepId}
+                  onInspectStep={setSelectedStepId}
                 />
               </Tabs.Content>
 
@@ -432,6 +434,10 @@ export function AgentApp() {
                   usage={state.usage}
                   finished={finished}
                   endedWithoutResult={endedWithoutResult}
+                  goal={state.goal}
+                  steps={state.steps}
+                  selectedStepId={selectedStepId}
+                  onInspectStep={setSelectedStepId}
                 />
               </Tabs.Content>
 

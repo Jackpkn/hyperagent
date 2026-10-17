@@ -1,5 +1,5 @@
-import { Database, ExternalLink, FileCheck2 } from "lucide-react";
-import type { Finding, RunResult, Usage } from "@/lib/protocol";
+import { Database, Eye, ExternalLink, FileCheck2 } from "lucide-react";
+import type { Finding, RunResult, StepRecord, Usage } from "@/lib/protocol";
 import { domainOf, formatCell } from "@/lib/format";
 import { ResultReport } from "./ResultReport";
 
@@ -11,6 +11,10 @@ interface ResultsPanelProps {
   finished: boolean;
   endedWithoutResult: string | null;
   mode?: "findings" | "result";
+  goal?: string;
+  steps?: StepRecord[];
+  selectedStepId?: string | null;
+  onInspectStep?: (stepId: string | null) => void;
 }
 
 const PREVIEW_FIELDS = 6;
@@ -23,6 +27,10 @@ export function ResultsPanel({
   finished,
   endedWithoutResult,
   mode = "result",
+  goal,
+  steps,
+  selectedStepId,
+  onInspectStep,
 }: ResultsPanelProps) {
   if (mode === "findings") {
     return (
@@ -41,7 +49,12 @@ export function ResultsPanel({
           <ul className="findings-list" aria-label="Collected data">
             {findings.map((finding, index) => (
               <li key={`${index}-${finding.source_url}`}>
-                <FindingCard finding={finding} index={index + 1} />
+                <FindingCard
+                  finding={finding}
+                  index={index + 1}
+                  selectedStepId={selectedStepId}
+                  onInspectStep={onInspectStep}
+                />
               </li>
             ))}
           </ul>
@@ -58,6 +71,10 @@ export function ResultsPanel({
           previousResult={previousResult}
           usage={usage}
           findings={findings}
+          goal={goal}
+          steps={steps}
+          selectedStepId={selectedStepId}
+          onInspectStep={onInspectStep}
         />
       ) : (
         <div className="empty-state">
@@ -78,7 +95,12 @@ export function ResultsPanel({
               <ul className="findings-list" aria-label="Collected data">
                 {findings.map((finding, index) => (
                   <li key={`${index}-${finding.source_url}`}>
-                    <FindingCard finding={finding} index={index + 1} />
+                    <FindingCard
+                      finding={finding}
+                      index={index + 1}
+                      selectedStepId={selectedStepId}
+                      onInspectStep={onInspectStep}
+                    />
                   </li>
                 ))}
               </ul>
@@ -90,12 +112,23 @@ export function ResultsPanel({
   );
 }
 
-export function FindingCard({ finding, index }: { finding: Finding; index: number }) {
+export function FindingCard({
+  finding,
+  index,
+  selectedStepId,
+  onInspectStep,
+}: {
+  finding: Finding;
+  index: number;
+  selectedStepId?: string | null;
+  onInspectStep?: (stepId: string | null) => void;
+}) {
   const entries = Object.entries(finding.data).slice(0, PREVIEW_FIELDS);
   const hidden = Object.keys(finding.data).length - entries.length;
   const isWeb = /^https?:\/\//i.test(finding.source_url);
   const unverifiedSet = new Set(finding.unverified ?? []);
   const suspectCount = unverifiedSet.size;
+  const isReceiptActive = Boolean(finding.step_id && selectedStepId === finding.step_id);
 
   return (
     <article className="finding">
@@ -116,6 +149,17 @@ export function FindingCard({ finding, index }: { finding: Finding; index: numbe
             ✓ Grounded
           </span>
         )}
+        {finding.step_id && onInspectStep ? (
+          <button
+            type="button"
+            className={`step-inspect-btn${isReceiptActive ? " is-active" : ""}`}
+            onClick={() => onInspectStep(isReceiptActive ? null : finding.step_id!)}
+            title={`Click to view the exact browser screenshot (Step #${finding.step_n ?? finding.step_id}) where this finding was captured`}
+          >
+            <Eye size={10} aria-hidden="true" />
+            <span>{isReceiptActive ? "Viewing" : `Receipt #${finding.step_n ?? ""}`}</span>
+          </button>
+        ) : null}
         {isWeb ? (
           <a
             href={finding.source_url}

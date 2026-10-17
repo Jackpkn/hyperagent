@@ -1,6 +1,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { Eye } from "lucide-react";
+import type { Finding } from "@/lib/protocol";
 import { formatCell } from "@/lib/format";
 
 interface DataTableProps {
@@ -8,9 +10,31 @@ interface DataTableProps {
   rows: Record<string, unknown>[];
   compareRows?: Record<string, unknown>[];
   unverifiedValues?: Set<string>;
+  findings?: Finding[];
+  selectedStepId?: string | null;
+  onInspectStep?: (stepId: string | null) => void;
 }
 
 type SortState = { column: string; direction: "asc" | "desc" } | null;
+
+const QUANTITATIVE_COL_RE =
+  /price|cost|amount|total|subtotal|fee|tax|payout|balance|revenue|margin|qty|quantity|count|stock|score|points|comments/i;
+
+function parseNumericCell(raw: string): { num: number; prefix: string } | null {
+  const clean = raw.trim();
+  if (!clean) return null;
+  const currencyMatch = clean.match(/^([$£€¥₹])\s*(-?\d[\d,]*(?:\.\d+)?)$/);
+  if (currencyMatch) {
+    const val = Number(currencyMatch[2].replace(/,/g, ""));
+    return Number.isFinite(val) ? { num: val, prefix: currencyMatch[1] } : null;
+  }
+  const numMatch = clean.match(/^(-?\d[\d,]*(?:\.\d+)?)\s*(?:in stock|available|items|points|comments)?$/i);
+  if (numMatch) {
+    const val = Number(numMatch[1].replace(/,/g, ""));
+    return Number.isFinite(val) ? { num: val, prefix: "" } : null;
+  }
+  return null;
+}
 
 function compareValues(a: unknown, b: unknown): number {
   const numA = typeof a === "number" ? a : Number(formatCell(a).replace(/[^0-9.-]/g, ""));
@@ -26,7 +50,15 @@ function compareValues(a: unknown, b: unknown): number {
   return formatCell(a).localeCompare(formatCell(b), undefined, { numeric: true });
 }
 
-export function DataTable({ columns, rows, compareRows, unverifiedValues }: DataTableProps) {
+export function DataTable({
+  columns,
+  rows,
+  compareRows,
+  unverifiedValues,
+  findings,
+  selectedStepId,
+  onInspectStep,
+}: DataTableProps) {
   const [sort, setSort] = useState<SortState>(null);
   const keyColumn = columns[0] ?? "";
 
@@ -47,6 +79,49 @@ export function DataTable({ columns, rows, compareRows, unverifiedValues }: Data
     }
     return { byKey, byIndex: compareRows };
   }, [compareRows, keyColumn]);
+
+  // Deterministic numeric column summaries (never relying on LLM arithmetic).
+  const columnTotals = useMemo(() => {
+    if (rows.length < 2) return null;
+    const map = new Map<string, { sum: number; avg: number; prefix: string; isDecimal: boolean }>();
+    for (const col of columns) {
+      const parsed: { num: number; prefix: string; raw: string }[] = [];
+      for (const row of rows) {
+        const raw = formatCell(row[col]);
+        const p = parseNumericCell(raw);
+        if (p) parsed.push({ ...p, raw });
+      }
+      if (parsed.length < 2) continue;
+      const hasCurrency = parsed.some((p) => p.prefix !== "");
+      if (!hasCurrency && !QUANTITATIVE_COL_RE.test(col)) continue;
+      const sum = parsed.reduce((acc, p) => acc + p.num, 0);
+      const avg = sum / parsed.length;
+      const prefix = parsed.find((p) => p.prefix)?.prefix ?? "";
+      const isDecimal = hasCurrency || parsed.some((p) => p.raw.includes("."));
+      map.set(col, { sum, avg, prefix, isDecimal });
+    }
+    return map.size > 0 ? map : null;
+  }, [columns, rows]);
+
+  const matchRowToFinding = (row: Record<string, unknown>): Finding | undefined => {
+    if (!findings || findings.length === 0) return undefined;
+    const rowStrings = Object.values(row)
+      .map((v) => formatCell(v).trim().toLowerCase())
+      .filter((s) => s.length >= 3);
+    if (rowStrings.length === 0) return undefined;
+    let best: Finding | undefined;
+    let bestScore = 0;
+    for (const f of findings) {
+      if (!f.step_id) continue;
+      const fVals = Object.values(f.data).map((v) => formatCell(v).trim().toLowerCase());
+      const score = rowStrings.filter((rv) => fVals.some((fv) => fv && (fv === rv || fv.includes(rv) || rv.includes(fv)))).length;
+      if (score > bestScore) {
+        bestScore = score;
+        best = f;
+      }
+    }
+    return best;
+  };
 
   const toggle = (column: string) => {
     setSort((current) => {
@@ -89,6 +164,11 @@ export function DataTable({ columns, rows, compareRows, unverifiedValues }: Data
               ? (keyVal && compareLookup.byKey.get(keyVal)) ?? compareLookup.byIndex[rowIndex]
               : undefined;
             const isNewRow = Boolean(compareLookup && !prevRow);
+            const matchedFinding = matchRowToFinding(row);
+            const receiptStepId = matchedFinding?.step_id;
+            const receiptStepN = matchedFinding?.step_n;
+            const isReceiptActive = Boolean(receiptStepId && selectedStepId === receiptStepId);
+
             return (
               <tr key={rowIndex} className={isNewRow ? "is-diff-new-row" : undefined}>
                 {columns.map((column, colIdx) => {
@@ -127,6 +207,17 @@ export function DataTable({ columns, rows, compareRows, unverifiedValues }: Data
                           ⚠ unverified
                         </span>
                       ) : null}
+                      {colIdx === 0 && receiptStepId && onInspectStep ? (
+                        <button
+                          type="button"
+                          className={`step-inspect-btn receipt-inline-btn${isReceiptActive ? " is-active" : ""}`}
+                          onClick={() => onInspectStep(isReceiptActive ? null : receiptStepId)}
+                          title={`Click to view the exact browser screenshot (Step #${receiptStepN ?? receiptStepId}) where this row was captured`}
+                        >
+                          <Eye size={10} aria-hidden="true" />
+                          <span>{isReceiptActive ? "Viewing" : `Receipt #${receiptStepN ?? ""}`}</span>
+                        </button>
+                      ) : null}
                     </td>
                   );
                 })}
@@ -134,6 +225,30 @@ export function DataTable({ columns, rows, compareRows, unverifiedValues }: Data
             );
           })}
         </tbody>
+        {columnTotals ? (
+          <tfoot>
+            <tr className="table-reconcile-row" title="Deterministic arithmetic check computed directly by the client">
+              {columns.map((column, colIdx) => {
+                const stat = columnTotals.get(column);
+                if (!stat) {
+                  return (
+                    <td key={column} className="reconcile-cell">
+                      {colIdx === 0 ? <strong className="reconcile-label">Σ Verified Total</strong> : ""}
+                    </td>
+                  );
+                }
+                const fmt = (n: number) =>
+                  `${stat.prefix}${stat.isDecimal ? n.toFixed(2) : Math.round(n).toLocaleString()}`;
+                return (
+                  <td key={column} className="reconcile-cell reconcile-stat">
+                    <strong>Σ {fmt(stat.sum)}</strong>
+                    <span className="reconcile-avg"> · avg {fmt(stat.avg)}</span>
+                  </td>
+                );
+              })}
+            </tr>
+          </tfoot>
+        ) : null}
       </table>
     </div>
   );

@@ -326,7 +326,12 @@ export function Timeline({
                   <ul className="findings-list" aria-label="Collected data">
                     {findings.map((finding, index) => (
                       <li key={`${index}-${finding.source_url}`}>
-                        <FindingCard finding={finding} index={index + 1} />
+                        <FindingCard
+                          finding={finding}
+                          index={index + 1}
+                          selectedStepId={selectedStepId}
+                          onInspectStep={onSelectStep}
+                        />
                       </li>
                     ))}
                   </ul>
@@ -349,6 +354,10 @@ export function Timeline({
                   previousResult={previousResult}
                   usage={usage}
                   findings={findings}
+                  goal={goal}
+                  steps={steps}
+                  selectedStepId={selectedStepId}
+                  onInspectStep={onSelectStep}
                 />
               </section>
             ) : finished && endedWithoutResult ? (
