@@ -1,0 +1,39 @@
+{
+  "name": "hyperagent-console",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "mock": "node scripts/mock-server.mjs",
+    "dev:mock": "NEXT_PUBLIC_WS_URL=ws://localhost:8799/ws/agent next dev -p 3001"
+  },
+  "dependencies": {
+    "@radix-ui/react-collapsible": "^1.2.1",
+    "@radix-ui/react-tabs": "^1.2.1",
+    "lucide-react": "^1.58.0",
+    "next": "15.5.28",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.1",
+    "@tailwindcss/postcss": "^4.3.3",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@types/ws": "^8.18.2",
+    "eslint": "^9",
+    "eslint-config-next": "15.5.28",
+    "tailwindcss": "^4",
+    "typescript": "^5",
+    "ws": "^8.22.0"
+  },
+  "overrides": {
+    "next": {
+      "postcss": "8.5.30"
+    }
+  }
+}
