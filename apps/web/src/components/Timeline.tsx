@@ -71,6 +71,7 @@ export function Timeline({
   const stickToBottom = useRef(true);
   const [planOpen, setPlanOpen] = useState(false);
   const [findingsOpen, setFindingsOpen] = useState(true);
+  const [expandAllFeed, setExpandAllFeed] = useState(false);
 
   const stepById = useMemo(() => new Map(steps.map((step) => [step.id, step])), [steps]);
   const doneCount = useMemo(
@@ -111,6 +112,71 @@ export function Timeline({
   const releaseStick = () => {
     stickToBottom.current = false;
   };
+
+  const renderFeedItem = (item: FeedItem) => {
+    if (item.kind === "notice") {
+      return (
+        <div key={item.key} className="feed-row feed-notice">
+          <div
+            className="notice"
+            data-level={item.level}
+            role={item.level === "error" ? "alert" : "status"}
+          >
+            {item.level === "error" || item.level === "warn" ? (
+              <AlertTriangle size={14} className="notice-icon" aria-hidden="true" />
+            ) : (
+              <Info size={14} className="notice-icon" aria-hidden="true" />
+            )}
+            <span>{item.message}</span>
+          </div>
+        </div>
+      );
+    }
+    if (item.kind === "guidance") {
+      return (
+        <div key={item.key} className="feed-row feed-guidance">
+          <div className="guidance-bubble">
+            <span className="guidance-meta">
+              <MessageSquare size={11} aria-hidden="true" /> You
+            </span>
+            {item.text}
+          </div>
+        </div>
+      );
+    }
+    const step = stepById.get(item.stepId);
+    if (!step) return null;
+    const approval = approvals[step.id];
+    const hasSnapshot = Boolean(stepFrames?.[step.id]);
+    const selected = selectedStepId === step.id;
+    return (
+      <div key={item.key} className="feed-row" data-status={step.status}>
+        <StepCard
+          step={step}
+          now={now}
+          selected={selected}
+          hasSnapshot={hasSnapshot}
+          onSelect={
+            onSelectStep
+              ? () => onSelectStep(selected ? null : step.id)
+              : undefined
+          }
+        />
+        {approval ? (
+          <div style={{ marginTop: 8, marginLeft: 18 }}>
+            <ApprovalCard
+              approval={approval}
+              onApprove={onApprove}
+              onReject={onReject}
+            />
+          </div>
+        ) : null}
+      </div>
+    );
+  };
+
+  const canRollup = feed.length > 10;
+  const hiddenCount = canRollup ? feed.length - 8 : 0;
 
   return (
     <div className="timeline-pane">
@@ -169,68 +235,32 @@ export function Timeline({
           <div className="stream-stack">
             {feed.length > 0 ? (
               <div className="feed">
-                {feed.map((item) => {
-                  if (item.kind === "notice") {
-                    return (
-                      <div key={item.key} className="feed-row feed-notice">
-                        <div
-                          className="notice"
-                          data-level={item.level}
-                          role={item.level === "error" ? "alert" : "status"}
-                        >
-                          {item.level === "error" || item.level === "warn" ? (
-                            <AlertTriangle size={14} className="notice-icon" aria-hidden="true" />
-                          ) : (
-                            <Info size={14} className="notice-icon" aria-hidden="true" />
-                          )}
-                          <span>{item.message}</span>
-                        </div>
-                      </div>
-                    );
-                  }
-                  if (item.kind === "guidance") {
-                    return (
-                      <div key={item.key} className="feed-row feed-guidance">
-                        <div className="guidance-bubble">
-                          <span className="guidance-meta">
-                            <MessageSquare size={11} aria-hidden="true" /> You
-                          </span>
-                          {item.text}
-                        </div>
-                      </div>
-                    );
-                  }
-                  const step = stepById.get(item.stepId);
-                  if (!step) return null;
-                  const approval = approvals[step.id];
-                  const hasSnapshot = Boolean(stepFrames?.[step.id]);
-                  const selected = selectedStepId === step.id;
-                  return (
-                    <div key={item.key} className="feed-row" data-status={step.status}>
-                      <span className="spine-dot" aria-hidden="true" />
-                      <StepCard
-                        step={step}
-                        now={now}
-                        selected={selected}
-                        hasSnapshot={hasSnapshot}
-                        onSelect={
-                          onSelectStep
-                            ? () => onSelectStep(selected ? null : step.id)
-                            : undefined
-                        }
-                      />
-                      {approval ? (
-                        <div style={{ marginTop: 10 }}>
-                          <ApprovalCard
-                            approval={approval}
-                            onApprove={onApprove}
-                            onReject={onReject}
-                          />
-                        </div>
-                      ) : null}
-                    </div>
-                  );
-                })}
+                {canRollup && !expandAllFeed ? (
+                  <>
+                    {feed.slice(0, 2).map(renderFeedItem)}
+                    <button
+                      type="button"
+                      className="stream-rollup-btn"
+                      onClick={() => setExpandAllFeed(true)}
+                    >
+                      … {hiddenCount} more actions (click to expand) …
+                    </button>
+                    {feed.slice(-6).map(renderFeedItem)}
+                  </>
+                ) : (
+                  <>
+                    {canRollup ? (
+                      <button
+                        type="button"
+                        className="stream-rollup-btn"
+                        onClick={() => setExpandAllFeed(false)}
+                      >
+                        Collapse {hiddenCount} middle actions
+                      </button>
+                    ) : null}
+                    {feed.map(renderFeedItem)}
+                  </>
+                )}
               </div>
             ) : null}
 

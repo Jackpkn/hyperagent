@@ -335,71 +335,19 @@
   color: var(--muted);
 }
 
-/* Feed: a spine connects steps in the order they happened. */
+/* Feed: flat borderless event stream (○ Thought / ● Action) */
 
 .feed {
   position: relative;
   display: flex;
   flex-direction: column;
-  gap: 10px;
-}
-
-.feed::before {
-  content: "";
-  position: absolute;
-  left: 9px;
-  top: 8px;
-  bottom: 8px;
-  width: 1.5px;
-  background: var(--hairline);
+  gap: 3px;
 }
 
 .feed-row {
   position: relative;
-  padding-left: 26px;
-  animation: rise 180ms ease-out both;
-}
-
-.feed-row .spine-dot {
-  position: absolute;
-  left: 5px;
-  top: 14px;
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  border: 2px solid var(--surface);
-  background: var(--muted);
-  box-shadow: 0 0 0 1px var(--hairline-strong);
-}
-
-.feed-row[data-status="ok"] .spine-dot {
-  background: var(--ok);
-}
-
-.feed-row[data-status="error"] .spine-dot,
-.feed-row[data-status="rejected"] .spine-dot {
-  background: var(--error);
-}
-
-.feed-row[data-status="awaiting_approval"] .spine-dot,
-.feed-row[data-status="planned"] .spine-dot {
-  background: var(--wait);
-}
-
-.feed-row[data-status="thinking"] .spine-dot,
-.feed-row[data-status="running"] .spine-dot {
-  background: var(--signal);
-  animation: pulse 1.6s ease-in-out infinite;
-}
-
-.feed-row.feed-notice,
-.feed-row.feed-guidance {
   padding-left: 0;
-}
-
-.feed-row.feed-notice .spine-dot,
-.feed-row.feed-guidance .spine-dot {
-  display: none;
+  animation: rise 150ms ease-out both;
 }
 
 @keyframes rise {
@@ -1095,6 +1043,224 @@
   font-weight: 600;
   background: var(--wait-soft);
   color: var(--wait);
+}
+
+/* Borderless CLI-style ○ Thought / ● Action step stream */
+
+.stream-step {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 2px 0;
+}
+
+.stream-step.is-fast {
+  padding-left: 14px;
+}
+
+.stream-line {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.45;
+  padding: 3px 6px;
+  border-radius: 5px;
+  min-width: 0;
+}
+
+.stream-bullet {
+  flex: none;
+  width: 12px;
+  text-align: center;
+  font-size: 12px;
+  line-height: 1;
+  user-select: none;
+}
+
+.stream-bullet.is-hollow {
+  color: var(--muted);
+}
+
+.stream-bullet.is-pulsing {
+  color: var(--signal);
+  animation: pulse 1.3s ease-in-out infinite;
+}
+
+.stream-bullet.is-solid[data-tone="ok"] {
+  color: var(--ok);
+}
+
+.stream-bullet.is-solid[data-tone="live"] {
+  color: var(--signal);
+  animation: pulse 1.3s ease-in-out infinite;
+}
+
+.stream-bullet.is-solid[data-tone="wait"] {
+  color: var(--wait);
+}
+
+.stream-bullet.is-solid[data-tone="error"] {
+  color: var(--error);
+}
+
+.stream-bullet.is-solid[data-tone="neutral"] {
+  color: var(--muted);
+}
+
+.stream-thought-details {
+  margin: 0;
+}
+
+.stream-thought-details > summary {
+  list-style: none;
+  cursor: pointer;
+  user-select: none;
+  color: var(--muted);
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.stream-thought-details > summary::-webkit-details-marker {
+  display: none;
+}
+
+.stream-thought-details > summary:hover {
+  background: var(--surface-sunk);
+  color: var(--ink-soft);
+}
+
+.stream-thought-details[open] .reasoning-chevron {
+  transform: rotate(90deg);
+}
+
+.stream-thought-summary {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12.5px;
+}
+
+.stream-thought-title {
+  font-weight: 500;
+  color: var(--ink-soft);
+}
+
+.stream-thought-preview {
+  color: var(--muted);
+}
+
+.stream-thought-live-body {
+  flex: 1;
+  min-width: 0;
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  line-height: 1.45;
+}
+
+.stream-thought-live-text {
+  color: var(--muted);
+}
+
+.stream-thought-expanded {
+  margin: 2px 0 6px 24px;
+  padding: 4px 0 4px 10px;
+  border-left: 1.5px solid var(--hairline-strong);
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+.stream-thought-para {
+  margin: 0;
+}
+
+.stream-line-action {
+  transition: background-color 120ms ease;
+}
+
+.stream-line-action.is-inspectable {
+  cursor: pointer;
+}
+
+.stream-line-action.is-inspectable:hover {
+  background: var(--surface-sunk);
+}
+
+.stream-line-action.is-selected {
+  background: var(--accent-soft);
+}
+
+.stream-action-main {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.stream-action-title {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.stream-action-detail {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 12.5px;
+}
+
+.stream-fast-tag {
+  display: inline-block;
+  margin-right: 5px;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--signal-soft);
+  color: var(--signal-ink);
+  font-size: 10.5px;
+  font-weight: 600;
+}
+
+.stream-fast-meta {
+  color: var(--muted);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.stream-error-line {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 2px 0 4px 24px;
+  font-size: 12px;
+  color: var(--error);
+  font-weight: 500;
+}
+
+.stream-error-line svg {
+  margin-top: 2px;
+  flex: none;
+}
+
+.stream-rollup-btn {
+  align-self: flex-start;
+  margin: 2px 0 2px 20px;
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  font-style: italic;
+  cursor: pointer;
+  transition: color 120ms ease, background-color 120ms ease;
+}
+
+.stream-rollup-btn:hover {
+  color: var(--ink);
+  background: var(--surface-sunk);
 }
 
 /* Unified stream sections (Findings + Final Deliverable inline in Live Stream) */
