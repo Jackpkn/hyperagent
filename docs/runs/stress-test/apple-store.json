@@ -1,0 +1,256 @@
+{
+ "goal": "What is the address, phone number and today's opening hours of the Apple Store on Fifth Avenue in New York?",
+ "result": {
+  "success": true,
+  "summary": "Apple Fifth Avenue is at **767 Fifth Avenue, New York, NY 10153**. The phone number is **(212) 336-1440**. Today (Saturday, October 17) it is open **12:00 a.m. \u2013 11:59 p.m.**",
+  "columns": [],
+  "rows": [],
+  "sources": [
+   {
+    "title": "Fifth Avenue - Apple Store",
+    "url": "https://www.apple.com/retail/fifthavenue/"
+   }
+  ],
+  "issues": []
+ },
+ "usage": {
+  "llm_calls": 2,
+  "input_tokens": 29642,
+  "output_tokens": 626,
+  "cost_usd": 0.06554399999999999,
+  "fast_calls": 0,
+  "fast_ms_total": 0,
+  "text_calls": 0
+ },
+ "events": [
+  {
+   "t": 3.43,
+   "type": "status",
+   "state": "thinking",
+   "step": 0,
+   "detail": "The planner is deciding the next step\u2026"
+  },
+  {
+   "t": 3.6,
+   "type": "step",
+   "id": "s1",
+   "n": 1,
+   "status": "thinking",
+   "system": "planner",
+   "started_at": 1792213958.195984,
+   "url": "https://www.bing.com/"
+  },
+  {
+   "t": 6.77,
+   "type": "usage",
+   "llm_calls": 1,
+   "input_tokens": 13641,
+   "output_tokens": 231,
+   "cost_usd": 0.02959,
+   "fast_calls": 0,
+   "fast_ms_total": 0,
+   "text_calls": 0,
+   "elapsed_s": 3.3
+  },
+  {
+   "t": 6.77,
+   "type": "plan",
+   "items": [
+    {
+     "text": "Open Apple store page",
+     "status": "active"
+    },
+    {
+     "text": "Read details",
+     "status": "pending"
+    },
+    {
+     "text": "Answer",
+     "status": "pending"
+    }
+   ]
+  },
+  {
+   "t": 6.77,
+   "type": "step",
+   "id": "s1",
+   "n": 1,
+   "status": "running",
+   "system": "planner",
+   "started_at": 1792213958.195984,
+   "url": "https://www.bing.com/",
+   "thought": {
+    "evaluation": "Bing homepage loaded.",
+    "memory": "Start",
+    "next_goal": "Open Apple Fifth Avenue store page"
+   },
+   "action": {
+    "name": "navigate",
+    "args": {
+     "url": "https://www.apple.com/retail/fifthavenue/"
+    },
+    "label": "Open https://www.apple.com/retail/fifthavenue/"
+   }
+  },
+  {
+   "t": 6.77,
+   "type": "status",
+   "state": "acting",
+   "step": 0,
+   "detail": "Open https://www.apple.com/retail/fifthavenue/"
+  },
+  {
+   "t": 10.98,
+   "type": "step",
+   "id": "s1",
+   "n": 1,
+   "status": "ok",
+   "system": "planner",
+   "started_at": 1792213958.195984,
+   "url": "https://www.bing.com/",
+   "thought": {
+    "evaluation": "Bing homepage loaded.",
+    "memory": "Start",
+    "next_goal": "Open Apple Fifth Avenue store page"
+   },
+   "action": {
+    "name": "navigate",
+    "args": {
+     "url": "https://www.apple.com/retail/fifthavenue/"
+    },
+    "label": "Open https://www.apple.com/retail/fifthavenue/"
+   },
+   "result": "Opened https://www.apple.com/retail/fifthavenue/",
+   "ended_at": 1792213965.7414222
+  },
+  {
+   "t": 10.98,
+   "type": "status",
+   "state": "thinking",
+   "step": 1,
+   "detail": "The planner is deciding the next step\u2026"
+  },
+  {
+   "t": 11.0,
+   "type": "step",
+   "id": "s2",
+   "n": 2,
+   "status": "thinking",
+   "system": "planner",
+   "started_at": 1792213965.741534,
+   "url": "https://www.apple.com/retail/fifthavenue/"
+  },
+  {
+   "t": 14.6,
+   "type": "usage",
+   "llm_calls": 2,
+   "input_tokens": 29642,
+   "output_tokens": 626,
+   "cost_usd": 0.06554,
+   "fast_calls": 0,
+   "fast_ms_total": 0,
+   "text_calls": 0,
+   "elapsed_s": 11.2
+  },
+  {
+   "t": 14.6,
+   "type": "step",
+   "id": "s2",
+   "n": 2,
+   "status": "running",
+   "system": "planner",
+   "started_at": 1792213965.741534,
+   "url": "https://www.apple.com/retail/fifthavenue/",
+   "thought": {
+    "evaluation": "The Apple Fifth Avenue store page shows the address, phone number and today's hours.",
+    "memory": "All details read from the store page.",
+    "next_goal": "Give the answer."
+   },
+   "action": {
+    "name": "done",
+    "args": {
+     "success": true,
+     "summary": "Apple Fifth Avenue is at **767 Fifth Avenue, New York, NY 10153**. The phone number is **(212) 336-1440**. Today (Saturday, October 17) it is open **12:00 a.m. \u2013 11:59 p.m.**",
+     "columns": [],
+     "rows": [],
+     "sources": [
+      {
+       "title": "Fifth Avenue - Apple Store",
+       "url": "https://www.apple.com/retail/fifthavenue/"
+      }
+     ],
+     "issues": []
+    },
+    "label": "Deliver the result"
+   }
+  },
+  {
+   "t": 14.6,
+   "type": "status",
+   "state": "acting",
+   "step": 1,
+   "detail": "Deliver the result"
+  },
+  {
+   "t": 14.6,
+   "type": "step",
+   "id": "s2",
+   "n": 2,
+   "status": "ok",
+   "system": "planner",
+   "started_at": 1792213965.741534,
+   "url": "https://www.apple.com/retail/fifthavenue/",
+   "thought": {
+    "evaluation": "The Apple Fifth Avenue store page shows the address, phone number and today's hours.",
+    "memory": "All details read from the store page.",
+    "next_goal": "Give the answer."
+   },
+   "action": {
+    "name": "done",
+    "args": {
+     "success": true,
+     "summary": "Apple Fifth Avenue is at **767 Fifth Avenue, New York, NY 10153**. The phone number is **(212) 336-1440**. Today (Saturday, October 17) it is open **12:00 a.m. \u2013 11:59 p.m.**",
+     "columns": [],
+     "rows": [],
+     "sources": [
+      {
+       "title": "Fifth Avenue - Apple Store",
+       "url": "https://www.apple.com/retail/fifthavenue/"
+      }
+     ],
+     "issues": []
+    },
+    "label": "Deliver the result"
+   },
+   "result": "Delivered the result.",
+   "ended_at": 1792213969.3656561
+  },
+  {
+   "t": 14.6,
+   "type": "result",
+   "success": true,
+   "summary": "Apple Fifth Avenue is at **767 Fifth Avenue, New York, NY 10153**. The phone number is **(212) 336-1440**. Today (Saturday, October 17) it is open **12:00 a.m. \u2013 11:59 p.m.**",
+   "columns": [],
+   "rows": [],
+   "sources": [
+    {
+     "title": "Fifth Avenue - Apple Store",
+     "url": "https://www.apple.com/retail/fifthavenue/"
+    }
+   ],
+   "issues": []
+  },
+  {
+   "t": 14.6,
+   "type": "usage",
+   "llm_calls": 2,
+   "input_tokens": 29642,
+   "output_tokens": 626,
+   "cost_usd": 0.06554,
+   "fast_calls": 0,
+   "fast_ms_total": 0,
+   "text_calls": 0,
+   "elapsed_s": 11.2
+  }
+ ]
+}

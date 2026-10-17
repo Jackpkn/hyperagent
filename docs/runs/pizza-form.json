@@ -1,0 +1,1272 @@
+{
+ "goal": "Go to httpbin.org/forms/post and order a large pizza with bacon and mushrooms for Ada Lovelace (phone 555-0100, ada@example.com), delivery at 19:30, then submit and tell me what the server received.",
+ "result": {
+  "success": true,
+  "summary": "The pizza order was submitted. The server (httpbin.org/post) received:\n- Customer name: Ada Lovelace\n- Telephone: 555-0100\n- E-mail: ada@example.com\n- Size: large\n- Toppings: bacon, mushroom\n- Delivery time: 19:30\n- Comments: (empty)",
+  "columns": [
+   "Field",
+   "Value received"
+  ],
+  "rows": [
+   {
+    "Field": "custname",
+    "Value received": "Ada Lovelace"
+   },
+   {
+    "Field": "custtel",
+    "Value received": "555-0100"
+   },
+   {
+    "Field": "custemail",
+    "Value received": "ada@example.com"
+   },
+   {
+    "Field": "size",
+    "Value received": "large"
+   },
+   {
+    "Field": "topping",
+    "Value received": "bacon, mushroom"
+   },
+   {
+    "Field": "delivery",
+    "Value received": "19:30"
+   },
+   {
+    "Field": "comments",
+    "Value received": "(empty)"
+   }
+  ],
+  "sources": [
+   {
+    "title": "httpbin.org/post (form submission echo)",
+    "url": "https://httpbin.org/post"
+   }
+  ],
+  "issues": [
+   "The 'Bacon' and 'Mushroom' toppings were selected; the server echoed 'mushroom' (singular) as the form value, which is the form's own value attribute."
+  ]
+ },
+ "usage": {
+  "llm_calls": 10,
+  "input_tokens": 98873,
+  "output_tokens": 3179,
+  "cost_usd": 0.011476799999999999
+ },
+ "events": [
+  {
+   "t": 4.22,
+   "type": "status",
+   "state": "thinking",
+   "step": 0,
+   "detail": ""
+  },
+  {
+   "t": 4.92,
+   "type": "step",
+   "id": "s1",
+   "n": 1,
+   "status": "thinking",
+   "started_at": 1792207896.132063,
+   "url": "https://www.bing.com/"
+  },
+  {
+   "t": 8.95,
+   "type": "usage",
+   "llm_calls": 1,
+   "input_tokens": 13204,
+   "output_tokens": 302,
+   "cost_usd": 0.00147,
+   "elapsed_s": 4.7
+  },
+  {
+   "t": 8.95,
+   "type": "plan",
+   "items": [
+    {
+     "text": "Open httpbin.org/forms/post",
+     "status": "active"
+    },
+    {
+     "text": "Fill customer name, phone, email",
+     "status": "pending"
+    },
+    {
+     "text": "Select large size, bacon and mushrooms toppings, delivery time 19:30",
+     "status": "pending"
+    },
+    {
+     "text": "Submit and report what server received",
+     "status": "pending"
+    }
+   ]
+  },
+  {
+   "t": 8.95,
+   "type": "step",
+   "id": "s1",
+   "n": 1,
+   "status": "running",
+   "started_at": 1792207896.132063,
+   "url": "https://www.bing.com/",
+   "thought": {
+    "evaluation": "Starting; browser is on Bing homepage.",
+    "memory": "Task: fill httpbin.org/forms/post pizza order. No steps done yet.",
+    "next_goal": "Open the httpbin pizza order form."
+   },
+   "action": {
+    "name": "navigate",
+    "args": {
+     "url": "https://httpbin.org/forms/post"
+    },
+    "label": "Open https://httpbin.org/forms/post"
+   }
+  },
+  {
+   "t": 8.95,
+   "type": "status",
+   "state": "acting",
+   "step": 0,
+   "detail": "Open https://httpbin.org/forms/post"
+  },
+  {
+   "t": 10.41,
+   "type": "step",
+   "id": "s1",
+   "n": 1,
+   "status": "ok",
+   "started_at": 1792207896.132063,
+   "url": "https://www.bing.com/",
+   "thought": {
+    "evaluation": "Starting; browser is on Bing homepage.",
+    "memory": "Task: fill httpbin.org/forms/post pizza order. No steps done yet.",
+    "next_goal": "Open the httpbin pizza order form."
+   },
+   "action": {
+    "name": "navigate",
+    "args": {
+     "url": "https://httpbin.org/forms/post"
+    },
+    "label": "Open https://httpbin.org/forms/post"
+   },
+   "result": "Opened https://httpbin.org/forms/post",
+   "ended_at": 1792207902.3316748
+  },
+  {
+   "t": 10.41,
+   "type": "status",
+   "state": "thinking",
+   "step": 1,
+   "detail": ""
+  },
+  {
+   "t": 10.45,
+   "type": "step",
+   "id": "s2",
+   "n": 2,
+   "status": "thinking",
+   "started_at": 1792207902.331778,
+   "url": "https://httpbin.org/forms/post"
+  },
+  {
+   "t": 14.9,
+   "type": "usage",
+   "llm_calls": 2,
+   "input_tokens": 22593,
+   "output_tokens": 658,
+   "cost_usd": 0.00259,
+   "elapsed_s": 10.7
+  },
+  {
+   "t": 14.9,
+   "type": "plan",
+   "items": [
+    {
+     "text": "Open httpbin.org/forms/post",
+     "status": "done"
+    },
+    {
+     "text": "Fill customer name, phone, email",
+     "status": "active"
+    },
+    {
+     "text": "Select large size, bacon and mushrooms toppings, delivery time 19:30",
+     "status": "pending"
+    },
+    {
+     "text": "Submit and report what server received",
+     "status": "pending"
+    }
+   ]
+  },
+  {
+   "t": 14.98,
+   "type": "step",
+   "id": "s2",
+   "n": 2,
+   "status": "running",
+   "started_at": 1792207902.331778,
+   "url": "https://httpbin.org/forms/post",
+   "target": {
+    "label": "Customer name:",
+    "rect": {
+     "x": 117.3125,
+     "y": 16,
+     "w": 153,
+     "h": 21
+    }
+   },
+   "thought": {
+    "evaluation": "Form page loaded with all fields visible.",
+    "memory": "On httpbin pizza form. Filling fields now.",
+    "next_goal": "Enter customer name Ada Lovelace."
+   },
+   "action": {
+    "name": "type_text",
+    "args": {
+     "element_id": 1,
+     "text": "Ada Lovelace",
+     "press_enter": false
+    },
+    "label": "Type \"Ada Lovelace\" into \"Customer name:\""
+   }
+  },
+  {
+   "t": 14.98,
+   "type": "status",
+   "state": "acting",
+   "step": 1,
+   "detail": "Type \"Ada Lovelace\" into \"Customer name:\""
+  },
+  {
+   "t": 15.26,
+   "type": "step",
+   "id": "s2",
+   "n": 2,
+   "status": "ok",
+   "started_at": 1792207902.331778,
+   "url": "https://httpbin.org/forms/post",
+   "target": {
+    "label": "Customer name:",
+    "rect": {
+     "x": 117.3125,
+     "y": 16,
+     "w": 153,
+     "h": 21
+    }
+   },
+   "thought": {
+    "evaluation": "Form page loaded with all fields visible.",
+    "memory": "On httpbin pizza form. Filling fields now.",
+    "next_goal": "Enter customer name Ada Lovelace."
+   },
+   "action": {
+    "name": "type_text",
+    "args": {
+     "element_id": 1,
+     "text": "Ada Lovelace",
+     "press_enter": false
+    },
+    "label": "Type \"Ada Lovelace\" into \"Customer name:\""
+   },
+   "result": "Typed.",
+   "ended_at": 1792207907.175484
+  },
+  {
+   "t": 15.26,
+   "type": "status",
+   "state": "thinking",
+   "step": 2,
+   "detail": ""
+  },
+  {
+   "t": 15.29,
+   "type": "step",
+   "id": "s3",
+   "n": 3,
+   "status": "thinking",
+   "started_at": 1792207907.175682,
+   "url": "https://httpbin.org/forms/post"
+  },
+  {
+   "t": 19.29,
+   "type": "usage",
+   "llm_calls": 3,
+   "input_tokens": 32017,
+   "output_tokens": 932,
+   "cost_usd": 0.00367,
+   "elapsed_s": 15.1
+  },
+  {
+   "t": 19.32,
+   "type": "step",
+   "id": "s3",
+   "n": 3,
+   "status": "running",
+   "started_at": 1792207907.175682,
+   "url": "https://httpbin.org/forms/post",
+   "target": {
+    "label": "Telephone:",
+    "rect": {
+     "x": 82.859375,
+     "y": 53,
+     "w": 153,
+     "h": 21
+    }
+   },
+   "thought": {
+    "evaluation": "Customer name shows \"Ada Lovelace\" in the form field, as expected.",
+    "memory": "Form at httpbin.org/forms/post loaded. Name filled. Remaining: phone, email, large size, bacon, mushroom, time 19:30, submit.",
+    "next_goal": "Type phone number 555-0100 into the Telephone field."
+   },
+   "action": {
+    "name": "type_text",
+    "args": {
+     "element_id": 2,
+     "text": "555-0100",
+     "press_enter": false
+    },
+    "label": "Type \"555-0100\" into \"Telephone:\""
+   }
+  },
+  {
+   "t": 19.32,
+   "type": "status",
+   "state": "acting",
+   "step": 2,
+   "detail": "Type \"555-0100\" into \"Telephone:\""
+  },
+  {
+   "t": 19.57,
+   "type": "step",
+   "id": "s3",
+   "n": 3,
+   "status": "ok",
+   "started_at": 1792207907.175682,
+   "url": "https://httpbin.org/forms/post",
+   "target": {
+    "label": "Telephone:",
+    "rect": {
+     "x": 82.859375,
+     "y": 53,
+     "w": 153,
+     "h": 21
+    }
+   },
+   "thought": {
+    "evaluation": "Customer name shows \"Ada Lovelace\" in the form field, as expected.",
+    "memory": "Form at httpbin.org/forms/post loaded. Name filled. Remaining: phone, email, large size, bacon, mushroom, time 19:30, submit.",
+    "next_goal": "Type phone number 555-0100 into the Telephone field."
+   },
+   "action": {
+    "name": "type_text",
+    "args": {
+     "element_id": 2,
+     "text": "555-0100",
+     "press_enter": false
+    },
+    "label": "Type \"555-0100\" into \"Telephone:\""
+   },
+   "result": "Typed.",
+   "ended_at": 1792207911.490207
+  },
+  {
+   "t": 19.57,
+   "type": "status",
+   "state": "thinking",
+   "step": 3,
+   "detail": ""
+  },
+  {
+   "t": 19.62,
+   "type": "step",
+   "id": "s4",
+   "n": 4,
+   "status": "thinking",
+   "started_at": 1792207911.4903,
+   "url": "https://httpbin.org/forms/post"
+  },
+  {
+   "t": 22.58,
+   "type": "usage",
+   "llm_calls": 4,
+   "input_tokens": 41469,
+   "output_tokens": 1194,
+   "cost_usd": 0.00474,
+   "elapsed_s": 18.4
+  },
+  {
+   "t": 22.59,
+   "type": "step",
+   "id": "s4",
+   "n": 4,
+   "status": "running",
+   "started_at": 1792207911.4903,
+   "url": "https://httpbin.org/forms/post",
+   "target": {
+    "label": "E-mail address:",
+    "rect": {
+     "x": 111.96875,
+     "y": 90,
+     "w": 153,
+     "h": 21
+    }
+   },
+   "thought": {
+    "evaluation": "Customer name and telephone are filled correctly (screenshot shows Ada Lovelace and 555-0100).",
+    "memory": "Name and phone done. Remaining: email, large size, bacon, mushroom, time 19:30, submit.",
+    "next_goal": "Enter the email address ada@example.com."
+   },
+   "action": {
+    "name": "type_text",
+    "args": {
+     "element_id": 3,
+     "text": "ada@example.com",
+     "press_enter": false
+    },
+    "label": "Type \"ada@example.com\" into \"E-mail address:\""
+   }
+  },
+  {
+   "t": 22.59,
+   "type": "status",
+   "state": "acting",
+   "step": 3,
+   "detail": "Type \"ada@example.com\" into \"E-mail address:\""
+  },
+  {
+   "t": 22.85,
+   "type": "step",
+   "id": "s4",
+   "n": 4,
+   "status": "ok",
+   "started_at": 1792207911.4903,
+   "url": "https://httpbin.org/forms/post",
+   "target": {
+    "label": "E-mail address:",
+    "rect": {
+     "x": 111.96875,
+     "y": 90,
+     "w": 153,
+     "h": 21
+    }
+   },
+   "thought": {
+    "evaluation": "Customer name and telephone are filled correctly (screenshot shows Ada Lovelace and 555-0100).",
+    "memory": "Name and phone done. Remaining: email, large size, bacon, mushroom, time 19:30, submit.",
+    "next_goal": "Enter the email address ada@example.com."
+   },
+   "action": {
+    "name": "type_text",
+    "args": {
+     "element_id": 3,
+     "text": "ada@example.com",
+     "press_enter": false
+    },
+    "label": "Type \"ada@example.com\" into \"E-mail address:\""
+   },
+   "result": "Typed.",
+   "ended_at": 1792207914.7656431
+  },
+  {
+   "t": 22.85,
+   "type": "status",
+   "state": "thinking",
+   "step": 4,
+   "detail": ""
+  },
+  {
+   "t": 22.89,
+   "type": "step",
+   "id": "s5",
+   "n": 5,
+   "status": "thinking",
+   "started_at": 1792207914.765718,
+   "url": "https://httpbin.org/forms/post"
+  },
+  {
+   "t": 25.64,
+   "type": "usage",
+   "llm_calls": 5,
+   "input_tokens": 50954,
+   "output_tokens": 1522,
+   "cost_usd": 0.00586,
+   "elapsed_s": 21.4
+  },
+  {
+   "t": 25.64,
+   "type": "plan",
+   "items": [
+    {
+     "text": "Open httpbin.org/forms/post",
+     "status": "done"
+    },
+    {
+     "text": "Fill customer name, phone, email",
+     "status": "done"
+    },
+    {
+     "text": "Select large size, bacon and mushrooms, delivery 19:30",
+     "status": "active"
+    },
+    {
+     "text": "Submit and report what server received",
+     "status": "pending"
+    }
+   ]
+  },
+  {
+   "t": 25.68,
+   "type": "step",
+   "id": "s5",
+   "n": 5,
+   "status": "running",
+   "started_at": 1792207914.765718,
+   "url": "https://httpbin.org/forms/post",
+   "target": {
+    "label": "Large",
+    "rect": {
+     "x": 29,
+     "y": 241.59375,
+     "w": 13,
+     "h": 13
+    }
+   },
+   "thought": {
+    "evaluation": "Customer name, phone, and email fields show Ada Lovelace, 555-0100, ada@example.com.",
+    "memory": "Fields filled. Now selecting Large size, Bacon, Mushroom, time 19:30.",
+    "next_goal": "Select Large pizza size."
+   },
+   "action": {
+    "name": "click",
+    "args": {
+     "element_id": 6
+    },
+    "label": "Click \"Large\""
+   }
+  },
+  {
+   "t": 25.68,
+   "type": "status",
+   "state": "acting",
+   "step": 4,
+   "detail": "Click \"Large\""
+  },
+  {
+   "t": 26.07,
+   "type": "step",
+   "id": "s5",
+   "n": 5,
+   "status": "ok",
+   "started_at": 1792207914.765718,
+   "url": "https://httpbin.org/forms/post",
+   "target": {
+    "label": "Large",
+    "rect": {
+     "x": 29,
+     "y": 241.59375,
+     "w": 13,
+     "h": 13
+    }
+   },
+   "thought": {
+    "evaluation": "Customer name, phone, and email fields show Ada Lovelace, 555-0100, ada@example.com.",
+    "memory": "Fields filled. Now selecting Large size, Bacon, Mushroom, time 19:30.",
+    "next_goal": "Select Large pizza size."
+   },
+   "action": {
+    "name": "click",
+    "args": {
+     "element_id": 6
+    },
+    "label": "Click \"Large\""
+   },
+   "result": "Clicked.",
+   "ended_at": 1792207917.98517
+  },
+  {
+   "t": 26.07,
+   "type": "status",
+   "state": "thinking",
+   "step": 5,
+   "detail": ""
+  },
+  {
+   "t": 26.12,
+   "type": "step",
+   "id": "s6",
+   "n": 6,
+   "status": "thinking",
+   "started_at": 1792207917.9852319,
+   "url": "https://httpbin.org/forms/post"
+  },
+  {
+   "t": 28.47,
+   "type": "usage",
+   "llm_calls": 6,
+   "input_tokens": 60447,
+   "output_tokens": 1716,
+   "cost_usd": 0.0069,
+   "elapsed_s": 24.3
+  },
+  {
+   "t": 28.48,
+   "type": "step",
+   "id": "s6",
+   "n": 6,
+   "status": "running",
+   "started_at": 1792207917.9852319,
+   "url": "https://httpbin.org/forms/post",
+   "target": {
+    "label": "Bacon",
+    "rect": {
+     "x": 28,
+     "y": 329.1875,
+     "w": 13,
+     "h": 13
+    }
+   },
+   "thought": {
+    "evaluation": "Large radio is now checked per the page state and screenshot.",
+    "memory": "Name, phone, email filled. Large selected. Remaining: Bacon, Mushroom, time 19:30, submit.",
+    "next_goal": "Check the Bacon topping."
+   },
+   "action": {
+    "name": "click",
+    "args": {
+     "element_id": 7
+    },
+    "label": "Click \"Bacon\""
+   }
+  },
+  {
+   "t": 28.48,
+   "type": "status",
+   "state": "acting",
+   "step": 5,
+   "detail": "Click \"Bacon\""
+  },
+  {
+   "t": 28.87,
+   "type": "step",
+   "id": "s6",
+   "n": 6,
+   "status": "ok",
+   "started_at": 1792207917.9852319,
+   "url": "https://httpbin.org/forms/post",
+   "target": {
+    "label": "Bacon",
+    "rect": {
+     "x": 28,
+     "y": 329.1875,
+     "w": 13,
+     "h": 13
+    }
+   },
+   "thought": {
+    "evaluation": "Large radio is now checked per the page state and screenshot.",
+    "memory": "Name, phone, email filled. Large selected. Remaining: Bacon, Mushroom, time 19:30, submit.",
+    "next_goal": "Check the Bacon topping."
+   },
+   "action": {
+    "name": "click",
+    "args": {
+     "element_id": 7
+    },
+    "label": "Click \"Bacon\""
+   },
+   "result": "Clicked.",
+   "ended_at": 1792207920.7842739
+  },
+  {
+   "t": 28.87,
+   "type": "status",
+   "state": "thinking",
+   "step": 6,
+   "detail": ""
+  },
+  {
+   "t": 28.89,
+   "type": "step",
+   "id": "s7",
+   "n": 7,
+   "status": "thinking",
+   "started_at": 1792207920.784333,
+   "url": "https://httpbin.org/forms/post"
+  },
+  {
+   "t": 31.23,
+   "type": "usage",
+   "llm_calls": 7,
+   "input_tokens": 69955,
+   "output_tokens": 1923,
+   "cost_usd": 0.00796,
+   "elapsed_s": 27.0
+  },
+  {
+   "t": 31.31,
+   "type": "step",
+   "id": "s7",
+   "n": 7,
+   "status": "running",
+   "started_at": 1792207920.784333,
+   "url": "https://httpbin.org/forms/post",
+   "target": {
+    "label": "Mushroom",
+    "rect": {
+     "x": 28,
+     "y": 437.1875,
+     "w": 13,
+     "h": 13
+    }
+   },
+   "thought": {
+    "evaluation": "Bacon is checked, Large is selected. Customer fields filled. Next: check Mushroom.",
+    "memory": "Filled name, phone, email, Large, Bacon. Remaining: Mushroom, time 19:30, submit.",
+    "next_goal": "Check the Mushroom topping."
+   },
+   "action": {
+    "name": "click",
+    "args": {
+     "element_id": 10
+    },
+    "label": "Click \"Mushroom\""
+   }
+  },
+  {
+   "t": 31.31,
+   "type": "status",
+   "state": "acting",
+   "step": 6,
+   "detail": "Click \"Mushroom\""
+  },
+  {
+   "t": 31.74,
+   "type": "step",
+   "id": "s7",
+   "n": 7,
+   "status": "ok",
+   "started_at": 1792207920.784333,
+   "url": "https://httpbin.org/forms/post",
+   "target": {
+    "label": "Mushroom",
+    "rect": {
+     "x": 28,
+     "y": 437.1875,
+     "w": 13,
+     "h": 13
+    }
+   },
+   "thought": {
+    "evaluation": "Bacon is checked, Large is selected. Customer fields filled. Next: check Mushroom.",
+    "memory": "Filled name, phone, email, Large, Bacon. Remaining: Mushroom, time 19:30, submit.",
+    "next_goal": "Check the Mushroom topping."
+   },
+   "action": {
+    "name": "click",
+    "args": {
+     "element_id": 10
+    },
+    "label": "Click \"Mushroom\""
+   },
+   "result": "Clicked.",
+   "ended_at": 1792207923.653613
+  },
+  {
+   "t": 31.74,
+   "type": "status",
+   "state": "thinking",
+   "step": 7,
+   "detail": ""
+  },
+  {
+   "t": 31.78,
+   "type": "step",
+   "id": "s8",
+   "n": 8,
+   "status": "thinking",
+   "started_at": 1792207923.653692,
+   "url": "https://httpbin.org/forms/post"
+  },
+  {
+   "t": 34.82,
+   "type": "usage",
+   "llm_calls": 8,
+   "input_tokens": 79479,
+   "output_tokens": 2204,
+   "cost_usd": 0.00905,
+   "elapsed_s": 30.6
+  },
+  {
+   "t": 34.84,
+   "type": "step",
+   "id": "s8",
+   "n": 8,
+   "status": "running",
+   "started_at": 1792207923.653692,
+   "url": "https://httpbin.org/forms/post",
+   "target": {
+    "label": "Preferred delivery time:",
+    "rect": {
+     "x": 164.828125,
+     "y": 498.1875,
+     "w": 103,
+     "h": 24
+    }
+   },
+   "thought": {
+    "evaluation": "Large, Bacon, and Mushroom are checked per the browser state; Extra Cheese and Onion remain unchecked.",
+    "memory": "Form filled: name, phone, email, Large, Bacon, Mushroom. Remaining: delivery time 19:30, submit, report server response.",
+    "next_goal": "Enter the delivery time 19:30 in the time field."
+   },
+   "action": {
+    "name": "type_text",
+    "args": {
+     "element_id": 11,
+     "text": "19:30",
+     "press_enter": false
+    },
+    "label": "Type \"19:30\" into \"Preferred delivery time:\""
+   }
+  },
+  {
+   "t": 34.84,
+   "type": "status",
+   "state": "acting",
+   "step": 7,
+   "detail": "Type \"19:30\" into \"Preferred delivery time:\""
+  },
+  {
+   "t": 35.1,
+   "type": "step",
+   "id": "s8",
+   "n": 8,
+   "status": "ok",
+   "started_at": 1792207923.653692,
+   "url": "https://httpbin.org/forms/post",
+   "target": {
+    "label": "Preferred delivery time:",
+    "rect": {
+     "x": 164.828125,
+     "y": 498.1875,
+     "w": 103,
+     "h": 24
+    }
+   },
+   "thought": {
+    "evaluation": "Large, Bacon, and Mushroom are checked per the browser state; Extra Cheese and Onion remain unchecked.",
+    "memory": "Form filled: name, phone, email, Large, Bacon, Mushroom. Remaining: delivery time 19:30, submit, report server response.",
+    "next_goal": "Enter the delivery time 19:30 in the time field."
+   },
+   "action": {
+    "name": "type_text",
+    "args": {
+     "element_id": 11,
+     "text": "19:30",
+     "press_enter": false
+    },
+    "label": "Type \"19:30\" into \"Preferred delivery time:\""
+   },
+   "result": "Typed.",
+   "ended_at": 1792207927.017675
+  },
+  {
+   "t": 35.1,
+   "type": "status",
+   "state": "thinking",
+   "step": 8,
+   "detail": ""
+  },
+  {
+   "t": 35.13,
+   "type": "step",
+   "id": "s9",
+   "n": 9,
+   "status": "thinking",
+   "started_at": 1792207927.017854,
+   "url": "https://httpbin.org/forms/post"
+  },
+  {
+   "t": 37.69,
+   "type": "usage",
+   "llm_calls": 9,
+   "input_tokens": 89033,
+   "output_tokens": 2539,
+   "cost_usd": 0.01017,
+   "elapsed_s": 33.5
+  },
+  {
+   "t": 37.69,
+   "type": "plan",
+   "items": [
+    {
+     "text": "Open httpbin.org/forms/post",
+     "status": "done"
+    },
+    {
+     "text": "Fill customer name, phone, email",
+     "status": "done"
+    },
+    {
+     "text": "Select large size, bacon and mushrooms, delivery 19:30",
+     "status": "done"
+    },
+    {
+     "text": "Submit and report what server received",
+     "status": "active"
+    }
+   ]
+  },
+  {
+   "t": 37.71,
+   "type": "step",
+   "id": "s9",
+   "n": 9,
+   "status": "awaiting_approval",
+   "started_at": 1792207927.017854,
+   "url": "https://httpbin.org/forms/post",
+   "target": {
+    "label": "Submit order",
+    "rect": {
+     "x": 8,
+     "y": 594.1875,
+     "w": 92.3125,
+     "h": 21
+    }
+   },
+   "thought": {
+    "evaluation": "Time field shows 07:30 PM and Large, Bacon, Mushroom are checked, all fields look correct.",
+    "memory": "Form filled: name, phone, email, Large, Bacon, Mushroom, time 19:30. Now submitting.",
+    "next_goal": "Submit the pizza order."
+   },
+   "action": {
+    "name": "click",
+    "args": {
+     "element_id": 13
+    },
+    "label": "Click \"Submit order\""
+   },
+   "risk": {
+    "risky": true,
+    "reason": "The agent flagged this as hard to undo."
+   }
+  },
+  {
+   "t": 37.71,
+   "type": "approval",
+   "step_id": "s9",
+   "reason": "The agent flagged this as hard to undo.",
+   "action_label": "Click \"Submit order\"",
+   "target_label": "Submit order",
+   "args": {
+    "element_id": 13
+   }
+  },
+  {
+   "t": 37.71,
+   "type": "status",
+   "state": "awaiting_approval",
+   "step": 8,
+   "detail": "The agent flagged this as hard to undo."
+  },
+  {
+   "t": 37.71,
+   "type": "step",
+   "id": "s9",
+   "n": 9,
+   "status": "running",
+   "started_at": 1792207927.017854,
+   "url": "https://httpbin.org/forms/post",
+   "target": {
+    "label": "Submit order",
+    "rect": {
+     "x": 8,
+     "y": 594.1875,
+     "w": 92.3125,
+     "h": 21
+    }
+   },
+   "thought": {
+    "evaluation": "Time field shows 07:30 PM and Large, Bacon, Mushroom are checked, all fields look correct.",
+    "memory": "Form filled: name, phone, email, Large, Bacon, Mushroom, time 19:30. Now submitting.",
+    "next_goal": "Submit the pizza order."
+   },
+   "action": {
+    "name": "click",
+    "args": {
+     "element_id": 13
+    },
+    "label": "Click \"Submit order\""
+   },
+   "risk": {
+    "risky": true,
+    "reason": "The agent flagged this as hard to undo."
+   }
+  },
+  {
+   "t": 37.71,
+   "type": "status",
+   "state": "acting",
+   "step": 8,
+   "detail": "Click \"Submit order\""
+  },
+  {
+   "t": 38.52,
+   "type": "step",
+   "id": "s9",
+   "n": 9,
+   "status": "ok",
+   "started_at": 1792207927.017854,
+   "url": "https://httpbin.org/forms/post",
+   "target": {
+    "label": "Submit order",
+    "rect": {
+     "x": 8,
+     "y": 594.1875,
+     "w": 92.3125,
+     "h": 21
+    }
+   },
+   "thought": {
+    "evaluation": "Time field shows 07:30 PM and Large, Bacon, Mushroom are checked, all fields look correct.",
+    "memory": "Form filled: name, phone, email, Large, Bacon, Mushroom, time 19:30. Now submitting.",
+    "next_goal": "Submit the pizza order."
+   },
+   "action": {
+    "name": "click",
+    "args": {
+     "element_id": 13
+    },
+    "label": "Click \"Submit order\""
+   },
+   "risk": {
+    "risky": true,
+    "reason": "The agent flagged this as hard to undo."
+   },
+   "result": "Clicked; navigated to https://httpbin.org/post",
+   "ended_at": 1792207930.440089
+  },
+  {
+   "t": 38.52,
+   "type": "status",
+   "state": "thinking",
+   "step": 9,
+   "detail": ""
+  },
+  {
+   "t": 38.55,
+   "type": "step",
+   "id": "s10",
+   "n": 10,
+   "status": "thinking",
+   "started_at": 1792207930.440177,
+   "url": "https://httpbin.org/post"
+  },
+  {
+   "t": 44.06,
+   "type": "usage",
+   "llm_calls": 10,
+   "input_tokens": 98873,
+   "output_tokens": 3179,
+   "cost_usd": 0.01148,
+   "elapsed_s": 39.8
+  },
+  {
+   "t": 44.06,
+   "type": "step",
+   "id": "s10",
+   "n": 10,
+   "status": "running",
+   "started_at": 1792207930.440177,
+   "url": "https://httpbin.org/post",
+   "thought": {
+    "evaluation": "The form was submitted and the page at https://httpbin.org/post shows the server's echo of the received form data.",
+    "memory": "Form submitted successfully; server response captured.",
+    "next_goal": "Report the server-received data to the user."
+   },
+   "action": {
+    "name": "done",
+    "args": {
+     "success": true,
+     "summary": "The pizza order was submitted. The server (httpbin.org/post) received:\n- Customer name: Ada Lovelace\n- Telephone: 555-0100\n- E-mail: ada@example.com\n- Size: large\n- Toppings: bacon, mushroom\n- Delivery time: 19:30\n- Comments: (empty)",
+     "columns": [
+      "Field",
+      "Value received"
+     ],
+     "rows": [
+      {
+       "Field": "custname",
+       "Value received": "Ada Lovelace"
+      },
+      {
+       "Field": "custtel",
+       "Value received": "555-0100"
+      },
+      {
+       "Field": "custemail",
+       "Value received": "ada@example.com"
+      },
+      {
+       "Field": "size",
+       "Value received": "large"
+      },
+      {
+       "Field": "topping",
+       "Value received": "bacon, mushroom"
+      },
+      {
+       "Field": "delivery",
+       "Value received": "19:30"
+      },
+      {
+       "Field": "comments",
+       "Value received": "(empty)"
+      }
+     ],
+     "sources": [
+      {
+       "title": "httpbin.org/post (form submission echo)",
+       "url": "https://httpbin.org/post"
+      }
+     ],
+     "issues": [
+      "The 'Bacon' and 'Mushroom' toppings were selected; the server echoed 'mushroom' (singular) as the form value, which is the form's own value attribute."
+     ]
+    },
+    "label": "Deliver the result"
+   }
+  },
+  {
+   "t": 44.06,
+   "type": "status",
+   "state": "acting",
+   "step": 9,
+   "detail": "Deliver the result"
+  },
+  {
+   "t": 44.06,
+   "type": "result",
+   "success": true,
+   "summary": "The pizza order was submitted. The server (httpbin.org/post) received:\n- Customer name: Ada Lovelace\n- Telephone: 555-0100\n- E-mail: ada@example.com\n- Size: large\n- Toppings: bacon, mushroom\n- Delivery time: 19:30\n- Comments: (empty)",
+   "columns": [
+    "Field",
+    "Value received"
+   ],
+   "rows": [
+    {
+     "Field": "custname",
+     "Value received": "Ada Lovelace"
+    },
+    {
+     "Field": "custtel",
+     "Value received": "555-0100"
+    },
+    {
+     "Field": "custemail",
+     "Value received": "ada@example.com"
+    },
+    {
+     "Field": "size",
+     "Value received": "large"
+    },
+    {
+     "Field": "topping",
+     "Value received": "bacon, mushroom"
+    },
+    {
+     "Field": "delivery",
+     "Value received": "19:30"
+    },
+    {
+     "Field": "comments",
+     "Value received": "(empty)"
+    }
+   ],
+   "sources": [
+    {
+     "title": "httpbin.org/post (form submission echo)",
+     "url": "https://httpbin.org/post"
+    }
+   ],
+   "issues": [
+    "The 'Bacon' and 'Mushroom' toppings were selected; the server echoed 'mushroom' (singular) as the form value, which is the form's own value attribute."
+   ]
+  },
+  {
+   "t": 44.06,
+   "type": "usage",
+   "llm_calls": 10,
+   "input_tokens": 98873,
+   "output_tokens": 3179,
+   "cost_usd": 0.01148,
+   "elapsed_s": 39.8
+  },
+  {
+   "t": 44.06,
+   "type": "step",
+   "id": "s10",
+   "n": 10,
+   "status": "ok",
+   "started_at": 1792207930.440177,
+   "url": "https://httpbin.org/post",
+   "thought": {
+    "evaluation": "The form was submitted and the page at https://httpbin.org/post shows the server's echo of the received form data.",
+    "memory": "Form submitted successfully; server response captured.",
+    "next_goal": "Report the server-received data to the user."
+   },
+   "action": {
+    "name": "done",
+    "args": {
+     "success": true,
+     "summary": "The pizza order was submitted. The server (httpbin.org/post) received:\n- Customer name: Ada Lovelace\n- Telephone: 555-0100\n- E-mail: ada@example.com\n- Size: large\n- Toppings: bacon, mushroom\n- Delivery time: 19:30\n- Comments: (empty)",
+     "columns": [
+      "Field",
+      "Value received"
+     ],
+     "rows": [
+      {
+       "Field": "custname",
+       "Value received": "Ada Lovelace"
+      },
+      {
+       "Field": "custtel",
+       "Value received": "555-0100"
+      },
+      {
+       "Field": "custemail",
+       "Value received": "ada@example.com"
+      },
+      {
+       "Field": "size",
+       "Value received": "large"
+      },
+      {
+       "Field": "topping",
+       "Value received": "bacon, mushroom"
+      },
+      {
+       "Field": "delivery",
+       "Value received": "19:30"
+      },
+      {
+       "Field": "comments",
+       "Value received": "(empty)"
+      }
+     ],
+     "sources": [
+      {
+       "title": "httpbin.org/post (form submission echo)",
+       "url": "https://httpbin.org/post"
+      }
+     ],
+     "issues": [
+      "The 'Bacon' and 'Mushroom' toppings were selected; the server echoed 'mushroom' (singular) as the form value, which is the form's own value attribute."
+     ]
+    },
+    "label": "Deliver the result"
+   },
+   "result": "Delivered the result.",
+   "ended_at": 1792207935.973245
+  }
+ ]
+}

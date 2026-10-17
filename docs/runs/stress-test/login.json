@@ -1,0 +1,631 @@
+{
+ "goal": "Log in at https://the-internet.herokuapp.com/login with username tomsmith and password SuperSecretPassword! and tell me the message you see after logging in.",
+ "result": {
+  "success": true,
+  "summary": "After logging in, the page shows the message: **\"You logged into a secure area!\"** The page heading is \"Secure Area\".",
+  "columns": [],
+  "rows": [],
+  "sources": [
+   {
+    "title": "Secure Area",
+    "url": "https://the-internet.herokuapp.com/secure"
+   }
+  ],
+  "issues": []
+ },
+ "usage": {
+  "llm_calls": 5,
+  "input_tokens": 53707,
+  "output_tokens": 1147,
+  "cost_usd": 0.11888399999999999,
+  "fast_calls": 0,
+  "fast_ms_total": 0,
+  "text_calls": 0
+ },
+ "events": [
+  {
+   "t": 3.41,
+   "type": "status",
+   "state": "thinking",
+   "step": 0,
+   "detail": "The planner is deciding the next step\u2026"
+  },
+  {
+   "t": 3.45,
+   "type": "step",
+   "id": "s1",
+   "n": 1,
+   "status": "thinking",
+   "system": "planner",
+   "started_at": 1792213958.050122,
+   "url": "https://www.bing.com/"
+  },
+  {
+   "t": 7.09,
+   "type": "usage",
+   "llm_calls": 1,
+   "input_tokens": 12836,
+   "output_tokens": 228,
+   "cost_usd": 0.02795,
+   "fast_calls": 0,
+   "fast_ms_total": 0,
+   "text_calls": 0,
+   "elapsed_s": 3.7
+  },
+  {
+   "t": 7.09,
+   "type": "plan",
+   "items": [
+    {
+     "text": "Open login page",
+     "status": "active"
+    },
+    {
+     "text": "Fill credentials and submit",
+     "status": "pending"
+    },
+    {
+     "text": "Read message",
+     "status": "pending"
+    }
+   ]
+  },
+  {
+   "t": 7.09,
+   "type": "step",
+   "id": "s1",
+   "n": 1,
+   "status": "running",
+   "system": "planner",
+   "started_at": 1792213958.050122,
+   "url": "https://www.bing.com/",
+   "thought": {
+    "evaluation": "Starting on Bing homepage.",
+    "memory": "Need to log in and read message.",
+    "next_goal": "Open login page"
+   },
+   "action": {
+    "name": "navigate",
+    "args": {
+     "url": "https://the-internet.herokuapp.com/login"
+    },
+    "label": "Open https://the-internet.herokuapp.com/login"
+   }
+  },
+  {
+   "t": 7.09,
+   "type": "status",
+   "state": "acting",
+   "step": 0,
+   "detail": "Open https://the-internet.herokuapp.com/login"
+  },
+  {
+   "t": 11.38,
+   "type": "step",
+   "id": "s1",
+   "n": 1,
+   "status": "ok",
+   "system": "planner",
+   "started_at": 1792213958.050122,
+   "url": "https://www.bing.com/",
+   "thought": {
+    "evaluation": "Starting on Bing homepage.",
+    "memory": "Need to log in and read message.",
+    "next_goal": "Open login page"
+   },
+   "action": {
+    "name": "navigate",
+    "args": {
+     "url": "https://the-internet.herokuapp.com/login"
+    },
+    "label": "Open https://the-internet.herokuapp.com/login"
+   },
+   "result": "Opened https://the-internet.herokuapp.com/login",
+   "ended_at": 1792213966.0177631
+  },
+  {
+   "t": 11.38,
+   "type": "status",
+   "state": "thinking",
+   "step": 1,
+   "detail": "The planner is deciding the next step\u2026"
+  },
+  {
+   "t": 11.4,
+   "type": "step",
+   "id": "s2",
+   "n": 2,
+   "status": "thinking",
+   "system": "planner",
+   "started_at": 1792213966.017976,
+   "url": "https://the-internet.herokuapp.com/login"
+  },
+  {
+   "t": 13.79,
+   "type": "usage",
+   "llm_calls": 2,
+   "input_tokens": 23025,
+   "output_tokens": 434,
+   "cost_usd": 0.05039,
+   "fast_calls": 0,
+   "fast_ms_total": 0,
+   "text_calls": 0,
+   "elapsed_s": 10.4
+  },
+  {
+   "t": 13.84,
+   "type": "step",
+   "id": "s2",
+   "n": 2,
+   "status": "running",
+   "system": "planner",
+   "started_at": 1792213966.017976,
+   "url": "https://the-internet.herokuapp.com/login",
+   "target": {
+    "label": "Username",
+    "rect": {
+     "x": 156,
+     "y": 333.75,
+     "w": 469,
+     "h": 32.375
+    }
+   },
+   "thought": {
+    "evaluation": "Login page is open.",
+    "memory": "Fill username, password, submit.",
+    "next_goal": "Type username"
+   },
+   "action": {
+    "name": "type_text",
+    "args": {
+     "element_id": 1,
+     "text": "tomsmith",
+     "press_enter": false
+    },
+    "label": "Type \"tomsmith\" into \"Username\""
+   }
+  },
+  {
+   "t": 13.84,
+   "type": "status",
+   "state": "acting",
+   "step": 1,
+   "detail": "Type \"tomsmith\" into \"Username\""
+  },
+  {
+   "t": 14.1,
+   "type": "step",
+   "id": "s2",
+   "n": 2,
+   "status": "ok",
+   "system": "planner",
+   "started_at": 1792213966.017976,
+   "url": "https://the-internet.herokuapp.com/login",
+   "target": {
+    "label": "Username",
+    "rect": {
+     "x": 156,
+     "y": 333.75,
+     "w": 469,
+     "h": 32.375
+    }
+   },
+   "thought": {
+    "evaluation": "Login page is open.",
+    "memory": "Fill username, password, submit.",
+    "next_goal": "Type username"
+   },
+   "action": {
+    "name": "type_text",
+    "args": {
+     "element_id": 1,
+     "text": "tomsmith",
+     "press_enter": false
+    },
+    "label": "Type \"tomsmith\" into \"Username\""
+   },
+   "result": "Typed.",
+   "ended_at": 1792213968.739051
+  },
+  {
+   "t": 14.1,
+   "type": "status",
+   "state": "thinking",
+   "step": 2,
+   "detail": "The planner is deciding the next step\u2026"
+  },
+  {
+   "t": 14.11,
+   "type": "step",
+   "id": "s3",
+   "n": 3,
+   "status": "thinking",
+   "system": "planner",
+   "started_at": 1792213968.739419,
+   "url": "https://the-internet.herokuapp.com/login"
+  },
+  {
+   "t": 17.81,
+   "type": "usage",
+   "llm_calls": 3,
+   "input_tokens": 33242,
+   "output_tokens": 652,
+   "cost_usd": 0.073,
+   "fast_calls": 0,
+   "fast_ms_total": 0,
+   "text_calls": 0,
+   "elapsed_s": 14.4
+  },
+  {
+   "t": 17.82,
+   "type": "step",
+   "id": "s3",
+   "n": 3,
+   "status": "awaiting_approval",
+   "system": "planner",
+   "started_at": 1792213968.739419,
+   "url": "https://the-internet.herokuapp.com/login",
+   "target": {
+    "label": "Password",
+    "rect": {
+     "x": 156,
+     "y": 396.75,
+     "w": 469,
+     "h": 32.375
+    }
+   },
+   "thought": {
+    "evaluation": "Username is filled in.",
+    "memory": "Username done; fill password, submit.",
+    "next_goal": "Type the password the user provided"
+   },
+   "action": {
+    "name": "type_text",
+    "args": {
+     "element_id": 2,
+     "text": "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022",
+     "press_enter": false
+    },
+    "label": "Type \"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\" into \"Password\""
+   },
+   "secret": true,
+   "risk": {
+    "risky": true,
+    "reason": "This is a password field. The agent only types into it with your approval."
+   }
+  },
+  {
+   "t": 17.82,
+   "type": "approval",
+   "step_id": "s3",
+   "reason": "This is a password field. The agent only types into it with your approval.",
+   "action_label": "Type \"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\" into \"Password\"",
+   "target_label": "Password",
+   "args": {
+    "text": "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022",
+    "press_enter": false
+   }
+  },
+  {
+   "t": 17.82,
+   "type": "status",
+   "state": "awaiting_approval",
+   "step": 2,
+   "detail": "This is a password field. The agent only types into it with your approval."
+  },
+  {
+   "t": 17.82,
+   "type": "step",
+   "id": "s3",
+   "n": 3,
+   "status": "running",
+   "system": "planner",
+   "started_at": 1792213968.739419,
+   "url": "https://the-internet.herokuapp.com/login",
+   "target": {
+    "label": "Password",
+    "rect": {
+     "x": 156,
+     "y": 396.75,
+     "w": 469,
+     "h": 32.375
+    }
+   },
+   "thought": {
+    "evaluation": "Username is filled in.",
+    "memory": "Username done; fill password, submit.",
+    "next_goal": "Type the password the user provided"
+   },
+   "action": {
+    "name": "type_text",
+    "args": {
+     "element_id": 2,
+     "text": "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022",
+     "press_enter": false
+    },
+    "label": "Type \"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\" into \"Password\""
+   },
+   "secret": true,
+   "risk": {
+    "risky": true,
+    "reason": "This is a password field. The agent only types into it with your approval."
+   }
+  },
+  {
+   "t": 17.82,
+   "type": "status",
+   "state": "acting",
+   "step": 2,
+   "detail": "Type \"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\" into \"Password\""
+  },
+  {
+   "t": 18.12,
+   "type": "step",
+   "id": "s3",
+   "n": 3,
+   "status": "ok",
+   "system": "planner",
+   "started_at": 1792213968.739419,
+   "url": "https://the-internet.herokuapp.com/login",
+   "target": {
+    "label": "Password",
+    "rect": {
+     "x": 156,
+     "y": 396.75,
+     "w": 469,
+     "h": 32.375
+    }
+   },
+   "thought": {
+    "evaluation": "Username is filled in.",
+    "memory": "Username done; fill password, submit.",
+    "next_goal": "Type the password the user provided"
+   },
+   "action": {
+    "name": "type_text",
+    "args": {
+     "element_id": 2,
+     "text": "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022",
+     "press_enter": false
+    },
+    "label": "Type \"\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022\" into \"Password\""
+   },
+   "secret": true,
+   "risk": {
+    "risky": true,
+    "reason": "This is a password field. The agent only types into it with your approval."
+   },
+   "result": "Typed.",
+   "ended_at": 1792213972.7629209
+  },
+  {
+   "t": 18.12,
+   "type": "status",
+   "state": "thinking",
+   "step": 3,
+   "detail": "The planner is deciding the next step\u2026"
+  },
+  {
+   "t": 18.17,
+   "type": "step",
+   "id": "s4",
+   "n": 4,
+   "status": "thinking",
+   "system": "planner",
+   "started_at": 1792213972.7631428,
+   "url": "https://the-internet.herokuapp.com/login"
+  },
+  {
+   "t": 20.11,
+   "type": "usage",
+   "llm_calls": 4,
+   "input_tokens": 43481,
+   "output_tokens": 816,
+   "cost_usd": 0.09512,
+   "fast_calls": 0,
+   "fast_ms_total": 0,
+   "text_calls": 0,
+   "elapsed_s": 16.7
+  },
+  {
+   "t": 20.12,
+   "type": "step",
+   "id": "s4",
+   "n": 4,
+   "status": "running",
+   "system": "planner",
+   "started_at": 1792213972.7631428,
+   "url": "https://the-internet.herokuapp.com/login",
+   "target": {
+    "label": "Login",
+    "rect": {
+     "x": 156,
+     "y": 443.125,
+     "w": 163.6875,
+     "h": 59
+    }
+   },
+   "thought": {
+    "evaluation": "Both fields are filled in the screenshot.",
+    "memory": "Credentials filled; submit.",
+    "next_goal": "Click Login"
+   },
+   "action": {
+    "name": "click",
+    "args": {
+     "element_id": 3
+    },
+    "label": "Click \"Login\""
+   }
+  },
+  {
+   "t": 20.12,
+   "type": "status",
+   "state": "acting",
+   "step": 3,
+   "detail": "Click \"Login\""
+  },
+  {
+   "t": 23.68,
+   "type": "step",
+   "id": "s4",
+   "n": 4,
+   "status": "ok",
+   "system": "planner",
+   "started_at": 1792213972.7631428,
+   "url": "https://the-internet.herokuapp.com/login",
+   "target": {
+    "label": "Login",
+    "rect": {
+     "x": 156,
+     "y": 443.125,
+     "w": 163.6875,
+     "h": 59
+    }
+   },
+   "thought": {
+    "evaluation": "Both fields are filled in the screenshot.",
+    "memory": "Credentials filled; submit.",
+    "next_goal": "Click Login"
+   },
+   "action": {
+    "name": "click",
+    "args": {
+     "element_id": 3
+    },
+    "label": "Click \"Login\""
+   },
+   "result": "Clicked; navigated to https://the-internet.herokuapp.com/secure",
+   "ended_at": 1792213978.3256361
+  },
+  {
+   "t": 23.68,
+   "type": "status",
+   "state": "thinking",
+   "step": 4,
+   "detail": "The planner is deciding the next step\u2026"
+  },
+  {
+   "t": 23.7,
+   "type": "step",
+   "id": "s5",
+   "n": 5,
+   "status": "thinking",
+   "system": "planner",
+   "started_at": 1792213978.325839,
+   "url": "https://the-internet.herokuapp.com/secure"
+  },
+  {
+   "t": 27.96,
+   "type": "usage",
+   "llm_calls": 5,
+   "input_tokens": 53707,
+   "output_tokens": 1147,
+   "cost_usd": 0.11888,
+   "fast_calls": 0,
+   "fast_ms_total": 0,
+   "text_calls": 0,
+   "elapsed_s": 24.6
+  },
+  {
+   "t": 27.96,
+   "type": "step",
+   "id": "s5",
+   "n": 5,
+   "status": "running",
+   "system": "planner",
+   "started_at": 1792213978.325839,
+   "url": "https://the-internet.herokuapp.com/secure",
+   "thought": {
+    "evaluation": "After login, the page at /secure shows the flash banner \"You logged into a secure area!\".",
+    "memory": "Logged in successfully.",
+    "next_goal": "Report result"
+   },
+   "action": {
+    "name": "done",
+    "args": {
+     "success": true,
+     "summary": "After logging in, the page shows the message: **\"You logged into a secure area!\"** The page heading is \"Secure Area\".",
+     "columns": [],
+     "rows": [],
+     "sources": [
+      {
+       "title": "Secure Area",
+       "url": "https://the-internet.herokuapp.com/secure"
+      }
+     ],
+     "issues": []
+    },
+    "label": "Deliver the result"
+   }
+  },
+  {
+   "t": 27.96,
+   "type": "status",
+   "state": "acting",
+   "step": 4,
+   "detail": "Deliver the result"
+  },
+  {
+   "t": 27.96,
+   "type": "step",
+   "id": "s5",
+   "n": 5,
+   "status": "ok",
+   "system": "planner",
+   "started_at": 1792213978.325839,
+   "url": "https://the-internet.herokuapp.com/secure",
+   "thought": {
+    "evaluation": "After login, the page at /secure shows the flash banner \"You logged into a secure area!\".",
+    "memory": "Logged in successfully.",
+    "next_goal": "Report result"
+   },
+   "action": {
+    "name": "done",
+    "args": {
+     "success": true,
+     "summary": "After logging in, the page shows the message: **\"You logged into a secure area!\"** The page heading is \"Secure Area\".",
+     "columns": [],
+     "rows": [],
+     "sources": [
+      {
+       "title": "Secure Area",
+       "url": "https://the-internet.herokuapp.com/secure"
+      }
+     ],
+     "issues": []
+    },
+    "label": "Deliver the result"
+   },
+   "result": "Delivered the result.",
+   "ended_at": 1792213982.600189
+  },
+  {
+   "t": 27.96,
+   "type": "result",
+   "success": true,
+   "summary": "After logging in, the page shows the message: **\"You logged into a secure area!\"** The page heading is \"Secure Area\".",
+   "columns": [],
+   "rows": [],
+   "sources": [
+    {
+     "title": "Secure Area",
+     "url": "https://the-internet.herokuapp.com/secure"
+    }
+   ],
+   "issues": []
+  },
+  {
+   "t": 27.96,
+   "type": "usage",
+   "llm_calls": 5,
+   "input_tokens": 53707,
+   "output_tokens": 1147,
+   "cost_usd": 0.11888,
+   "fast_calls": 0,
+   "fast_ms_total": 0,
+   "text_calls": 0,
+   "elapsed_s": 24.6
+  }
+ ]
+}

@@ -1,0 +1,260 @@
+{
+ "goal": "What are the British Museum's opening hours today and is general admission free?",
+ "result": {
+  "success": true,
+  "summary": "**Today (Saturday 17 October 2026) the Museum closes early, at 13.00.** An alert on the Museum's site says this is because of a Museum event. Entry is only for ticket holders, through the Montague Place entrance. Gallery availability is limited.\n\n**General admission is free.** The site says \"Free entry\". It recommends booking a free timeslot ticket in advance. Entry without a ticket depends on capacity, and queues are likely at busy times.\n\nNormal hours are daily 10.00\u201317.00, or until 20.30 on Fridays. Last entry is 16.45, or 20.15 on Fridays. Special exhibitions such as Korea need paid tickets, but I did not check their prices.",
+  "columns": [],
+  "rows": [],
+  "sources": [
+   {
+    "title": "Visit | British Museum",
+    "url": "https://www.britishmuseum.org/visit"
+   }
+  ],
+  "issues": [
+   "The 10.00 opening time today is assumed from the normal daily hours; the alert only mentions the 13.00 closure."
+  ]
+ },
+ "usage": {
+  "llm_calls": 2,
+  "input_tokens": 32299,
+  "output_tokens": 793,
+  "cost_usd": 0.072528,
+  "fast_calls": 0,
+  "fast_ms_total": 0,
+  "text_calls": 0
+ },
+ "events": [
+  {
+   "t": 3.61,
+   "type": "status",
+   "state": "thinking",
+   "step": 0,
+   "detail": "The planner is deciding the next step\u2026"
+  },
+  {
+   "t": 3.68,
+   "type": "step",
+   "id": "s1",
+   "n": 1,
+   "status": "thinking",
+   "system": "planner",
+   "started_at": 1792214134.4831119,
+   "url": "https://www.bing.com/"
+  },
+  {
+   "t": 6.86,
+   "type": "usage",
+   "llm_calls": 1,
+   "input_tokens": 16748,
+   "output_tokens": 215,
+   "cost_usd": 0.03565,
+   "fast_calls": 0,
+   "fast_ms_total": 0,
+   "text_calls": 0,
+   "elapsed_s": 3.3
+  },
+  {
+   "t": 6.86,
+   "type": "plan",
+   "items": [
+    {
+     "text": "Open official visit page",
+     "status": "active"
+    },
+    {
+     "text": "Read hours and admission",
+     "status": "pending"
+    }
+   ]
+  },
+  {
+   "t": 6.86,
+   "type": "step",
+   "id": "s1",
+   "n": 1,
+   "status": "running",
+   "system": "planner",
+   "started_at": 1792214134.4831119,
+   "url": "https://www.bing.com/",
+   "thought": {
+    "evaluation": "Bing homepage loaded.",
+    "memory": "Starting; go to official site.",
+    "next_goal": "Open British Museum visit page"
+   },
+   "action": {
+    "name": "navigate",
+    "args": {
+     "url": "https://www.britishmuseum.org/visit"
+    },
+    "label": "Open https://www.britishmuseum.org/visit"
+   }
+  },
+  {
+   "t": 6.86,
+   "type": "status",
+   "state": "acting",
+   "step": 0,
+   "detail": "Open https://www.britishmuseum.org/visit"
+  },
+  {
+   "t": 9.91,
+   "type": "step",
+   "id": "s1",
+   "n": 1,
+   "status": "ok",
+   "system": "planner",
+   "started_at": 1792214134.4831119,
+   "url": "https://www.bing.com/",
+   "thought": {
+    "evaluation": "Bing homepage loaded.",
+    "memory": "Starting; go to official site.",
+    "next_goal": "Open British Museum visit page"
+   },
+   "action": {
+    "name": "navigate",
+    "args": {
+     "url": "https://www.britishmuseum.org/visit"
+    },
+    "label": "Open https://www.britishmuseum.org/visit"
+   },
+   "result": "Opened https://www.britishmuseum.org/visit",
+   "ended_at": 1792214140.779517
+  },
+  {
+   "t": 9.91,
+   "type": "status",
+   "state": "thinking",
+   "step": 1,
+   "detail": "The planner is deciding the next step\u2026"
+  },
+  {
+   "t": 9.99,
+   "type": "step",
+   "id": "s2",
+   "n": 2,
+   "status": "thinking",
+   "system": "planner",
+   "started_at": 1792214140.779813,
+   "url": "https://www.britishmuseum.org/visit"
+  },
+  {
+   "t": 14.48,
+   "type": "usage",
+   "llm_calls": 2,
+   "input_tokens": 32299,
+   "output_tokens": 793,
+   "cost_usd": 0.07253,
+   "fast_calls": 0,
+   "fast_ms_total": 0,
+   "text_calls": 0,
+   "elapsed_s": 10.9
+  },
+  {
+   "t": 14.48,
+   "type": "step",
+   "id": "s2",
+   "n": 2,
+   "status": "running",
+   "system": "planner",
+   "started_at": 1792214140.779813,
+   "url": "https://www.britishmuseum.org/visit",
+   "thought": {
+    "evaluation": "The British Museum visit page loaded and showed the hours, the free-entry notice and an alert for today.",
+    "memory": "Read the hours and admission on the official visit page.",
+    "next_goal": "Give the answer."
+   },
+   "action": {
+    "name": "done",
+    "args": {
+     "success": true,
+     "summary": "**Today (Saturday 17 October 2026) the Museum closes early, at 13.00.** An alert on the Museum's site says this is because of a Museum event. Entry is only for ticket holders, through the Montague Place entrance. Gallery availability is limited.\n\n**General admission is free.** The site says \"Free entry\". It recommends booking a free timeslot ticket in advance. Entry without a ticket depends on capacity, and queues are likely at busy times.\n\nNormal hours are daily 10.00\u201317.00, or until 20.30 on Fridays. Last entry is 16.45, or 20.15 on Fridays. Special exhibitions such as Korea need paid tickets, but I did not check their prices.",
+     "columns": [],
+     "rows": [],
+     "sources": [
+      {
+       "title": "Visit | British Museum",
+       "url": "https://www.britishmuseum.org/visit"
+      }
+     ],
+     "issues": [
+      "The 10.00 opening time today is assumed from the normal daily hours; the alert only mentions the 13.00 closure."
+     ]
+    },
+    "label": "Deliver the result"
+   }
+  },
+  {
+   "t": 14.48,
+   "type": "status",
+   "state": "acting",
+   "step": 1,
+   "detail": "Deliver the result"
+  },
+  {
+   "t": 14.48,
+   "type": "step",
+   "id": "s2",
+   "n": 2,
+   "status": "ok",
+   "system": "planner",
+   "started_at": 1792214140.779813,
+   "url": "https://www.britishmuseum.org/visit",
+   "thought": {
+    "evaluation": "The British Museum visit page loaded and showed the hours, the free-entry notice and an alert for today.",
+    "memory": "Read the hours and admission on the official visit page.",
+    "next_goal": "Give the answer."
+   },
+   "action": {
+    "name": "done",
+    "args": {
+     "success": true,
+     "summary": "**Today (Saturday 17 October 2026) the Museum closes early, at 13.00.** An alert on the Museum's site says this is because of a Museum event. Entry is only for ticket holders, through the Montague Place entrance. Gallery availability is limited.\n\n**General admission is free.** The site says \"Free entry\". It recommends booking a free timeslot ticket in advance. Entry without a ticket depends on capacity, and queues are likely at busy times.\n\nNormal hours are daily 10.00\u201317.00, or until 20.30 on Fridays. Last entry is 16.45, or 20.15 on Fridays. Special exhibitions such as Korea need paid tickets, but I did not check their prices.",
+     "columns": [],
+     "rows": [],
+     "sources": [
+      {
+       "title": "Visit | British Museum",
+       "url": "https://www.britishmuseum.org/visit"
+      }
+     ],
+     "issues": [
+      "The 10.00 opening time today is assumed from the normal daily hours; the alert only mentions the 13.00 closure."
+     ]
+    },
+    "label": "Deliver the result"
+   },
+   "result": "Delivered the result.",
+   "ended_at": 1792214145.35451
+  },
+  {
+   "t": 14.49,
+   "type": "result",
+   "success": true,
+   "summary": "**Today (Saturday 17 October 2026) the Museum closes early, at 13.00.** An alert on the Museum's site says this is because of a Museum event. Entry is only for ticket holders, through the Montague Place entrance. Gallery availability is limited.\n\n**General admission is free.** The site says \"Free entry\". It recommends booking a free timeslot ticket in advance. Entry without a ticket depends on capacity, and queues are likely at busy times.\n\nNormal hours are daily 10.00\u201317.00, or until 20.30 on Fridays. Last entry is 16.45, or 20.15 on Fridays. Special exhibitions such as Korea need paid tickets, but I did not check their prices.",
+   "columns": [],
+   "rows": [],
+   "sources": [
+    {
+     "title": "Visit | British Museum",
+     "url": "https://www.britishmuseum.org/visit"
+    }
+   ],
+   "issues": [
+    "The 10.00 opening time today is assumed from the normal daily hours; the alert only mentions the 13.00 closure."
+   ]
+  },
+  {
+   "t": 14.49,
+   "type": "usage",
+   "llm_calls": 2,
+   "input_tokens": 32299,
+   "output_tokens": 793,
+   "cost_usd": 0.07253,
+   "fast_calls": 0,
+   "fast_ms_total": 0,
+   "text_calls": 0,
+   "elapsed_s": 10.9
+  }
+ ]
+}

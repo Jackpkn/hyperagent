@@ -1,0 +1,1015 @@
+{
+ "goal": "Find the 3 most recent arXiv papers about browser agents and give title, authors and abstract in one sentence each.",
+ "result": {
+  "success": true,
+  "summary": "These are the 3 most recent arXiv papers I found for the phrase \"browser agent\", newest first. I searched arXiv sorted by announcement date.\n\n1. **BrowseSafe++: Benchmarking Prompt Injection Detection Across Web Contexts, Languages, and Browser Views** (12 Oct 2026)\n   - Authors: Yuetian Chen, Kaiyuan Zhang, Yuntao Du, Thomas Li, Mark Tenenholtz, Kyle Polley, Jerry Ma, Denis Yarats, Ninghui Li.\n   - Abstract: It extends BrowseSafe to 38,675 page pairs for detecting prompt injection against browser agents, and trains two 0.8B BrowseSafe-Guard detectors that beat frontier-model-based detectors on F1.\n\n2. **The Agent Clicks Approve: Injected Page Text Makes Browser Agents Authorize Access the Task Never Named** (10 Oct 2026)\n   - Author: Md Imran Hossen.\n   - Abstract: Injected page text made browser agents approve unauthorized access grants and webhooks in 100% of 73 undefended attacks. An authority envelope gate that checks requests against the user's task rejected all 70 attacks.\n\n3. **CaptchaAgent: Verifiable Visual Reasoning for CAPTCHA Solving** (9 Oct 2026)\n   - Authors: Shangquan Sun, Ruoyu Chen, Zhirui Liu, Xiang Liu, Chenghao Qian, Wenqi Ren, Xiaochun Cao.\n   - Abstract: It builds a structured visual intermediate representation with refinement and consistency verification. This improves Pass@1 by 21.3\u201325.8 points over a commercial browser agent baseline on Open CaptchaWorld.",
+  "columns": [
+   "Title",
+   "Authors",
+   "Abstract (one sentence)"
+  ],
+  "rows": [
+   {
+    "Title": "BrowseSafe++: Benchmarking Prompt Injection Detection Across Web Contexts, Languages, and Browser Views",
+    "Authors": "Yuetian Chen, Kaiyuan Zhang, Yuntao Du, Thomas Li, Mark Tenenholtz, Kyle Polley, Jerry Ma, Denis Yarats, Ninghui Li",
+    "Abstract (one sentence)": "Extends BrowseSafe to 38,675 page pairs for prompt-injection detection against browser agents and trains two 0.8B detectors that beat frontier-model-based detectors on F1."
+   },
+   {
+    "Title": "The Agent Clicks Approve: Injected Page Text Makes Browser Agents Authorize Access the Task Never Named",
+    "Authors": "Md Imran Hossen",
+    "Abstract (one sentence)": "Injected page text makes browser agents approve unauthorized access in 100% of 73 undefended attacks, but an authority envelope gate rejected all 70 attacks."
+   },
+   {
+    "Title": "CaptchaAgent: Verifiable Visual Reasoning for CAPTCHA Solving",
+    "Authors": "Shangquan Sun, Ruoyu Chen, Zhirui Liu, Xiang Liu, Chenghao Qian, Wenqi Ren, Xiaochun Cao",
+    "Abstract (one sentence)": "Structured visual representation with refinement and consistency verification improves Pass@1 by 21.3-25.8 points over a commercial browser agent baseline."
+   }
+  ],
+  "sources": [
+   {
+    "title": "BrowseSafe++",
+    "url": "https://arxiv.org/abs/2610.17457"
+   },
+   {
+    "title": "The Agent Clicks Approve",
+    "url": "https://arxiv.org/abs/2610.15138"
+   },
+   {
+    "title": "CaptchaAgent",
+    "url": "https://arxiv.org/abs/2610.12866"
+   }
+  ],
+  "issues": [
+   "Selection is based on the arXiv search for the phrase \"browser agent\", sorted by announcement date. Papers that use different wording may have been missed."
+  ]
+ },
+ "usage": {
+  "llm_calls": 8,
+  "input_tokens": 111835,
+  "output_tokens": 3682,
+  "cost_usd": 0.26049,
+  "fast_calls": 0,
+  "fast_ms_total": 0,
+  "text_calls": 0
+ },
+ "events": [
+  {
+   "t": 3.39,
+   "type": "status",
+   "state": "thinking",
+   "step": 0,
+   "detail": "The planner is deciding the next step\u2026"
+  },
+  {
+   "t": 3.43,
+   "type": "step",
+   "id": "s1",
+   "n": 1,
+   "status": "thinking",
+   "system": "planner",
+   "started_at": 1792213973.4727821,
+   "url": "https://www.bing.com/"
+  },
+  {
+   "t": 6.75,
+   "type": "usage",
+   "llm_calls": 1,
+   "input_tokens": 12828,
+   "output_tokens": 277,
+   "cost_usd": 0.02843,
+   "fast_calls": 0,
+   "fast_ms_total": 0,
+   "text_calls": 0,
+   "elapsed_s": 3.4
+  },
+  {
+   "t": 6.75,
+   "type": "plan",
+   "items": [
+    {
+     "text": "Open arXiv search sorted by date",
+     "status": "active"
+    },
+    {
+     "text": "Read top 3",
+     "status": "pending"
+    },
+    {
+     "text": "Answer",
+     "status": "pending"
+    }
+   ]
+  },
+  {
+   "t": 6.75,
+   "type": "step",
+   "id": "s1",
+   "n": 1,
+   "status": "running",
+   "system": "planner",
+   "started_at": 1792213973.4727821,
+   "url": "https://www.bing.com/",
+   "thought": {
+    "evaluation": "Bing home page loaded.",
+    "memory": "Starting; use arXiv listing search sorted by date.",
+    "next_goal": "Open arXiv search for browser agents sorted by newest"
+   },
+   "action": {
+    "name": "navigate",
+    "args": {
+     "url": "https://arxiv.org/search/?query=%22browser+agent%22&searchtype=all&order=-announced_date_first"
+    },
+    "label": "Open https://arxiv.org/search/?query=%22browser+agent%22&searchtype=all&order=-announced_date_first"
+   }
+  },
+  {
+   "t": 6.75,
+   "type": "status",
+   "state": "acting",
+   "step": 0,
+   "detail": "Open https://arxiv.org/search/?query=%22browser+agent%22&searchtype=all&order=-announced_date_first"
+  },
+  {
+   "t": 27.89,
+   "type": "step",
+   "id": "s1",
+   "n": 1,
+   "status": "ok",
+   "system": "planner",
+   "started_at": 1792213973.4727821,
+   "url": "https://www.bing.com/",
+   "thought": {
+    "evaluation": "Bing home page loaded.",
+    "memory": "Starting; use arXiv listing search sorted by date.",
+    "next_goal": "Open arXiv search for browser agents sorted by newest"
+   },
+   "action": {
+    "name": "navigate",
+    "args": {
+     "url": "https://arxiv.org/search/?query=%22browser+agent%22&searchtype=all&order=-announced_date_first"
+    },
+    "label": "Open https://arxiv.org/search/?query=%22browser+agent%22&searchtype=all&order=-announced_date_first"
+   },
+   "result": "Opened https://arxiv.org/search/?query=%22browser+agent%22&searchtype=all&order=-announced_date_first",
+   "ended_at": 1792213997.9720771
+  },
+  {
+   "t": 27.89,
+   "type": "status",
+   "state": "thinking",
+   "step": 1,
+   "detail": "The planner is deciding the next step\u2026"
+  },
+  {
+   "t": 27.94,
+   "type": "step",
+   "id": "s2",
+   "n": 2,
+   "status": "thinking",
+   "system": "planner",
+   "started_at": 1792213997.972405,
+   "url": "https://arxiv.org/search/?query=%22browser+agent%22&searchtype=all&order=-announced_date_first"
+  },
+  {
+   "t": 30.87,
+   "type": "usage",
+   "llm_calls": 2,
+   "input_tokens": 29724,
+   "output_tokens": 497,
+   "cost_usd": 0.06442,
+   "fast_calls": 0,
+   "fast_ms_total": 0,
+   "text_calls": 0,
+   "elapsed_s": 27.5
+  },
+  {
+   "t": 30.87,
+   "type": "step",
+   "id": "s2",
+   "n": 2,
+   "status": "running",
+   "system": "planner",
+   "started_at": 1792213997.972405,
+   "url": "https://arxiv.org/search/?query=%22browser+agent%22&searchtype=all&order=-announced_date_first",
+   "thought": {
+    "evaluation": "Results list is sorted newest first; abstracts are truncated.",
+    "memory": "Top3: 2610.17457 BrowseSafe++, 2610.15138 Agent Clicks Approve, 2610.12866 CaptchaAgent. Need full abstracts.",
+    "next_goal": "Read the first paper's abstract"
+   },
+   "action": {
+    "name": "navigate",
+    "args": {
+     "url": "https://arxiv.org/abs/2610.17457"
+    },
+    "label": "Open https://arxiv.org/abs/2610.17457"
+   }
+  },
+  {
+   "t": 30.87,
+   "type": "status",
+   "state": "acting",
+   "step": 1,
+   "detail": "Open https://arxiv.org/abs/2610.17457"
+  },
+  {
+   "t": 32.06,
+   "type": "step",
+   "id": "s2",
+   "n": 2,
+   "status": "ok",
+   "system": "planner",
+   "started_at": 1792213997.972405,
+   "url": "https://arxiv.org/search/?query=%22browser+agent%22&searchtype=all&order=-announced_date_first",
+   "thought": {
+    "evaluation": "Results list is sorted newest first; abstracts are truncated.",
+    "memory": "Top3: 2610.17457 BrowseSafe++, 2610.15138 Agent Clicks Approve, 2610.12866 CaptchaAgent. Need full abstracts.",
+    "next_goal": "Read the first paper's abstract"
+   },
+   "action": {
+    "name": "navigate",
+    "args": {
+     "url": "https://arxiv.org/abs/2610.17457"
+    },
+    "label": "Open https://arxiv.org/abs/2610.17457"
+   },
+   "result": "Opened https://arxiv.org/abs/2610.17457",
+   "ended_at": 1792214002.13978
+  },
+  {
+   "t": 32.06,
+   "type": "status",
+   "state": "thinking",
+   "step": 2,
+   "detail": "The planner is deciding the next step\u2026"
+  },
+  {
+   "t": 32.09,
+   "type": "step",
+   "id": "s3",
+   "n": 3,
+   "status": "thinking",
+   "system": "planner",
+   "started_at": 1792214002.13999,
+   "url": "https://arxiv.org/abs/2610.17457"
+  },
+  {
+   "t": 35.59,
+   "type": "usage",
+   "llm_calls": 3,
+   "input_tokens": 43138,
+   "output_tokens": 968,
+   "cost_usd": 0.09596,
+   "fast_calls": 0,
+   "fast_ms_total": 0,
+   "text_calls": 0,
+   "elapsed_s": 32.2
+  },
+  {
+   "t": 35.59,
+   "type": "step",
+   "id": "s3",
+   "n": 3,
+   "status": "running",
+   "system": "planner",
+   "started_at": 1792214002.13999,
+   "url": "https://arxiv.org/abs/2610.17457",
+   "thought": {
+    "evaluation": "Abstract page for 2610.17457 is open and readable.",
+    "memory": "Top3: 2610.17457 BrowseSafe++ (recorded), 2610.15138 Agent Clicks Approve, 2610.12866 CaptchaAgent. Need the other two.",
+    "next_goal": "Save the first paper's details"
+   },
+   "action": {
+    "name": "record_findings",
+    "args": {
+     "items": [
+      {
+       "title": "BrowseSafe++: Benchmarking Prompt Injection Detection Across Web Contexts, Languages, and Browser Views",
+       "authors": "Yuetian Chen, Kaiyuan Zhang, Yuntao Du, Thomas Li, Mark Tenenholtz, Kyle Polley, Jerry Ma, Denis Yarats, Ninghui Li",
+       "summary": "Extends BrowseSafe to 38,675 page pairs for prompt-injection detection against browser agents, and trains two 0.8B BrowseSafe-Guard detectors that beat frontier-model-based detectors on F1.",
+       "date": "12 Oct 2026"
+      }
+     ],
+     "source_url": "https://arxiv.org/abs/2610.17457"
+    },
+    "label": "Save 1 finding"
+   }
+  },
+  {
+   "t": 35.59,
+   "type": "status",
+   "state": "acting",
+   "step": 2,
+   "detail": "Save 1 finding"
+  },
+  {
+   "t": 35.59,
+   "type": "findings",
+   "items": [
+    {
+     "source_url": "https://arxiv.org/abs/2610.17457",
+     "data": {
+      "title": "BrowseSafe++: Benchmarking Prompt Injection Detection Across Web Contexts, Languages, and Browser Views",
+      "authors": "Yuetian Chen, Kaiyuan Zhang, Yuntao Du, Thomas Li, Mark Tenenholtz, Kyle Polley, Jerry Ma, Denis Yarats, Ninghui Li",
+      "summary": "Extends BrowseSafe to 38,675 page pairs for prompt-injection detection against browser agents, and trains two 0.8B BrowseSafe-Guard detectors that beat frontier-model-based detectors on F1.",
+      "date": "12 Oct 2026"
+     }
+    },
+    {
+     "source_url": "https://arxiv.org/abs/2610.15138",
+     "data": {
+      "title": "The Agent Clicks Approve: Injected Page Text Makes Browser Agents Authorize Access the Task Never Named",
+      "authors": "Md Imran Hossen",
+      "summary": "Injected page text can make browser agents approve unauthorized access grants and webhooks (100% of 73 undefended attacks), but an authority envelope gate that checks requests against the user's task at the service rejected all 70 attacks.",
+      "date": "10 Oct 2026"
+     }
+    },
+    {
+     "source_url": "https://arxiv.org/abs/2610.12866",
+     "data": {
+      "title": "CaptchaAgent: Verifiable Visual Reasoning for CAPTCHA Solving",
+      "authors": "Shangquan Sun, Ruoyu Chen, Zhirui Liu, Xiang Liu, Chenghao Qian, Wenqi Ren, Xiaochun Cao",
+      "summary": "CaptchaAgent builds a structured visual intermediate representation with refinement and consistency verification, improving Pass@1 by 21.3-25.8 points over a commercial browser agent baseline on Open CaptchaWorld.",
+      "date": "9 Oct 2026"
+     }
+    }
+   ]
+  },
+  {
+   "t": 35.59,
+   "type": "step",
+   "id": "s3",
+   "n": 3,
+   "status": "ok",
+   "system": "planner",
+   "started_at": 1792214002.13999,
+   "url": "https://arxiv.org/abs/2610.17457",
+   "thought": {
+    "evaluation": "Abstract page for 2610.17457 is open and readable.",
+    "memory": "Top3: 2610.17457 BrowseSafe++ (recorded), 2610.15138 Agent Clicks Approve, 2610.12866 CaptchaAgent. Need the other two.",
+    "next_goal": "Save the first paper's details"
+   },
+   "action": {
+    "name": "record_findings",
+    "args": {
+     "items": [
+      {
+       "title": "BrowseSafe++: Benchmarking Prompt Injection Detection Across Web Contexts, Languages, and Browser Views",
+       "authors": "Yuetian Chen, Kaiyuan Zhang, Yuntao Du, Thomas Li, Mark Tenenholtz, Kyle Polley, Jerry Ma, Denis Yarats, Ninghui Li",
+       "summary": "Extends BrowseSafe to 38,675 page pairs for prompt-injection detection against browser agents, and trains two 0.8B BrowseSafe-Guard detectors that beat frontier-model-based detectors on F1.",
+       "date": "12 Oct 2026"
+      }
+     ],
+     "source_url": "https://arxiv.org/abs/2610.17457"
+    },
+    "label": "Save 1 finding"
+   },
+   "result": "Saved 1 new finding (1 total).",
+   "ended_at": 1792214005.672277
+  },
+  {
+   "t": 35.59,
+   "type": "status",
+   "state": "thinking",
+   "step": 3,
+   "detail": "The planner is deciding the next step\u2026"
+  },
+  {
+   "t": 35.63,
+   "type": "step",
+   "id": "s4",
+   "n": 4,
+   "status": "thinking",
+   "system": "planner",
+   "started_at": 1792214005.672467,
+   "url": "https://arxiv.org/abs/2610.17457"
+  },
+  {
+   "t": 38.47,
+   "type": "usage",
+   "llm_calls": 4,
+   "input_tokens": 56860,
+   "output_tokens": 1162,
+   "cost_usd": 0.12534,
+   "fast_calls": 0,
+   "fast_ms_total": 0,
+   "text_calls": 0,
+   "elapsed_s": 35.1
+  },
+  {
+   "t": 38.47,
+   "type": "step",
+   "id": "s4",
+   "n": 4,
+   "status": "running",
+   "system": "planner",
+   "started_at": 1792214005.672467,
+   "url": "https://arxiv.org/abs/2610.17457",
+   "thought": {
+    "evaluation": "First paper saved; two more to read.",
+    "memory": "Top3: 2610.17457 (recorded), 2610.15138 Agent Clicks Approve, 2610.12866 CaptchaAgent.",
+    "next_goal": "Open second paper"
+   },
+   "action": {
+    "name": "navigate",
+    "args": {
+     "url": "https://arxiv.org/abs/2610.15138"
+    },
+    "label": "Open https://arxiv.org/abs/2610.15138"
+   }
+  },
+  {
+   "t": 38.47,
+   "type": "status",
+   "state": "acting",
+   "step": 3,
+   "detail": "Open https://arxiv.org/abs/2610.15138"
+  },
+  {
+   "t": 39.74,
+   "type": "step",
+   "id": "s4",
+   "n": 4,
+   "status": "ok",
+   "system": "planner",
+   "started_at": 1792214005.672467,
+   "url": "https://arxiv.org/abs/2610.17457",
+   "thought": {
+    "evaluation": "First paper saved; two more to read.",
+    "memory": "Top3: 2610.17457 (recorded), 2610.15138 Agent Clicks Approve, 2610.12866 CaptchaAgent.",
+    "next_goal": "Open second paper"
+   },
+   "action": {
+    "name": "navigate",
+    "args": {
+     "url": "https://arxiv.org/abs/2610.15138"
+    },
+    "label": "Open https://arxiv.org/abs/2610.15138"
+   },
+   "result": "Opened https://arxiv.org/abs/2610.15138",
+   "ended_at": 1792214009.814423
+  },
+  {
+   "t": 39.74,
+   "type": "status",
+   "state": "thinking",
+   "step": 4,
+   "detail": "The planner is deciding the next step\u2026"
+  },
+  {
+   "t": 39.85,
+   "type": "step",
+   "id": "s5",
+   "n": 5,
+   "status": "thinking",
+   "system": "planner",
+   "started_at": 1792214009.815501,
+   "url": "https://arxiv.org/abs/2610.15138"
+  },
+  {
+   "t": 42.69,
+   "type": "usage",
+   "llm_calls": 5,
+   "input_tokens": 70130,
+   "output_tokens": 1515,
+   "cost_usd": 0.15541,
+   "fast_calls": 0,
+   "fast_ms_total": 0,
+   "text_calls": 0,
+   "elapsed_s": 39.3
+  },
+  {
+   "t": 42.69,
+   "type": "step",
+   "id": "s5",
+   "n": 5,
+   "status": "running",
+   "system": "planner",
+   "started_at": 1792214009.815501,
+   "url": "https://arxiv.org/abs/2610.15138",
+   "thought": {
+    "evaluation": "Page shows the full abstract.",
+    "memory": "Top3: 17457 recorded, 15138 now, 12866 CaptchaAgent next.",
+    "next_goal": "Save paper 2"
+   },
+   "action": {
+    "name": "record_findings",
+    "args": {
+     "items": [
+      {
+       "title": "The Agent Clicks Approve: Injected Page Text Makes Browser Agents Authorize Access the Task Never Named",
+       "authors": "Md Imran Hossen",
+       "summary": "Injected page text can make browser agents approve unauthorized access grants and webhooks (100% of 73 undefended attacks), but an authority envelope gate that checks requests against the user's task at the service rejected all 70 attacks.",
+       "date": "10 Oct 2026"
+      }
+     ],
+     "source_url": "https://arxiv.org/abs/2610.15138"
+    },
+    "label": "Save 1 finding"
+   }
+  },
+  {
+   "t": 42.69,
+   "type": "status",
+   "state": "acting",
+   "step": 4,
+   "detail": "Save 1 finding"
+  },
+  {
+   "t": 42.69,
+   "type": "findings",
+   "items": [
+    {
+     "source_url": "https://arxiv.org/abs/2610.17457",
+     "data": {
+      "title": "BrowseSafe++: Benchmarking Prompt Injection Detection Across Web Contexts, Languages, and Browser Views",
+      "authors": "Yuetian Chen, Kaiyuan Zhang, Yuntao Du, Thomas Li, Mark Tenenholtz, Kyle Polley, Jerry Ma, Denis Yarats, Ninghui Li",
+      "summary": "Extends BrowseSafe to 38,675 page pairs for prompt-injection detection against browser agents, and trains two 0.8B BrowseSafe-Guard detectors that beat frontier-model-based detectors on F1.",
+      "date": "12 Oct 2026"
+     }
+    },
+    {
+     "source_url": "https://arxiv.org/abs/2610.15138",
+     "data": {
+      "title": "The Agent Clicks Approve: Injected Page Text Makes Browser Agents Authorize Access the Task Never Named",
+      "authors": "Md Imran Hossen",
+      "summary": "Injected page text can make browser agents approve unauthorized access grants and webhooks (100% of 73 undefended attacks), but an authority envelope gate that checks requests against the user's task at the service rejected all 70 attacks.",
+      "date": "10 Oct 2026"
+     }
+    },
+    {
+     "source_url": "https://arxiv.org/abs/2610.12866",
+     "data": {
+      "title": "CaptchaAgent: Verifiable Visual Reasoning for CAPTCHA Solving",
+      "authors": "Shangquan Sun, Ruoyu Chen, Zhirui Liu, Xiang Liu, Chenghao Qian, Wenqi Ren, Xiaochun Cao",
+      "summary": "CaptchaAgent builds a structured visual intermediate representation with refinement and consistency verification, improving Pass@1 by 21.3-25.8 points over a commercial browser agent baseline on Open CaptchaWorld.",
+      "date": "9 Oct 2026"
+     }
+    }
+   ]
+  },
+  {
+   "t": 42.69,
+   "type": "step",
+   "id": "s5",
+   "n": 5,
+   "status": "ok",
+   "system": "planner",
+   "started_at": 1792214009.815501,
+   "url": "https://arxiv.org/abs/2610.15138",
+   "thought": {
+    "evaluation": "Page shows the full abstract.",
+    "memory": "Top3: 17457 recorded, 15138 now, 12866 CaptchaAgent next.",
+    "next_goal": "Save paper 2"
+   },
+   "action": {
+    "name": "record_findings",
+    "args": {
+     "items": [
+      {
+       "title": "The Agent Clicks Approve: Injected Page Text Makes Browser Agents Authorize Access the Task Never Named",
+       "authors": "Md Imran Hossen",
+       "summary": "Injected page text can make browser agents approve unauthorized access grants and webhooks (100% of 73 undefended attacks), but an authority envelope gate that checks requests against the user's task at the service rejected all 70 attacks.",
+       "date": "10 Oct 2026"
+      }
+     ],
+     "source_url": "https://arxiv.org/abs/2610.15138"
+    },
+    "label": "Save 1 finding"
+   },
+   "result": "Saved 1 new finding (2 total).",
+   "ended_at": 1792214012.769724
+  },
+  {
+   "t": 42.69,
+   "type": "status",
+   "state": "thinking",
+   "step": 5,
+   "detail": "The planner is deciding the next step\u2026"
+  },
+  {
+   "t": 42.72,
+   "type": "step",
+   "id": "s6",
+   "n": 6,
+   "status": "thinking",
+   "system": "planner",
+   "started_at": 1792214012.769866,
+   "url": "https://arxiv.org/abs/2610.15138"
+  },
+  {
+   "t": 44.96,
+   "type": "usage",
+   "llm_calls": 6,
+   "input_tokens": 83592,
+   "output_tokens": 1698,
+   "cost_usd": 0.18416,
+   "fast_calls": 0,
+   "fast_ms_total": 0,
+   "text_calls": 0,
+   "elapsed_s": 41.6
+  },
+  {
+   "t": 44.96,
+   "type": "step",
+   "id": "s6",
+   "n": 6,
+   "status": "running",
+   "system": "planner",
+   "started_at": 1792214012.769866,
+   "url": "https://arxiv.org/abs/2610.15138",
+   "thought": {
+    "evaluation": "Two papers saved; third (12866) still needed.",
+    "memory": "Top3: 17457 recorded, 15138 recorded, 12866 CaptchaAgent next.",
+    "next_goal": "Open third paper"
+   },
+   "action": {
+    "name": "navigate",
+    "args": {
+     "url": "https://arxiv.org/abs/2610.12866"
+    },
+    "label": "Open https://arxiv.org/abs/2610.12866"
+   }
+  },
+  {
+   "t": 44.96,
+   "type": "status",
+   "state": "acting",
+   "step": 5,
+   "detail": "Open https://arxiv.org/abs/2610.12866"
+  },
+  {
+   "t": 46.41,
+   "type": "step",
+   "id": "s6",
+   "n": 6,
+   "status": "ok",
+   "system": "planner",
+   "started_at": 1792214012.769866,
+   "url": "https://arxiv.org/abs/2610.15138",
+   "thought": {
+    "evaluation": "Two papers saved; third (12866) still needed.",
+    "memory": "Top3: 17457 recorded, 15138 recorded, 12866 CaptchaAgent next.",
+    "next_goal": "Open third paper"
+   },
+   "action": {
+    "name": "navigate",
+    "args": {
+     "url": "https://arxiv.org/abs/2610.12866"
+    },
+    "label": "Open https://arxiv.org/abs/2610.12866"
+   },
+   "result": "Opened https://arxiv.org/abs/2610.12866",
+   "ended_at": 1792214016.487107
+  },
+  {
+   "t": 46.41,
+   "type": "status",
+   "state": "thinking",
+   "step": 6,
+   "detail": "The planner is deciding the next step\u2026"
+  },
+  {
+   "t": 46.44,
+   "type": "step",
+   "id": "s7",
+   "n": 7,
+   "status": "thinking",
+   "system": "planner",
+   "started_at": 1792214016.48732,
+   "url": "https://arxiv.org/abs/2610.12866"
+  },
+  {
+   "t": 49.49,
+   "type": "usage",
+   "llm_calls": 7,
+   "input_tokens": 97596,
+   "output_tokens": 2100,
+   "cost_usd": 0.21619,
+   "fast_calls": 0,
+   "fast_ms_total": 0,
+   "text_calls": 0,
+   "elapsed_s": 46.1
+  },
+  {
+   "t": 49.49,
+   "type": "step",
+   "id": "s7",
+   "n": 7,
+   "status": "running",
+   "system": "planner",
+   "started_at": 1792214016.48732,
+   "url": "https://arxiv.org/abs/2610.12866",
+   "thought": {
+    "evaluation": "The CaptchaAgent abstract page loaded normally, with title, authors and abstract all visible.",
+    "memory": "Top3 all read; finish next.",
+    "next_goal": "Save the third paper"
+   },
+   "action": {
+    "name": "record_findings",
+    "args": {
+     "items": [
+      {
+       "title": "CaptchaAgent: Verifiable Visual Reasoning for CAPTCHA Solving",
+       "authors": "Shangquan Sun, Ruoyu Chen, Zhirui Liu, Xiang Liu, Chenghao Qian, Wenqi Ren, Xiaochun Cao",
+       "summary": "CaptchaAgent builds a structured visual intermediate representation with refinement and consistency verification, improving Pass@1 by 21.3-25.8 points over a commercial browser agent baseline on Open CaptchaWorld.",
+       "date": "9 Oct 2026"
+      }
+     ],
+     "source_url": "https://arxiv.org/abs/2610.12866"
+    },
+    "label": "Save 1 finding"
+   }
+  },
+  {
+   "t": 49.49,
+   "type": "status",
+   "state": "acting",
+   "step": 6,
+   "detail": "Save 1 finding"
+  },
+  {
+   "t": 49.49,
+   "type": "findings",
+   "items": [
+    {
+     "source_url": "https://arxiv.org/abs/2610.17457",
+     "data": {
+      "title": "BrowseSafe++: Benchmarking Prompt Injection Detection Across Web Contexts, Languages, and Browser Views",
+      "authors": "Yuetian Chen, Kaiyuan Zhang, Yuntao Du, Thomas Li, Mark Tenenholtz, Kyle Polley, Jerry Ma, Denis Yarats, Ninghui Li",
+      "summary": "Extends BrowseSafe to 38,675 page pairs for prompt-injection detection against browser agents, and trains two 0.8B BrowseSafe-Guard detectors that beat frontier-model-based detectors on F1.",
+      "date": "12 Oct 2026"
+     }
+    },
+    {
+     "source_url": "https://arxiv.org/abs/2610.15138",
+     "data": {
+      "title": "The Agent Clicks Approve: Injected Page Text Makes Browser Agents Authorize Access the Task Never Named",
+      "authors": "Md Imran Hossen",
+      "summary": "Injected page text can make browser agents approve unauthorized access grants and webhooks (100% of 73 undefended attacks), but an authority envelope gate that checks requests against the user's task at the service rejected all 70 attacks.",
+      "date": "10 Oct 2026"
+     }
+    },
+    {
+     "source_url": "https://arxiv.org/abs/2610.12866",
+     "data": {
+      "title": "CaptchaAgent: Verifiable Visual Reasoning for CAPTCHA Solving",
+      "authors": "Shangquan Sun, Ruoyu Chen, Zhirui Liu, Xiang Liu, Chenghao Qian, Wenqi Ren, Xiaochun Cao",
+      "summary": "CaptchaAgent builds a structured visual intermediate representation with refinement and consistency verification, improving Pass@1 by 21.3-25.8 points over a commercial browser agent baseline on Open CaptchaWorld.",
+      "date": "9 Oct 2026"
+     }
+    }
+   ]
+  },
+  {
+   "t": 49.49,
+   "type": "step",
+   "id": "s7",
+   "n": 7,
+   "status": "ok",
+   "system": "planner",
+   "started_at": 1792214016.48732,
+   "url": "https://arxiv.org/abs/2610.12866",
+   "thought": {
+    "evaluation": "The CaptchaAgent abstract page loaded normally, with title, authors and abstract all visible.",
+    "memory": "Top3 all read; finish next.",
+    "next_goal": "Save the third paper"
+   },
+   "action": {
+    "name": "record_findings",
+    "args": {
+     "items": [
+      {
+       "title": "CaptchaAgent: Verifiable Visual Reasoning for CAPTCHA Solving",
+       "authors": "Shangquan Sun, Ruoyu Chen, Zhirui Liu, Xiang Liu, Chenghao Qian, Wenqi Ren, Xiaochun Cao",
+       "summary": "CaptchaAgent builds a structured visual intermediate representation with refinement and consistency verification, improving Pass@1 by 21.3-25.8 points over a commercial browser agent baseline on Open CaptchaWorld.",
+       "date": "9 Oct 2026"
+      }
+     ],
+     "source_url": "https://arxiv.org/abs/2610.12866"
+    },
+    "label": "Save 1 finding"
+   },
+   "result": "Saved 1 new finding (3 total).",
+   "ended_at": 1792214019.568068
+  },
+  {
+   "t": 49.49,
+   "type": "status",
+   "state": "thinking",
+   "step": 7,
+   "detail": "The planner is deciding the next step\u2026"
+  },
+  {
+   "t": 49.56,
+   "type": "step",
+   "id": "s8",
+   "n": 8,
+   "status": "thinking",
+   "system": "planner",
+   "started_at": 1792214019.5728042,
+   "url": "https://arxiv.org/abs/2610.12866"
+  },
+  {
+   "t": 58.85,
+   "type": "usage",
+   "llm_calls": 8,
+   "input_tokens": 111835,
+   "output_tokens": 3682,
+   "cost_usd": 0.26049,
+   "fast_calls": 0,
+   "fast_ms_total": 0,
+   "text_calls": 0,
+   "elapsed_s": 55.5
+  },
+  {
+   "t": 58.85,
+   "type": "step",
+   "id": "s8",
+   "n": 8,
+   "status": "running",
+   "system": "planner",
+   "started_at": 1792214019.5728042,
+   "url": "https://arxiv.org/abs/2610.12866",
+   "thought": {
+    "evaluation": "All three papers were opened and their details saved. The page is a normal arXiv abstract page, not a bot check.",
+    "memory": "All three papers verified.",
+    "next_goal": "Deliver the answer."
+   },
+   "action": {
+    "name": "done",
+    "args": {
+     "success": true,
+     "summary": "These are the 3 most recent arXiv papers I found for the phrase \"browser agent\", newest first. I searched arXiv sorted by announcement date.\n\n1. **BrowseSafe++: Benchmarking Prompt Injection Detection Across Web Contexts, Languages, and Browser Views** (12 Oct 2026)\n   - Authors: Yuetian Chen, Kaiyuan Zhang, Yuntao Du, Thomas Li, Mark Tenenholtz, Kyle Polley, Jerry Ma, Denis Yarats, Ninghui Li.\n   - Abstract: It extends BrowseSafe to 38,675 page pairs for detecting prompt injection against browser agents, and trains two 0.8B BrowseSafe-Guard detectors that beat frontier-model-based detectors on F1.\n\n2. **The Agent Clicks Approve: Injected Page Text Makes Browser Agents Authorize Access the Task Never Named** (10 Oct 2026)\n   - Author: Md Imran Hossen.\n   - Abstract: Injected page text made browser agents approve unauthorized access grants and webhooks in 100% of 73 undefended attacks. An authority envelope gate that checks requests against the user's task rejected all 70 attacks.\n\n3. **CaptchaAgent: Verifiable Visual Reasoning for CAPTCHA Solving** (9 Oct 2026)\n   - Authors: Shangquan Sun, Ruoyu Chen, Zhirui Liu, Xiang Liu, Chenghao Qian, Wenqi Ren, Xiaochun Cao.\n   - Abstract: It builds a structured visual intermediate representation with refinement and consistency verification. This improves Pass@1 by 21.3\u201325.8 points over a commercial browser agent baseline on Open CaptchaWorld.",
+     "columns": [
+      "Title",
+      "Authors",
+      "Abstract (one sentence)"
+     ],
+     "rows": [
+      {
+       "Title": "BrowseSafe++: Benchmarking Prompt Injection Detection Across Web Contexts, Languages, and Browser Views",
+       "Authors": "Yuetian Chen, Kaiyuan Zhang, Yuntao Du, Thomas Li, Mark Tenenholtz, Kyle Polley, Jerry Ma, Denis Yarats, Ninghui Li",
+       "Abstract (one sentence)": "Extends BrowseSafe to 38,675 page pairs for prompt-injection detection against browser agents and trains two 0.8B detectors that beat frontier-model-based detectors on F1."
+      },
+      {
+       "Title": "The Agent Clicks Approve: Injected Page Text Makes Browser Agents Authorize Access the Task Never Named",
+       "Authors": "Md Imran Hossen",
+       "Abstract (one sentence)": "Injected page text makes browser agents approve unauthorized access in 100% of 73 undefended attacks, but an authority envelope gate rejected all 70 attacks."
+      },
+      {
+       "Title": "CaptchaAgent: Verifiable Visual Reasoning for CAPTCHA Solving",
+       "Authors": "Shangquan Sun, Ruoyu Chen, Zhirui Liu, Xiang Liu, Chenghao Qian, Wenqi Ren, Xiaochun Cao",
+       "Abstract (one sentence)": "Structured visual representation with refinement and consistency verification improves Pass@1 by 21.3-25.8 points over a commercial browser agent baseline."
+      }
+     ],
+     "sources": [
+      {
+       "title": "BrowseSafe++",
+       "url": "https://arxiv.org/abs/2610.17457"
+      },
+      {
+       "title": "The Agent Clicks Approve",
+       "url": "https://arxiv.org/abs/2610.15138"
+      },
+      {
+       "title": "CaptchaAgent",
+       "url": "https://arxiv.org/abs/2610.12866"
+      }
+     ],
+     "issues": [
+      "Selection is based on the arXiv search for the phrase \"browser agent\", sorted by announcement date. Papers that use different wording may have been missed."
+     ]
+    },
+    "label": "Deliver the result"
+   }
+  },
+  {
+   "t": 58.85,
+   "type": "status",
+   "state": "acting",
+   "step": 7,
+   "detail": "Deliver the result"
+  },
+  {
+   "t": 58.85,
+   "type": "step",
+   "id": "s8",
+   "n": 8,
+   "status": "ok",
+   "system": "planner",
+   "started_at": 1792214019.5728042,
+   "url": "https://arxiv.org/abs/2610.12866",
+   "thought": {
+    "evaluation": "All three papers were opened and their details saved. The page is a normal arXiv abstract page, not a bot check.",
+    "memory": "All three papers verified.",
+    "next_goal": "Deliver the answer."
+   },
+   "action": {
+    "name": "done",
+    "args": {
+     "success": true,
+     "summary": "These are the 3 most recent arXiv papers I found for the phrase \"browser agent\", newest first. I searched arXiv sorted by announcement date.\n\n1. **BrowseSafe++: Benchmarking Prompt Injection Detection Across Web Contexts, Languages, and Browser Views** (12 Oct 2026)\n   - Authors: Yuetian Chen, Kaiyuan Zhang, Yuntao Du, Thomas Li, Mark Tenenholtz, Kyle Polley, Jerry Ma, Denis Yarats, Ninghui Li.\n   - Abstract: It extends BrowseSafe to 38,675 page pairs for detecting prompt injection against browser agents, and trains two 0.8B BrowseSafe-Guard detectors that beat frontier-model-based detectors on F1.\n\n2. **The Agent Clicks Approve: Injected Page Text Makes Browser Agents Authorize Access the Task Never Named** (10 Oct 2026)\n   - Author: Md Imran Hossen.\n   - Abstract: Injected page text made browser agents approve unauthorized access grants and webhooks in 100% of 73 undefended attacks. An authority envelope gate that checks requests against the user's task rejected all 70 attacks.\n\n3. **CaptchaAgent: Verifiable Visual Reasoning for CAPTCHA Solving** (9 Oct 2026)\n   - Authors: Shangquan Sun, Ruoyu Chen, Zhirui Liu, Xiang Liu, Chenghao Qian, Wenqi Ren, Xiaochun Cao.\n   - Abstract: It builds a structured visual intermediate representation with refinement and consistency verification. This improves Pass@1 by 21.3\u201325.8 points over a commercial browser agent baseline on Open CaptchaWorld.",
+     "columns": [
+      "Title",
+      "Authors",
+      "Abstract (one sentence)"
+     ],
+     "rows": [
+      {
+       "Title": "BrowseSafe++: Benchmarking Prompt Injection Detection Across Web Contexts, Languages, and Browser Views",
+       "Authors": "Yuetian Chen, Kaiyuan Zhang, Yuntao Du, Thomas Li, Mark Tenenholtz, Kyle Polley, Jerry Ma, Denis Yarats, Ninghui Li",
+       "Abstract (one sentence)": "Extends BrowseSafe to 38,675 page pairs for prompt-injection detection against browser agents and trains two 0.8B detectors that beat frontier-model-based detectors on F1."
+      },
+      {
+       "Title": "The Agent Clicks Approve: Injected Page Text Makes Browser Agents Authorize Access the Task Never Named",
+       "Authors": "Md Imran Hossen",
+       "Abstract (one sentence)": "Injected page text makes browser agents approve unauthorized access in 100% of 73 undefended attacks, but an authority envelope gate rejected all 70 attacks."
+      },
+      {
+       "Title": "CaptchaAgent: Verifiable Visual Reasoning for CAPTCHA Solving",
+       "Authors": "Shangquan Sun, Ruoyu Chen, Zhirui Liu, Xiang Liu, Chenghao Qian, Wenqi Ren, Xiaochun Cao",
+       "Abstract (one sentence)": "Structured visual representation with refinement and consistency verification improves Pass@1 by 21.3-25.8 points over a commercial browser agent baseline."
+      }
+     ],
+     "sources": [
+      {
+       "title": "BrowseSafe++",
+       "url": "https://arxiv.org/abs/2610.17457"
+      },
+      {
+       "title": "The Agent Clicks Approve",
+       "url": "https://arxiv.org/abs/2610.15138"
+      },
+      {
+       "title": "CaptchaAgent",
+       "url": "https://arxiv.org/abs/2610.12866"
+      }
+     ],
+     "issues": [
+      "Selection is based on the arXiv search for the phrase \"browser agent\", sorted by announcement date. Papers that use different wording may have been missed."
+     ]
+    },
+    "label": "Deliver the result"
+   },
+   "result": "Delivered the result.",
+   "ended_at": 1792214028.931359
+  },
+  {
+   "t": 58.85,
+   "type": "result",
+   "success": true,
+   "summary": "These are the 3 most recent arXiv papers I found for the phrase \"browser agent\", newest first. I searched arXiv sorted by announcement date.\n\n1. **BrowseSafe++: Benchmarking Prompt Injection Detection Across Web Contexts, Languages, and Browser Views** (12 Oct 2026)\n   - Authors: Yuetian Chen, Kaiyuan Zhang, Yuntao Du, Thomas Li, Mark Tenenholtz, Kyle Polley, Jerry Ma, Denis Yarats, Ninghui Li.\n   - Abstract: It extends BrowseSafe to 38,675 page pairs for detecting prompt injection against browser agents, and trains two 0.8B BrowseSafe-Guard detectors that beat frontier-model-based detectors on F1.\n\n2. **The Agent Clicks Approve: Injected Page Text Makes Browser Agents Authorize Access the Task Never Named** (10 Oct 2026)\n   - Author: Md Imran Hossen.\n   - Abstract: Injected page text made browser agents approve unauthorized access grants and webhooks in 100% of 73 undefended attacks. An authority envelope gate that checks requests against the user's task rejected all 70 attacks.\n\n3. **CaptchaAgent: Verifiable Visual Reasoning for CAPTCHA Solving** (9 Oct 2026)\n   - Authors: Shangquan Sun, Ruoyu Chen, Zhirui Liu, Xiang Liu, Chenghao Qian, Wenqi Ren, Xiaochun Cao.\n   - Abstract: It builds a structured visual intermediate representation with refinement and consistency verification. This improves Pass@1 by 21.3\u201325.8 points over a commercial browser agent baseline on Open CaptchaWorld.",
+   "columns": [
+    "Title",
+    "Authors",
+    "Abstract (one sentence)"
+   ],
+   "rows": [
+    {
+     "Title": "BrowseSafe++: Benchmarking Prompt Injection Detection Across Web Contexts, Languages, and Browser Views",
+     "Authors": "Yuetian Chen, Kaiyuan Zhang, Yuntao Du, Thomas Li, Mark Tenenholtz, Kyle Polley, Jerry Ma, Denis Yarats, Ninghui Li",
+     "Abstract (one sentence)": "Extends BrowseSafe to 38,675 page pairs for prompt-injection detection against browser agents and trains two 0.8B detectors that beat frontier-model-based detectors on F1."
+    },
+    {
+     "Title": "The Agent Clicks Approve: Injected Page Text Makes Browser Agents Authorize Access the Task Never Named",
+     "Authors": "Md Imran Hossen",
+     "Abstract (one sentence)": "Injected page text makes browser agents approve unauthorized access in 100% of 73 undefended attacks, but an authority envelope gate rejected all 70 attacks."
+    },
+    {
+     "Title": "CaptchaAgent: Verifiable Visual Reasoning for CAPTCHA Solving",
+     "Authors": "Shangquan Sun, Ruoyu Chen, Zhirui Liu, Xiang Liu, Chenghao Qian, Wenqi Ren, Xiaochun Cao",
+     "Abstract (one sentence)": "Structured visual representation with refinement and consistency verification improves Pass@1 by 21.3-25.8 points over a commercial browser agent baseline."
+    }
+   ],
+   "sources": [
+    {
+     "title": "BrowseSafe++",
+     "url": "https://arxiv.org/abs/2610.17457"
+    },
+    {
+     "title": "The Agent Clicks Approve",
+     "url": "https://arxiv.org/abs/2610.15138"
+    },
+    {
+     "title": "CaptchaAgent",
+     "url": "https://arxiv.org/abs/2610.12866"
+    }
+   ],
+   "issues": [
+    "Selection is based on the arXiv search for the phrase \"browser agent\", sorted by announcement date. Papers that use different wording may have been missed."
+   ]
+  },
+  {
+   "t": 58.85,
+   "type": "usage",
+   "llm_calls": 8,
+   "input_tokens": 111835,
+   "output_tokens": 3682,
+   "cost_usd": 0.26049,
+   "fast_calls": 0,
+   "fast_ms_total": 0,
+   "text_calls": 0,
+   "elapsed_s": 55.5
+  }
+ ]
+}
