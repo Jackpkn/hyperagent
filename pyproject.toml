@@ -1,0 +1,43 @@
+[project]
+name = "hyperagent"
+version = "0.2.0"
+description = "An LLM browser agent with a live, transparent and steerable operator console."
+license = "MIT"
+requires-python = ">=3.12"
+dependencies = [
+    "playwright>=1.55,<2",
+    "httpx[http2]>=0.28,<1",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "pydantic>=2.0.0",
+    "anthropic>=1.15",
+]
+
+[project.scripts]
+hyperagent = "hyperagent.server:main"
+hyperagent-server = "hyperagent.server:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["hyperagent"]
+
+[tool.hatch.build.targets.sdist]
+include = ["/hyperagent", "/tests", "/pyproject.toml", "/uv.lock", "/README.md", "/LICENSE", "/.env.example"]
+exclude = ["/apps", "**/__pycache__"]
+
+[dependency-groups]
+dev = ["pytest>=8.4,<9", "pytest-asyncio>=1.0,<2", "ruff>=0.14,<1"]
+
+[tool.ruff]
+line-length = 120
+extend-exclude = ["legacy"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
