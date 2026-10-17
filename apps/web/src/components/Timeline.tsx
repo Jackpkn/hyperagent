@@ -23,6 +23,9 @@ import { StepCard } from "./StepCard";
 const NEAR_BOTTOM_PX = 100;
 
 interface TimelineProps {
+  goal?: string;
+  runState?: string;
+  runDetail?: string;
   plan: PlanItem[];
   steps: StepRecord[];
   feed: FeedItem[];
@@ -49,6 +52,9 @@ const PLAN_MARK: Record<PlanItem["status"], string> = {
 };
 
 export function Timeline({
+  goal = "",
+  runState = "",
+  runDetail = "",
   plan,
   steps,
   feed,
@@ -225,7 +231,7 @@ export function Timeline({
         }}
         onTouchStart={releaseStick}
       >
-        {feed.length === 0 && !result && findings.length === 0 ? (
+        {!goal && feed.length === 0 && !result && findings.length === 0 ? (
           <div className="empty-state">
             <Circle size={20} className="empty-icon" aria-hidden="true" />
             <p className="empty-title">Starting run</p>
@@ -233,6 +239,17 @@ export function Timeline({
           </div>
         ) : (
           <div className="stream-stack">
+            {goal ? (
+              <div className="feed-row feed-guidance">
+                <div className="guidance-bubble is-goal">
+                  <span className="guidance-meta">
+                    <MessageSquare size={11} aria-hidden="true" /> You
+                  </span>
+                  {goal}
+                </div>
+              </div>
+            ) : null}
+
             {feed.length > 0 ? (
               <div className="feed">
                 {canRollup && !expandAllFeed ? (
@@ -261,6 +278,27 @@ export function Timeline({
                     {feed.map(renderFeedItem)}
                   </>
                 )}
+              </div>
+            ) : null}
+
+            {!finished &&
+            !steps.some((s) => s.status === "thinking" || s.status === "running" || s.status === "awaiting_approval") ? (
+              <div className="stream-live-loader" role="status" aria-live="polite">
+                <span className="stream-bullet is-hollow is-pulsing" aria-hidden="true">
+                  ○
+                </span>
+                <span className="stream-loader-text">
+                  {runState === "paused"
+                    ? "Paused — take over in the browser, send guidance below, or press Resume."
+                    : runDetail || (steps.length === 0 ? "Launching browser & opening initial page…" : "Observing page & preparing next step…")}
+                </span>
+                {runState !== "paused" ? (
+                  <span className="thinking-dots" aria-hidden="true">
+                    <span />
+                    <span />
+                    <span />
+                  </span>
+                ) : null}
               </div>
             ) : null}
 

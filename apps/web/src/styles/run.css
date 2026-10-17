@@ -1265,6 +1265,19 @@
   background: var(--surface-sunk);
 }
 
+.stream-live-loader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.stream-loader-text {
+  color: var(--ink-soft);
+}
+
 /* Unified stream sections (Findings + Final Deliverable inline in Live Stream) */
 
 .stream-stack {

@@ -389,6 +389,9 @@ export function AgentApp() {
 
               <Tabs.Content value="steps" className="sidebar-tab-content">
                 <Timeline
+                  goal={state.goal}
+                  runState={state.run}
+                  runDetail={state.detail}
                   plan={state.plan}
                   steps={state.steps}
                   feed={state.feed}
