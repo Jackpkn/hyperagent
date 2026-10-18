@@ -61,6 +61,55 @@ async def screenshot(page, name):
         await page.screenshot(path=str(Path(directory) / f"{name}.png"), full_page=True, animations="disabled")
 
 
+@pytest.mark.parametrize("width", [1440, 1000, 390])
+async def test_long_report_stays_inside_chat_panel(design_console, width):
+    page, sockets, _ = design_console
+    await page.set_viewport_size({"width": width, "height": 1050})
+    if width < 760:
+        await page.get_by_role("button", name="Collapse chat sidebar").click()
+    await page.emulate_media(reduced_motion="reduce")
+    url = "https://example.com/search?query=" + "abcdefgh12345678" * 80
+    await start_task(page, f"Compare results and include the source URL: {url}")
+    sockets[-1].send(json.dumps({**RESULT, "summary": f"Comparison complete.\n\nSource: {url}"}))
+    sockets[-1].send(json.dumps({"type": "status", "state": "done", "step": 0}))
+    await expect(page.get_by_text("Comparison complete.", exact=True)).to_be_visible()
+    await page.locator(".timeline-scroll").hover()
+    await page.mouse.wheel(300, 0)
+    # Let the actual completion scroll finish before measuring clipped content.
+    await page.locator(".timeline-scroll").evaluate("""el => new Promise(resolve => {
+      let stable = 0, last = '';
+      const check = () => {
+        const next = `${el.scrollTop},${el.scrollLeft}`;
+        stable = next === last ? stable + 1 : 0;
+        last = next;
+        if (stable >= 8) resolve(); else requestAnimationFrame(check);
+      };
+      requestAnimationFrame(check);
+    })""")
+    await screenshot(page, f"long-report-{width}")
+
+    async def assert_panel():
+        bounds = await page.locator(".panel-body:visible").evaluate("""el => ({
+          left: el.scrollLeft, width: el.clientWidth, scrollWidth: el.scrollWidth,
+          cardLeft: el.querySelector('.result-summary-card').getBoundingClientRect().left,
+          panelLeft: el.getBoundingClientRect().left
+        })""")
+        assert bounds["scrollWidth"] <= bounds["width"] + 1, bounds
+        assert bounds["left"] == 0, bounds
+        assert bounds["cardLeft"] >= bounds["panelLeft"], bounds
+        assert await page.evaluate("document.documentElement.scrollWidth <= innerWidth")
+
+    await assert_panel()
+    await page.get_by_role("button", name="Widen left stream panel").click()
+    await assert_panel()
+    await page.get_by_role("tab", name="Report Only").click()
+    await assert_panel()
+    await wait_saved(page, lambda turn: turn and turn["result"] is not None)
+    await page.reload()
+    await expect(page.get_by_text("Comparison complete.", exact=True)).to_be_visible()
+    await assert_panel()
+
+
 async def test_examples_are_editable_and_share_composer_edges(design_console):
     page, _, messages = design_console
     cards = page.get_by_role("button", name="Use example:")

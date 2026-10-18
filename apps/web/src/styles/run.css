@@ -210,6 +210,8 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  /* Plain URLs and long tokens must not make the entire conversation scroll sideways. */
+  overflow-wrap: anywhere;
   padding: 14px;
 }
 
