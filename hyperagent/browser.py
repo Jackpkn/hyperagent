@@ -7,7 +7,9 @@ import base64
 import contextlib
 import functools
 import ipaddress
+import logging
 import os
+import re
 import socket
 import time
 from collections.abc import Awaitable, Callable
@@ -21,6 +23,8 @@ from urllib.parse import urlsplit
 from playwright.async_api import Browser, BrowserContext, Page, Playwright, Route, async_playwright
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import TimeoutError as PlaywrightTimeout
+
+log = logging.getLogger("hyperagent")
 
 OBSERVE_JS = Path(__file__).with_name("dom.js").read_text()
 VIEWPORT = {"width": 1280, "height": 960}
@@ -120,6 +124,13 @@ def _host_is_public(host: str) -> bool:
     return all(ipaddress.ip_address(info[4][0]).is_global for info in infos)
 
 
+def _redact_endpoints(message: str, endpoint: str | None) -> str:
+    """Browser-service URLs often carry an API key; keep them out of logs."""
+    if endpoint:
+        message = message.replace(endpoint, "<BROWSER_WS_URL>")
+    return re.sub(r"(wss?://[^\s?]+)\?\S*", r"\1?<redacted>", message)
+
+
 def private_network_allowed() -> bool:
     return os.environ.get("ALLOW_PRIVATE_NETWORK", "0") == "1"
 
@@ -179,7 +190,12 @@ class BrowserSession:
             self.context = await self.browser.new_context(**ctx_kwargs)
         except PlaywrightError as exc:
             await self.close()
-            raise ActionError("Could not start the browser. Check the Chromium install or BROWSER_WS_URL.") from exc
+            where = "remote browser (BROWSER_WS_URL)" if endpoint else "local Chromium"
+            log.error("could not start the %s: %s", where, _redact_endpoints(str(exc), endpoint)[:800])
+            if endpoint:
+                raise ActionError("Could not connect to the remote browser set in BROWSER_WS_URL. Check that "
+                                  "URL, or clear it to use the built-in Chromium.") from exc
+            raise ActionError("Could not launch the built-in Chromium; the server log has the reason.") from exc
         if not private_network_allowed():
             await self.context.route("**/*", self._guard)
         self.context.on("page", self._on_new_page)

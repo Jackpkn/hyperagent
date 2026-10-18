@@ -156,3 +156,13 @@ async def test_scroll_handles_inner_scrollable_container(browser):
 
 
 
+
+
+async def test_unreachable_remote_browser_names_the_setting_and_hides_the_endpoint(monkeypatch, caplog):
+    monkeypatch.setenv("BROWSER_WS_URL", "ws://127.0.0.1:9/?token=SECRET123")
+    session = BrowserSession()
+    with pytest.raises(ActionError) as err:
+        await session.start("data:text/html,hi")
+    assert "BROWSER_WS_URL" in str(err.value)
+    assert "SECRET123" not in str(err.value) and "SECRET123" not in caplog.text
+    assert "remote browser" in caplog.text, "the real cause must reach the server log"
