@@ -34,7 +34,7 @@ services:
       - key: PLANNER_THINKING
         value: "1"
       - key: PLANNER_EFFORT
-        value: "medium"
+        value: "high"
 
       # Planner models default per provider (Claude API ids for "anthropic"). Only set LLM_MODELS with ids
       # that match LLM_PROVIDER: OpenRouter-style "anthropic/..." ids are rejected by the Claude API.

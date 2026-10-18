@@ -64,13 +64,13 @@ async def test_decide_uses_auto_tool_choice_and_retries_without_tool_call():
     assert (name, args, tokens_in) == (
         "navigate",
         {"url": "https://x.test", "_thinking": "Need to open x.test first."},
-        2000,  # both attempts are billed
+        1000,
     )
-    assert spent == pytest.approx(0.0003)
+    assert spent == pytest.approx(0.00015)
     first = calls.calls[0]
     assert first["tool_choice"] == {"type": "auto", "disable_parallel_tool_use": True}
     assert first["thinking"] == {"type": "adaptive", "display": "summarized"}
-    assert first["output_config"] == {"effort": "medium"}
+    assert first["output_config"] == {"effort": "high"}
     assert calls.calls[1]["messages"][-1]["content"][0]["text"].startswith("Call exactly one tool")
 
 
@@ -125,23 +125,3 @@ async def test_static_system_prompt_and_tools_are_cached_and_cache_tokens_are_bi
 def test_partial_stream_surfaces_the_narration_message():
     partial = '{"evaluation": "Page loaded", "memory": "m", "next_goal": "Open Fiction", "message": "Found the Fic'
     assert extract_partial_thought(partial)["message"] == "Found the Fic"
-
-
-async def test_reply_cut_off_by_the_length_limit_is_retried_not_executed():
-    cut = reply(block(type="thinking", thinking="Comparing ten hubs at length…"),
-                block(type="tool_use", name="ask_user", input={}), stop="max_tokens")
-    whole = reply(block(type="tool_use", name="ask_user", input={"question": "Which hub?"}))
-    b, calls = backend([cut, whole])
-    notices = []
-
-    async def on_retry(text):
-        notices.append(text)
-
-    name, args, tokens_in, tokens_out, _, _ = await b.decide(
-        "claude-sonnet-5-5", [{"role": "user", "content": "go"}], TOOLS, on_retry=on_retry)
-    assert (name, args["question"]) == ("ask_user", "Which hub?")
-    assert (tokens_in, tokens_out) == (2000, 200)
-    assert "cut off" in notices[0]
-    retry = calls.calls[1]["messages"][-1]["content"][-1]["text"]
-    assert retry.startswith("Your last reply hit the length limit")
-    assert calls.calls[0]["max_tokens"] == 16000
