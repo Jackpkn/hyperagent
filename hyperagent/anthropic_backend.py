@@ -11,6 +11,10 @@ from typing import Any
 import anthropic
 
 # USD per million tokens (input, output), Claude API first-party rates.
+# Adaptive thinking counts toward this, so it must leave room for the tool call after the thinking. Kept under
+# the SDK's limit for non-streaming requests.
+PLANNER_MAX_TOKENS = 16000
+
 PRICES = {
     "claude-haiku-5-5": (0.10, 0.50),
     "claude-sonnet-5-5": (2.00, 10.00),
@@ -123,7 +127,7 @@ def speed_settings(model: str, *, for_planner: bool = True) -> dict[str, Any]:
         if model.startswith("claude-haiku"):
             return {"thinking": {"type": "disabled"}}
         return {"output_config": {"effort": "low"}}
-    effort = os.environ.get("PLANNER_EFFORT", "high")
+    effort = os.environ.get("PLANNER_EFFORT", "medium")
     return {
         "thinking": {"type": "adaptive", "display": "summarized"},
         "output_config": {"effort": effort},
@@ -158,10 +162,13 @@ class AnthropicBackend:
             converted[-1]["content"].append({"type": "text", "text": f"Call the `{force}` tool now."})
         last = "unknown error"
         wait = 0.0
+        # Every attempt is billed, including ones that are retried, so usage adds them all up.
+        total_in = total_out = total_cache = 0
+        total_spent = 0.0
         for attempt in range(5):
             try:
                 req_kwargs = dict(
-                    model=model, max_tokens=4096, system=_cached_system(system), messages=converted,
+                    model=model, max_tokens=PLANNER_MAX_TOKENS, system=_cached_system(system), messages=converted,
                     tools=convert_tools(tools),
                     tool_choice={"type": "auto", "disable_parallel_tool_use": True},
                     **speed_settings(model, for_planner=True),
@@ -219,8 +226,23 @@ class AnthropicBackend:
                 usage = response.usage
                 cache_write = getattr(usage, "cache_creation_input_tokens", 0) or 0
                 cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
-                spent = cost(model, usage.input_tokens, usage.output_tokens, cache_write, cache_read)
-                tokens_in = usage.input_tokens + cache_write + cache_read
+                total_spent += cost(model, usage.input_tokens, usage.output_tokens, cache_write, cache_read)
+                total_in += usage.input_tokens + cache_write + cache_read
+                total_out += usage.output_tokens
+                total_cache += cache_read
+                if response.stop_reason == "max_tokens":
+                    # Thinking used up the output budget and the tool call was cut off mid-arguments; running
+                    # it would act on a half-written decision, so ask again for a shorter answer instead.
+                    last = "the reply was cut off before its action was complete"
+                    if on_retry:
+                        await on_retry("The model's reply was cut off before it finished choosing an action; "
+                                       "asking again for a shorter answer.")
+                    converted = [*converted[:-1], {**converted[-1], "content": [
+                        *converted[-1]["content"],
+                        {"type": "text", "text": "Your last reply hit the length limit before the tool call was "
+                                                 "complete. Think briefly, keep every field short, and call "
+                                                 "exactly one tool now."}]}]
+                    continue
                 call = next((b for b in response.content if b.type == "tool_use"), None)
                 if call is not None and (not force or call.name == force):
                     thinking_parts = [
@@ -239,7 +261,7 @@ class AnthropicBackend:
                     inputs = _recover_xml_params(dict(call.input))
                     if native_thinking:
                         inputs["_thinking"] = native_thinking
-                    return call.name, inputs, tokens_in, usage.output_tokens, spent, cache_read
+                    return call.name, inputs, total_in, total_out, total_spent, total_cache
                 last = "the reply did not choose an action"
                 converted = [*converted,
                              {"role": "assistant", "content": [b.model_dump(exclude_none=True)
