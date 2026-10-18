@@ -34,6 +34,8 @@ interface BrowserViewProps {
   statusText: string;
   paused: boolean;
   takeoverEnabled: boolean;
+  /** Why the page cannot be scrolled or clicked right now, shown briefly when the operator tries. */
+  blockedHint?: string;
   subtitle: string;
   hasSavedSession?: boolean;
   timeTravelStep?: { n: number; label: string } | null;
@@ -49,6 +51,8 @@ interface BrowserViewProps {
   onSaveSession?: () => void;
 }
 
+const HINT_MS = 2500;
+
 function isSecureUrl(url?: string): boolean {
   return Boolean(url && /^https:\/\//i.test(url));
 }
@@ -63,6 +67,7 @@ export function BrowserView({
   statusText,
   paused,
   takeoverEnabled,
+  blockedHint,
   hasSavedSession,
   timeTravelStep,
   onExitTimeTravel,
@@ -177,6 +182,7 @@ export function BrowserView({
             frame={frame}
             target={target}
             takeoverEnabled={takeoverEnabled && !timeTravelStep}
+            blockedHint={timeTravelStep ? "This is a saved snapshot of an earlier step. Exit time travel to use the live page." : blockedHint}
             pinMode={Boolean(pinMode && !timeTravelStep)}
             pinnedPoint={!timeTravelStep ? pinnedPoint : null}
             onPinPoint={onPinPoint}
@@ -214,6 +220,7 @@ interface ScreenProps {
   frame: Frame;
   target: BrowserTarget | null;
   takeoverEnabled: boolean;
+  blockedHint?: string;
   pinMode?: boolean;
   pinnedPoint?: { x: number; y: number } | null;
   onPinPoint?: (pt: { x: number; y: number } | null) => void;
@@ -225,6 +232,7 @@ function Screen({
   frame,
   target,
   takeoverEnabled,
+  blockedHint,
   pinMode,
   pinnedPoint,
   onPinPoint,
@@ -233,6 +241,16 @@ function Screen({
 }: ScreenProps) {
   const lastWheelRef = useRef(0);
   const wheelDeltaRef = useRef(0);
+  const [hintVisible, setHintVisible] = useState(false);
+  const hintTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // A wheel or click that cannot reach the page says why instead of doing nothing.
+  const showBlockedHint = () => {
+    if (!blockedHint) return;
+    setHintVisible(true);
+    if (hintTimerRef.current) clearTimeout(hintTimerRef.current);
+    hintTimerRef.current = setTimeout(() => setHintVisible(false), HINT_MS);
+  };
 
   const handleClick = (event: MouseEvent<HTMLImageElement>) => {
     const bounds = event.currentTarget.getBoundingClientRect();
@@ -244,12 +262,18 @@ function Screen({
       onPinPoint({ x, y });
       return;
     }
-    if (!takeoverEnabled) return;
+    if (!takeoverEnabled) {
+      showBlockedHint();
+      return;
+    }
     onClick(x, y);
   };
 
   const handleWheel = (event: WheelEvent<HTMLImageElement>) => {
-    if (!takeoverEnabled) return;
+    if (!takeoverEnabled) {
+      showBlockedHint();
+      return;
+    }
     wheelDeltaRef.current += event.deltaY;
     const now = Date.now();
     if (now - lastWheelRef.current < 160) return;
@@ -300,6 +324,11 @@ function Screen({
                 : "Alt+click any element to pin it to your guidance"
           }
         />
+        {hintVisible && blockedHint ? (
+          <div className="viewport-hint" role="status">
+            {blockedHint}
+          </div>
+        ) : null}
         {overlay && target ? (
           <div
             className={`target-box${target.risky ? " is-risky" : ""}${target.recent ? " is-recent" : ""}`}

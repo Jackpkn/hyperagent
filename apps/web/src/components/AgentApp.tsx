@@ -15,7 +15,7 @@ import {
 import { useAgent, type StartOptions } from "@/lib/use-agent";
 import { useChats } from "@/lib/use-chats";
 import { useStoredFrames } from "@/lib/use-stored-frames";
-import { parseFrameKey } from "@/lib/chat-model";
+import { frameKey, parseFrameKey } from "@/lib/chat-model";
 import { currentStep, isRunFinished } from "@/lib/agent-state";
 import type { AgentState } from "@/lib/agent-state";
 import type { RunState } from "@/lib/protocol";
@@ -217,6 +217,18 @@ export function AgentApp() {
       ? state.stepFrames[selectedStep.id] ?? null
       : null;
 
+  // After a reload no run is live: the tabs show the chat's latest turn instead of empty live state.
+  const lastPast = chats.pastTurns[chats.pastTurns.length - 1];
+  const restored = !state.goal && lastPast ? lastPast : null;
+  const shown = restored
+    ? { steps: restored.steps, findings: restored.findings, result: restored.result, usage: restored.usage,
+        goal: restored.goal }
+    : { steps: state.steps, findings: state.findings, result: state.result, usage: state.usage, goal: state.goal };
+  const inspectShown = (stepId: string | null) =>
+    setSelectedStepId(restored && stepId ? frameKey(restored.id, stepId) : stepId);
+  const shownSelectedStepId =
+    restored && selectedStepId ? parseFrameKey(selectedStepId)?.stepId ?? null : selectedStepId;
+
   // Find the best step to highlight on the live browser:
   // 1) Any unsettled step (planned, awaiting_approval, running) with a target rect (newest first, so Jev child steps win over parent delegate).
   // 2) Otherwise, the most recent settled step on the current page URL with a target rect so the operator can see what was just clicked/typed while the next step thinks.
@@ -376,28 +388,28 @@ export function AgentApp() {
                     <ListTodo size={14} aria-hidden="true" />
                     <span>Live Stream</span>
                     <span
-                      className={`tab-badge${approvalCount > 0 ? " is-wait" : state.result ? " is-ok" : ""}`}
+                      className={`tab-badge${approvalCount > 0 ? " is-wait" : shown.result ? " is-ok" : ""}`}
                     >
-                      {state.steps.length}
+                      {shown.steps.length}
                     </span>
                   </Tabs.Trigger>
 
                   <Tabs.Trigger value="findings" className="sidebar-tab" title="Focus only on collected findings">
                     <Database size={14} aria-hidden="true" />
                     <span>Findings</span>
-                    {state.findings.length > 0 ? (
-                      <span className="tab-badge">{state.findings.length}</span>
+                    {shown.findings.length > 0 ? (
+                      <span className="tab-badge">{shown.findings.length}</span>
                     ) : null}
                   </Tabs.Trigger>
 
                   <Tabs.Trigger value="result" className="sidebar-tab" title="Focus only on the final report">
                     <FileCheck2 size={14} aria-hidden="true" />
                     <span>Report Only</span>
-                    {state.result ? (
+                    {shown.result ? (
                       <span
-                        className={`tab-badge ${state.result.success ? "is-ok" : "is-wait"}`}
+                        className={`tab-badge ${shown.result.success ? "is-ok" : "is-wait"}`}
                       >
-                        {state.result.success ? "Done" : "Partial"}
+                        {shown.result.success ? "Done" : "Partial"}
                       </span>
                     ) : null}
                   </Tabs.Trigger>
@@ -455,28 +467,28 @@ export function AgentApp() {
               <Tabs.Content value="findings" className="sidebar-tab-content">
                 <ResultsPanel
                   mode="findings"
-                  findings={state.findings}
-                  result={state.result}
+                  findings={shown.findings}
+                  result={shown.result}
                   finished={finished}
-                  endedWithoutResult={endedWithoutResult}
-                  selectedStepId={selectedStepId}
-                  onInspectStep={setSelectedStepId}
+                  endedWithoutResult={restored ? null : endedWithoutResult}
+                  selectedStepId={shownSelectedStepId}
+                  onInspectStep={inspectShown}
                 />
               </Tabs.Content>
 
               <Tabs.Content value="result" className="sidebar-tab-content">
                 <ResultsPanel
                   mode="result"
-                  findings={state.findings}
-                  result={state.result}
-                  previousResult={previousResult}
-                  usage={state.usage}
+                  findings={shown.findings}
+                  result={shown.result}
+                  previousResult={restored ? null : previousResult}
+                  usage={shown.usage}
                   finished={finished}
-                  endedWithoutResult={endedWithoutResult}
-                  goal={state.goal}
-                  steps={state.steps}
-                  selectedStepId={selectedStepId}
-                  onInspectStep={setSelectedStepId}
+                  endedWithoutResult={restored ? null : endedWithoutResult}
+                  goal={shown.goal}
+                  steps={shown.steps}
+                  selectedStepId={shownSelectedStepId}
+                  onInspectStep={inspectShown}
                   onUseFollowUp={prefillFollowUp}
                 />
               </Tabs.Content>
@@ -531,6 +543,11 @@ export function AgentApp() {
                   state.run === "paused" ||
                   state.run === "awaiting_user" ||
                   (finished && Boolean(state.frame))
+                }
+                blockedHint={
+                  state.frame
+                    ? "The agent is driving the browser. Press Pause, then scroll or click the page yourself."
+                    : "This is a saved screenshot; the browser is closed, so it cannot scroll. Send a message to open a fresh browser."
                 }
                 subtitle={browserSubtitle(state.run)}
                 hasSavedSession={state.session?.has_saved_session}
