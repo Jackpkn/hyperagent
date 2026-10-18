@@ -1,0 +1,199 @@
+/* Final report additions: run recap, requirement checklist, single-answer card, assumptions, follow-ups. */
+
+.run-recap {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  border-radius: var(--radius-sm);
+  border: 1px dashed var(--hairline-strong);
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
+.run-recap-path {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px;
+  color: var(--ink);
+}
+
+.run-recap-path svg {
+  color: var(--muted);
+  flex: none;
+}
+
+.run-recap-page {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.run-recap-sep {
+  color: var(--muted);
+}
+
+.run-recap-stats {
+  color: var(--muted);
+}
+
+.run-recap-jev {
+  color: var(--signal-ink);
+}
+
+.run-recap-jev svg {
+  vertical-align: -1px;
+}
+
+.checklist {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.checklist-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  font-size: 12.5px;
+}
+
+.checklist-item[data-met="false"] {
+  border-color: color-mix(in srgb, var(--wait) 40%, var(--hairline));
+  background: var(--wait-soft);
+}
+
+.checklist-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  margin-top: 1px;
+  border-radius: 999px;
+  flex: none;
+  color: var(--ok);
+  background: var(--ok-soft);
+}
+
+.checklist-item[data-met="false"] .checklist-mark {
+  color: var(--wait);
+  background: var(--surface);
+}
+
+.checklist-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.checklist-req {
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.checklist-evidence {
+  color: var(--muted);
+}
+
+.answer-card {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.answer-fact {
+  padding: 8px 10px;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--hairline);
+  background: var(--surface);
+  min-width: 0;
+}
+
+.answer-fact[data-flagged="true"] {
+  border-color: color-mix(in srgb, var(--wait) 45%, var(--hairline));
+}
+
+.answer-fact dt {
+  font-size: 11px;
+  text-transform: capitalize;
+  color: var(--muted);
+}
+
+.answer-fact dd {
+  margin: 2px 0 0;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.answer-missing {
+  font-weight: 400;
+  font-style: italic;
+  color: var(--muted);
+}
+
+.assumptions li {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--ink-soft);
+}
+
+.assumptions svg {
+  margin-top: 3px;
+  flex: none;
+  color: var(--wait);
+}
+
+.follow-ups {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.follow-up-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--hairline-strong);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease;
+}
+
+.follow-up-chip:hover {
+  border-color: var(--signal);
+  background: var(--signal-soft);
+}
+
+.follow-up-chip:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.follow-up-chip svg {
+  flex: none;
+  color: var(--signal);
+}

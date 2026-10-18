@@ -551,11 +551,12 @@
   background: #fff;
 }
 
+/* Sized exactly to the screenshot: target/pin overlays use percentages of this box, so it must never be taller
+   than the image (a min-height here shifts every overlay down in proportion to its y). */
 .viewport-inner {
   position: relative;
   width: 100%;
   max-width: 100%;
-  min-height: 100%;
   line-height: 0;
   border-radius: 0;
   overflow: hidden;

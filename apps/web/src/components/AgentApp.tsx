@@ -81,6 +81,8 @@ export function AgentApp() {
   const [sidebarWidth, setSidebarWidth] = useState<number>(540);
   const [isResizing, setIsResizing] = useState(false);
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
+  const [composerSeed, setComposerSeed] = useState<{ text: string; nonce: number } | null>(null);
+  const prefillFollowUp = (text: string) => setComposerSeed({ text, nonce: Date.now() });
   const [pinMode, setPinMode] = useState(false);
   const [pinnedPoint, setPinnedPoint] = useState<{ x: number; y: number } | null>(null);
   const [profile, setProfile] = useState<OperatorProfile>(defaultOperatorProfile);
@@ -400,12 +402,14 @@ export function AgentApp() {
                   result={state.result}
                   previousResult={previousResult}
                   usage={state.usage}
+                  fastModel={state.session?.fast_model}
                   finished={finished}
                   endedWithoutResult={endedWithoutResult}
                   stepFrames={state.stepFrames}
                   selectedStepId={selectedStepId}
                   now={now}
                   onSelectStep={setSelectedStepId}
+                  onUseFollowUp={prefillFollowUp}
                   onApprove={(stepId) => agent.send({ type: "approve", step_id: stepId })}
                   onReject={(stepId, reason) =>
                     agent.send({ type: "reject", step_id: stepId, reason: reason || undefined })
@@ -438,6 +442,7 @@ export function AgentApp() {
                   steps={state.steps}
                   selectedStepId={selectedStepId}
                   onInspectStep={setSelectedStepId}
+                  onUseFollowUp={prefillFollowUp}
                 />
               </Tabs.Content>
 
@@ -445,6 +450,7 @@ export function AgentApp() {
                 question={question}
                 finished={finished}
                 hasLiveBrowser={Boolean(state.frame)}
+                seed={composerSeed}
                 pinnedPoint={pinnedPoint}
                 onClearPin={() => {
                   setPinnedPoint(null);

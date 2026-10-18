@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Eye } from "lucide-react";
 import type { Finding } from "@/lib/protocol";
 import { formatCell } from "@/lib/format";
+import { matchRowToFinding } from "@/lib/findings";
 
 interface DataTableProps {
   columns: string[];
@@ -103,26 +104,6 @@ export function DataTable({
     return map.size > 0 ? map : null;
   }, [columns, rows]);
 
-  const matchRowToFinding = (row: Record<string, unknown>): Finding | undefined => {
-    if (!findings || findings.length === 0) return undefined;
-    const rowStrings = Object.values(row)
-      .map((v) => formatCell(v).trim().toLowerCase())
-      .filter((s) => s.length >= 3);
-    if (rowStrings.length === 0) return undefined;
-    let best: Finding | undefined;
-    let bestScore = 0;
-    for (const f of findings) {
-      if (!f.step_id) continue;
-      const fVals = Object.values(f.data).map((v) => formatCell(v).trim().toLowerCase());
-      const score = rowStrings.filter((rv) => fVals.some((fv) => fv && (fv === rv || fv.includes(rv) || rv.includes(fv)))).length;
-      if (score > bestScore) {
-        bestScore = score;
-        best = f;
-      }
-    }
-    return best;
-  };
-
   const toggle = (column: string) => {
     setSort((current) => {
       if (!current || current.column !== column) return { column, direction: "asc" };
@@ -164,7 +145,7 @@ export function DataTable({
               ? (keyVal && compareLookup.byKey.get(keyVal)) ?? compareLookup.byIndex[rowIndex]
               : undefined;
             const isNewRow = Boolean(compareLookup && !prevRow);
-            const matchedFinding = matchRowToFinding(row);
+            const matchedFinding = matchRowToFinding(row, findings);
             const receiptStepId = matchedFinding?.step_id;
             const receiptStepN = matchedFinding?.step_n;
             const isReceiptActive = Boolean(receiptStepId && selectedStepId === receiptStepId);

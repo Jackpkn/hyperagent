@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import * as Collapsible from "@radix-ui/react-collapsible";
 import {
   Activity,
@@ -354,6 +354,8 @@ interface GuidanceComposerProps {
   question: Question | null;
   finished: boolean;
   hasLiveBrowser?: boolean;
+  /** Text to place in the box (e.g. a suggested follow-up); a new nonce re-applies the same text. */
+  seed?: { text: string; nonce: number } | null;
   pinnedPoint?: { x: number; y: number } | null;
   onClearPin?: () => void;
   onGuide: (text: string, pin?: { x: number; y: number } | null) => boolean;
@@ -365,6 +367,7 @@ export function GuidanceComposer({
   question,
   finished,
   hasLiveBrowser,
+  seed,
   pinnedPoint,
   onClearPin,
   onGuide,
@@ -372,6 +375,13 @@ export function GuidanceComposer({
   onStartNewTask,
 }: GuidanceComposerProps) {
   const [draft, setDraft] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (!seed) return;
+    setDraft(seed.text);
+    inputRef.current?.focus();
+  }, [seed]);
 
   if (finished && !question && !onStartNewTask && !onContinueOnPage) return null;
 
@@ -434,6 +444,7 @@ export function GuidanceComposer({
           {question ? "Your answer" : finished ? "Follow-up or new task goal" : "Message to the agent"}
         </label>
         <input
+          ref={inputRef}
           id="guidance"
           className="guide-input"
           value={draft}

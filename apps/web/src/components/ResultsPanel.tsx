@@ -15,6 +15,7 @@ interface ResultsPanelProps {
   steps?: StepRecord[];
   selectedStepId?: string | null;
   onInspectStep?: (stepId: string | null) => void;
+  onUseFollowUp?: (text: string) => void;
 }
 
 const PREVIEW_FIELDS = 6;
@@ -31,6 +32,7 @@ export function ResultsPanel({
   steps,
   selectedStepId,
   onInspectStep,
+  onUseFollowUp,
 }: ResultsPanelProps) {
   if (mode === "findings") {
     return (
@@ -75,6 +77,7 @@ export function ResultsPanel({
           steps={steps}
           selectedStepId={selectedStepId}
           onInspectStep={onInspectStep}
+          onUseFollowUp={onUseFollowUp}
         />
       ) : (
         <div className="empty-state">

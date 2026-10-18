@@ -15,18 +15,24 @@ import {
 import type { Finding, RunResult, StepRecord, Usage } from "@/lib/protocol";
 import { copyText, downloadText, resultToCsv, resultToMarkdown } from "@/lib/export";
 import { domainOf, formatCell, formatCost } from "@/lib/format";
+import { matchRowToFinding } from "@/lib/findings";
 import { DataTable } from "./DataTable";
 import { Markdown } from "./Markdown";
+import { AnswerCard, Assumptions, Checklist, FollowUps, RunRecap } from "./ResultExtras";
 
 interface ResultReportProps {
   result: RunResult;
   previousResult?: RunResult | null;
   usage?: Usage | null;
+  /** System 1 model when Jev is configured, so a run that never delegated says so instead of staying silent. */
+  fastModel?: string | null;
   findings?: Finding[];
   goal?: string;
   steps?: StepRecord[];
   selectedStepId?: string | null;
   onInspectStep?: (stepId: string | null) => void;
+  /** Pre-fills the message box with a suggested follow-up; never starts a run by itself. */
+  onUseFollowUp?: (text: string) => void;
 }
 
 function isWebUrl(url: string): boolean {
@@ -41,11 +47,13 @@ export function ResultReport({
   result,
   previousResult,
   usage,
+  fastModel,
   findings,
   goal,
   steps,
   selectedStepId,
   onInspectStep,
+  onUseFollowUp,
 }: ResultReportProps) {
   const [copied, setCopied] = useState<"idle" | "copied" | "failed">("idle");
   const [showDiff, setShowDiff] = useState(false);
@@ -61,6 +69,19 @@ export function ResultReport({
       if (val) unverifiedValues.add(val.toLowerCase());
     }
   }
+  // Flags that reach the delivered answer, so the banner never claims "verified" over a flagged value.
+  const flaggedInResult = new Set(
+    result.rows.flatMap((row) =>
+      result.columns
+        .map((c) => formatCell(row[c]).trim().toLowerCase())
+        .filter((v) => v && unverifiedValues.has(v)),
+    ),
+  ).size;
+  const checklist = result.checklist ?? [];
+  const assumptions = result.assumptions ?? [];
+  const followUps = result.follow_ups ?? [];
+  const singleAnswer = hasTable && result.rows.length === 1 && result.columns.length <= 8;
+  const verdictSub = verdictText(result.success, checklist.length, flaggedInResult);
 
   const onCopy = async () => {
     const ok = await copyText(resultToMarkdown(result));
@@ -81,11 +102,7 @@ export function ResultReport({
             <strong className="verdict-title">
               {result.success ? "Goal Completed" : "Partial Result"}
             </strong>
-            <span className="verdict-sub">
-              {result.success
-                ? "All requested fields and actions were verified."
-                : "Some items could not be verified — see open issues below."}
-            </span>
+            <span className="verdict-sub">{verdictSub}</span>
           </div>
         </div>
 
@@ -165,6 +182,11 @@ export function ResultReport({
               {fastCalls === 1 ? "action" : "actions"} ({avgFastMs}ms avg) ·{" "}
               <strong>~{estTokensSaved.toLocaleString()} tokens saved</strong> (no screenshots)
             </span>
+          ) : fastModel ? (
+            <span className="efficiency-item" title="The planner only delegates multi-step on-page UI work to Jev">
+              <Zap size={12} aria-hidden="true" />
+              <strong>Jev (System 1):</strong> not used. The planner did every action itself.
+            </span>
           ) : null}
         </div>
       ) : null}
@@ -175,7 +197,22 @@ export function ResultReport({
         </div>
       </div>
 
-      {hasTable ? (
+      {steps && steps.length > 0 ? <RunRecap steps={steps} /> : null}
+
+      {checklist.length > 0 ? (
+        <Checklist items={checklist} selectedStepId={selectedStepId} onInspectStep={onInspectStep} />
+      ) : null}
+
+      {singleAnswer ? (
+        <AnswerCard
+          columns={result.columns}
+          row={result.rows[0]}
+          unverifiedValues={unverifiedValues}
+          finding={matchRowToFinding(result.rows[0], findings)}
+          selectedStepId={selectedStepId}
+          onInspectStep={onInspectStep}
+        />
+      ) : hasTable ? (
         <div className="result-section">
           <div className="result-section-head">
             <h3 className="section-label eyebrow">
@@ -216,6 +253,8 @@ export function ResultReport({
         </div>
       ) : null}
 
+      {assumptions.length > 0 ? <Assumptions items={assumptions} /> : null}
+
       {result.sources.length > 0 ? (
         <div className="result-section">
           <h3 className="section-label eyebrow">Verified Sources ({result.sources.length})</h3>
@@ -246,6 +285,18 @@ export function ResultReport({
           </ul>
         </div>
       ) : null}
+      {followUps.length > 0 && onUseFollowUp ? <FollowUps items={followUps} onUse={onUseFollowUp} /> : null}
     </article>
   );
+}
+
+function verdictText(success: boolean, checklistCount: number, flagged: number): string {
+  if (!success) return "Not everything was done — see the checklist and open issues below.";
+  if (flagged > 0) {
+    return `Done, but ${flagged} ${flagged === 1 ? "value" : "values"} couldn't be matched to the page text — marked ⚠ below.`;
+  }
+  if (checklistCount > 0) {
+    return `All ${checklistCount} ${checklistCount === 1 ? "requirement" : "requirements"} met, each with evidence below.`;
+  }
+  return "The agent reports every requested item was found.";
 }

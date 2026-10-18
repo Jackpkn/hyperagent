@@ -127,6 +127,15 @@ export interface SourceLink {
   url: string;
 }
 
+export interface ChecklistItem {
+  requirement: string;
+  met: boolean;
+  evidence: string;
+  /** Step where the evidence was seen (only steps that ran in this run). */
+  step_id?: string;
+  step_n?: number;
+}
+
 export interface RunResult {
   success: boolean;
   summary: string;
@@ -134,6 +143,10 @@ export interface RunResult {
   rows: Record<string, unknown>[];
   sources: SourceLink[];
   issues: string[];
+  /** Optional so results saved in history before these fields existed still load. */
+  checklist?: ChecklistItem[];
+  assumptions?: string[];
+  follow_ups?: string[];
 }
 
 export interface TabInfo {

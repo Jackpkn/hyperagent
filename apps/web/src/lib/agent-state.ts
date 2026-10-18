@@ -271,6 +271,9 @@ function handleServer(state: AgentState, message: ServerMessage): AgentState {
           rows: message.rows,
           sources: message.sources,
           issues: message.issues,
+          checklist: message.checklist ?? [],
+          assumptions: message.assumptions ?? [],
+          follow_ups: message.follow_ups ?? [],
         },
       };
   }

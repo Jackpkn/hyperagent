@@ -34,12 +34,14 @@ interface TimelineProps {
   result?: RunResult | null;
   previousResult?: RunResult | null;
   usage?: Usage | null;
+  fastModel?: string | null;
   finished?: boolean;
   endedWithoutResult?: string | null;
   stepFrames?: Record<string, Frame>;
   selectedStepId?: string | null;
   now: number;
   onSelectStep?: (stepId: string | null) => void;
+  onUseFollowUp?: (text: string) => void;
   onApprove: (stepId: string) => void;
   onReject: (stepId: string, reason: string) => void;
 }
@@ -63,12 +65,14 @@ export function Timeline({
   result = null,
   previousResult = null,
   usage = null,
+  fastModel = null,
   finished = false,
   endedWithoutResult = null,
   stepFrames,
   selectedStepId,
   now,
   onSelectStep,
+  onUseFollowUp,
   onApprove,
   onReject,
 }: TimelineProps) {
@@ -353,11 +357,13 @@ export function Timeline({
                   result={result}
                   previousResult={previousResult}
                   usage={usage}
+                  fastModel={fastModel}
                   findings={findings}
                   goal={goal}
                   steps={steps}
                   selectedStepId={selectedStepId}
                   onInspectStep={onSelectStep}
+                  onUseFollowUp={onUseFollowUp}
                 />
               </section>
             ) : finished && endedWithoutResult ? (

@@ -358,6 +358,12 @@ class MockRun {
       rows,
       sources: [{ title: "Travel | Books to Scrape", url: FRAMES[1].url }],
       issues: success ? ["Only page 1 of the category was checked. More books may exist on later pages."] : ["Run stopped before the second page was checked."],
+      checklist: [
+        { requirement: "Open the Travel category", met: true, evidence: "Travel listing loaded", step_id: "s2", step_n: 2 },
+        { requirement: "Collect title, price, rating and availability", met: success, evidence: success ? "Saved from the listing cards" : "Stopped before every book was saved", step_id: "s3", step_n: 3 },
+      ],
+      assumptions: ["Prices are as listed on the site, in GBP."],
+      follow_ups: success ? ["Check page 2 of the Travel category", "Compare these with the Mystery category"] : [],
     });
     this.finish(success ? "done" : "stopped", success ? "Report written" : "Stopped at your request");
   }

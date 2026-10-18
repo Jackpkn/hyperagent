@@ -15,6 +15,14 @@ export function resultToCsv(result: RunResult): string {
 
 export function resultToMarkdown(result: RunResult): string {
   const parts: string[] = [result.summary.trim()];
+  if (result.checklist && result.checklist.length > 0) {
+    parts.push(
+      "### Checklist\n" +
+        result.checklist
+          .map((c) => `- [${c.met ? "x" : " "}] ${c.requirement}${c.evidence ? ` — ${c.evidence}` : ""}`)
+          .join("\n"),
+    );
+  }
   if (result.columns.length > 0 && result.rows.length > 0) {
     const escape = (value: string) => value.replace(/\|/g, "\\|").replace(/\n/g, " ");
     const head = `| ${result.columns.map(escape).join(" | ")} |`;
@@ -31,6 +39,9 @@ export function resultToMarkdown(result: RunResult): string {
   }
   if (result.issues.length > 0) {
     parts.push("### Open issues\n" + result.issues.map((issue) => `- ${issue}`).join("\n"));
+  }
+  if (result.assumptions && result.assumptions.length > 0) {
+    parts.push("### Assumptions\n" + result.assumptions.map((a) => `- ${a}`).join("\n"));
   }
   return parts.join("\n\n");
 }
