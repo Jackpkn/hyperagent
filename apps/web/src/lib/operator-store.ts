@@ -1,9 +1,5 @@
-import type { Finding, RunResult, RunState } from "./protocol";
-
 const PROFILE_STORAGE_KEY = "hyperagent.profile.v1";
-const HISTORY_STORAGE_KEY = "hyperagent.history.v1";
 const PERSIST_SESSION_KEY = "hyperagent.persist_session.v1";
-const MAX_HISTORY_ITEMS = 20;
 
 export interface OperatorProfile {
   enabled: boolean;
@@ -25,17 +21,6 @@ export const defaultOperatorProfile: OperatorProfile = {
   notes: "",
 };
 
-export interface RunHistoryEntry {
-  id: string;
-  goal: string;
-  createdAt: number;
-  status: RunState;
-  stepsCount: number;
-  elapsedS: number;
-  costUsd: number;
-  findings: Finding[];
-  result: RunResult | null;
-}
 
 export function loadOperatorProfile(): OperatorProfile {
   if (typeof window === "undefined") return defaultOperatorProfile;
@@ -105,53 +90,4 @@ export function savePersistSession(persist: boolean): void {
   } catch {
     // Ignore storage errors
   }
-}
-
-export function loadRunHistory(): RunHistoryEntry[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = window.localStorage.getItem(HISTORY_STORAGE_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as RunHistoryEntry[]) : [];
-  } catch {
-    return [];
-  }
-}
-
-export function upsertRunHistory(entry: RunHistoryEntry): RunHistoryEntry[] {
-  const existing = loadRunHistory();
-  const filtered = existing.filter((item) => item.id !== entry.id);
-  const next = [entry, ...filtered].slice(0, MAX_HISTORY_ITEMS);
-  if (typeof window !== "undefined") {
-    try {
-      window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      // Ignore storage errors
-    }
-  }
-  return next;
-}
-
-export function deleteRunHistoryItem(id: string): RunHistoryEntry[] {
-  const next = loadRunHistory().filter((item) => item.id !== id);
-  if (typeof window !== "undefined") {
-    try {
-      window.localStorage.setItem(HISTORY_STORAGE_KEY, JSON.stringify(next));
-    } catch {
-      // Ignore storage errors
-    }
-  }
-  return next;
-}
-
-export function clearRunHistory(): RunHistoryEntry[] {
-  if (typeof window !== "undefined") {
-    try {
-      window.localStorage.removeItem(HISTORY_STORAGE_KEY);
-    } catch {
-      // Ignore storage errors
-    }
-  }
-  return [];
 }

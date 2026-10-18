@@ -84,16 +84,6 @@ export type AgentAction =
       at: number;
       continueSession?: boolean;
     }
-  | {
-      type: "load_history";
-      goal: string;
-      status: RunState;
-      stepsCount: number;
-      elapsedS: number;
-      costUsd: number;
-      findings: Finding[];
-      result: RunResult | null;
-    }
   | { type: "guidance_sent"; text: string }
   | { type: "local_notice"; level: NoticeLevel; message: string }
   | { type: "mode_changed"; mode: ApprovalMode }
@@ -276,6 +266,7 @@ function handleServer(state: AgentState, message: ServerMessage): AgentState {
           checklist: message.checklist ?? [],
           assumptions: message.assumptions ?? [],
           follow_ups: message.follow_ups ?? [],
+          remember: message.remember ?? [],
         },
       };
   }
@@ -312,32 +303,6 @@ export function agentReducer(state: AgentState, action: AgentAction): AgentState
         findings: action.continueSession ? state.findings : [],
         usage: null,
         result: null,
-      };
-    case "load_history":
-      return {
-        ...state,
-        active: true,
-        goal: action.goal,
-        startUrl: "",
-        runStartedAt: null,
-        run: action.status,
-        stepNumber: action.stepsCount,
-        detail: "Loaded from run history",
-        plan: [],
-        steps: [],
-        feed: [],
-        approvals: {},
-        questions: {},
-        stepFrames: {},
-        findings: action.findings,
-        usage: {
-          llm_calls: action.stepsCount,
-          input_tokens: 0,
-          output_tokens: 0,
-          cost_usd: action.costUsd,
-          elapsed_s: action.elapsedS,
-        },
-        result: action.result,
       };
     case "guidance_sent":
       // Answering a question clears it; the server confirms via notices.

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import type { ApprovalMode, ClientMessage } from "./protocol";
+import type { ApprovalMode, ClientMessage, ConversationTurn } from "./protocol";
 import { parseServerMessage } from "./protocol";
 import { agentReducer, initialAgentState } from "./agent-state";
 import type { AgentState } from "./agent-state";
@@ -9,8 +9,6 @@ import { getWsUrl } from "./ws-url";
 
 const BASE_DELAY_MS = 800;
 const MAX_DELAY_MS = 8000;
-
-import type { RunHistoryEntry } from "./operator-store";
 
 export interface StartOptions {
   goal: string;
@@ -20,6 +18,10 @@ export interface StartOptions {
   continueSession?: boolean;
   persistSession?: boolean;
   operatorContext?: string;
+  /** Earlier turns of the open chat, condensed, so follow-ups can refer to them. */
+  conversation?: ConversationTurn[];
+  /** Long-term memory items applied to every run. */
+  userMemory?: string[];
 }
 
 export interface AgentApi {
@@ -30,7 +32,6 @@ export interface AgentApi {
   changeMode: (mode: ApprovalMode) => boolean;
   reconnectNow: () => void;
   reset: () => void;
-  loadHistoryEntry: (entry: RunHistoryEntry) => void;
   notify: (level: "info" | "warn" | "error", message: string) => void;
 }
 
@@ -128,6 +129,8 @@ export function useAgent(): AgentApi {
         ...(options.continueSession ? { continue_session: true } : {}),
         ...(options.persistSession ? { persist_session: true } : {}),
         ...(operatorContext ? { operator_context: operatorContext } : {}),
+        ...(options.conversation?.length ? { conversation: options.conversation } : {}),
+        ...(options.userMemory?.length ? { user_memory: options.userMemory } : {}),
         timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       };
       const sent = send(payload);
@@ -178,22 +181,9 @@ export function useAgent(): AgentApi {
 
   const reset = useCallback(() => dispatch({ type: "reset" }), []);
 
-  const loadHistoryEntry = useCallback((entry: RunHistoryEntry) => {
-    dispatch({
-      type: "load_history",
-      goal: entry.goal,
-      status: entry.status,
-      stepsCount: entry.stepsCount,
-      elapsedS: entry.elapsedS,
-      costUsd: entry.costUsd,
-      findings: entry.findings,
-      result: entry.result,
-    });
-  }, []);
-
   const notify = useCallback((level: "info" | "warn" | "error", message: string) => {
     dispatch({ type: "local_notice", level, message });
   }, []);
 
-  return { state, startRun, send, guide, changeMode, reconnectNow, reset, loadHistoryEntry, notify };
+  return { state, startRun, send, guide, changeMode, reconnectNow, reset, notify };
 }

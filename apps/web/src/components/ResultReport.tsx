@@ -3,6 +3,7 @@
 import { useState } from "react";
 import {
   AlertTriangle,
+  Brain,
   Check,
   CheckCircle2,
   Copy,
@@ -80,6 +81,7 @@ export function ResultReport({
   const checklist = result.checklist ?? [];
   const assumptions = result.assumptions ?? [];
   const followUps = result.follow_ups ?? [];
+  const remembered = result.remember ?? [];
   const singleAnswer = hasTable && result.rows.length === 1 && result.columns.length <= 8;
   const verdictSub = verdictText(result.success, checklist.length, flaggedInResult);
 
@@ -262,6 +264,20 @@ export function ResultReport({
       ) : null}
 
       {assumptions.length > 0 ? <Assumptions items={assumptions} /> : null}
+
+      {remembered.length > 0 ? (
+        <div className="result-section">
+          <h3 className="section-label eyebrow">Saved to memory</h3>
+          <ul className="issues assumptions">
+            {remembered.map((item) => (
+              <li key={item}>
+                <Brain size={12} aria-hidden="true" /> {item}
+              </li>
+            ))}
+          </ul>
+          <p className="memory-hint">Applied in your future chats. Edit or remove it under Memory.</p>
+        </div>
+      ) : null}
 
       {result.sources.length > 0 ? (
         <div className="result-section">

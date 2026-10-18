@@ -8,7 +8,8 @@ import {
   Bot,
   Compass,
   Globe,
-  History,
+  Brain,
+  MessagesSquare,
   ShieldAlert,
   ShieldCheck,
   Sparkles,
@@ -27,10 +28,12 @@ interface LauncherProps {
   hasSavedSession?: boolean;
   hasProfileData: boolean;
   historyCount: number;
+  memoryCount: number;
   onTogglePersistSession: () => void;
   onClearSavedSession: () => void;
   onOpenProfile: () => void;
   onOpenHistory: () => void;
+  onOpenMemory: () => void;
   onStart: (options: StartOptions) => boolean;
 }
 
@@ -95,10 +98,12 @@ export function Launcher({
   hasSavedSession,
   hasProfileData,
   historyCount,
+  memoryCount,
   onTogglePersistSession,
   onClearSavedSession,
   onOpenProfile,
   onOpenHistory,
+  onOpenMemory,
   onStart,
 }: LauncherProps) {
   const [goal, setGoal] = useState("");
@@ -242,15 +247,25 @@ export function Launcher({
                 <span>{hasProfileData ? "Profile active" : "Autofill profile"}</span>
               </button>
 
+              <button
+                type="button"
+                className={`composer-pill composer-btn-pill${memoryCount > 0 ? " is-active" : ""}`}
+                onClick={onOpenMemory}
+                title="What the agent remembers about you across chats"
+              >
+                <Brain size={13} aria-hidden="true" />
+                <span>{memoryCount > 0 ? `Memory (${memoryCount})` : "Memory"}</span>
+              </button>
+
               {historyCount > 0 ? (
                 <button
                   type="button"
                   className="composer-pill composer-btn-pill"
                   onClick={onOpenHistory}
-                  title="View past runs and reports"
+                  title="Your saved chats in this browser"
                 >
-                  <History size={13} aria-hidden="true" />
-                  <span>History ({historyCount})</span>
+                  <MessagesSquare size={13} aria-hidden="true" />
+                  <span>Chats ({historyCount})</span>
                 </button>
               ) : null}
             </div>

@@ -12,30 +12,30 @@ import {
   Sparkles,
   WifiOff,
 } from "lucide-react";
-import { useAgent } from "@/lib/use-agent";
+import { useAgent, type StartOptions } from "@/lib/use-agent";
+import { useChats } from "@/lib/use-chats";
+import { useStoredFrames } from "@/lib/use-stored-frames";
+import { parseFrameKey } from "@/lib/chat-model";
 import { currentStep, isRunFinished } from "@/lib/agent-state";
 import type { AgentState } from "@/lib/agent-state";
 import type { RunState } from "@/lib/protocol";
 import { useNow } from "@/lib/use-now";
 import {
-  clearRunHistory,
-   defaultOperatorProfile,
-  deleteRunHistoryItem,
+  defaultOperatorProfile,
   formatOperatorContext,
   hasOperatorProfileData,
   loadOperatorProfile,
   loadPersistSession,
-  loadRunHistory,
   saveOperatorProfile,
   savePersistSession,
-  upsertRunHistory,
   type OperatorProfile,
-  type RunHistoryEntry,
 } from "@/lib/operator-store";
 import { BrowserView, type BrowserTarget } from "./BrowserView";
 import { ControlBar, GuidanceComposer } from "./ControlBar";
 import { Launcher } from "./Launcher";
-import { HistoryModal, ProfileModal } from "./OperatorModals";
+import { ProfileModal } from "./OperatorModals";
+import { ChatsModal, MemoryModal } from "./ChatModals";
+import { PastTurns } from "./PastTurns";
 import { ResultsPanel } from "./ResultsPanel";
 import { Timeline } from "./Timeline";
 
@@ -72,8 +72,11 @@ export function AgentApp() {
   const agent = useAgent();
   const { state, send } = agent;
   const connected = state.connection === "open";
-  const finished = isRunFinished(state.run);
-  const showRun = state.active || state.run !== "idle";
+  const chats = useChats(state);
+  const showRun = state.active || state.run !== "idle" || chats.pastTurns.length > 0;
+  // A chat reopened (or restored after a reload) has no live run: treat it like a finished one.
+  const idleChat = showRun && state.run === "idle";
+  const finished = isRunFinished(state.run) || idleChat;
   const now = useNow(showRun && !finished);
 
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("steps");
@@ -86,17 +89,16 @@ export function AgentApp() {
   const [pinMode, setPinMode] = useState(false);
   const [pinnedPoint, setPinnedPoint] = useState<{ x: number; y: number } | null>(null);
   const [profile, setProfile] = useState<OperatorProfile>(defaultOperatorProfile);
-  const [history, setHistory] = useState<RunHistoryEntry[]>([]);
   const [persistSession, setPersistSession] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
+  const [showChatsModal, setShowChatsModal] = useState(false);
+  const [showMemoryModal, setShowMemoryModal] = useState(false);
 
   const lastApprovalStepRef = useRef<string | null>(null);
-  const savedRunAtRef = useRef<number | null>(null);
+  const rememberedRunRef = useRef<number | null>(null);
 
   useEffect(() => {
     setProfile(loadOperatorProfile());
-    setHistory(loadRunHistory());
     setPersistSession(loadPersistSession());
     try {
       const savedWidth = Number(window.localStorage.getItem("hyperagent.sidebarWidth.v1"));
@@ -146,7 +148,8 @@ export function AgentApp() {
   const approvalCount = Object.keys(state.approvals).length;
   const question = Object.values(state.questions)[0] ?? null;
   const elapsedS = state.runStartedAt ? Math.max(0, now - state.runStartedAt) : 0;
-  const endedWithoutResult = finished && !state.result ? endedMessage(state) : null;
+  // Only a run that actually ended can end "without a report"; a reopened chat has no live run at all.
+  const endedWithoutResult = isRunFinished(state.run) && !state.result ? endedMessage(state) : null;
 
   // Keep the operator in the unified Live Stream by default; reset state when starting a new run.
   useEffect(() => {
@@ -160,24 +163,13 @@ export function AgentApp() {
     }
   }, [showRun]);
 
-  // Persist completed runs to local history automatically.
+  // Lasting preferences the agent proposed (already grounded server-side) go into long-term memory once.
   useEffect(() => {
-    if (!finished || !state.goal || !state.runStartedAt) return;
-    if (savedRunAtRef.current === state.runStartedAt && !state.result) return;
-    savedRunAtRef.current = state.runStartedAt;
-    const entry: RunHistoryEntry = {
-      id: `run-${Math.round(state.runStartedAt * 1000)}`,
-      goal: state.goal,
-      createdAt: Math.round(state.runStartedAt * 1000),
-      status: state.run,
-      stepsCount: state.stepNumber || state.steps.length,
-      elapsedS: state.usage?.elapsed_s ?? elapsedS,
-      costUsd: state.usage?.cost_usd ?? 0,
-      findings: state.findings,
-      result: state.result,
-    };
-    setHistory(upsertRunHistory(entry));
-  }, [finished, state.goal, state.runStartedAt, state.run, state.stepNumber, state.steps.length, state.usage, elapsedS, state.findings, state.result]);
+    const items = state.result?.remember ?? [];
+    if (!items.length || !state.runStartedAt || rememberedRunRef.current === state.runStartedAt) return;
+    rememberedRunRef.current = state.runStartedAt;
+    chats.rememberFromResult(items);
+  }, [state.result, state.runStartedAt, chats]);
 
   // If a new approval arrives while the operator is on another tab, bring them to Live Stream.
   useEffect(() => {
@@ -212,10 +204,18 @@ export function AgentApp() {
   };
 
   // Visual Time-Travel Scrubber: if a step with a snapshot is selected, show its frame and target.
-  const selectedStep = selectedStepId
-    ? state.steps.find((s) => s.id === selectedStepId) ?? null
-    : null;
-  const selectedStepFrame = selectedStep ? state.stepFrames[selectedStep.id] ?? null : null;
+  const pastSelected = Boolean(selectedStepId && parseFrameKey(selectedStepId));
+  const stored = useStoredFrames(chats, pastSelected ? selectedStepId : null, idleChat);
+  const selectedStep = pastSelected
+    ? stored.pastStep
+    : selectedStepId
+      ? state.steps.find((s) => s.id === selectedStepId) ?? null
+      : null;
+  const selectedStepFrame = pastSelected
+    ? stored.pastFrame
+    : selectedStep
+      ? state.stepFrames[selectedStep.id] ?? null
+      : null;
 
   // Find the best step to highlight on the live browser:
   // 1) Any unsettled step (planned, awaiting_approval, running) with a target rect (newest first, so Jev child steps win over parent delegate).
@@ -254,11 +254,34 @@ export function AgentApp() {
         }
       : null;
 
-  const currentRunId = state.runStartedAt ? `run-${Math.round(state.runStartedAt * 1000)}` : "";
   const previousResult =
-    history.find(
-      (h) => h.id !== currentRunId && h.result && h.result.rows && h.result.rows.length > 0,
-    )?.result ?? null;
+    [...chats.pastTurns].reverse().find((t) => (t.result?.rows.length ?? 0) > 0)?.result ?? null;
+
+  // Every run carries the open chat's earlier turns and long-term memory.
+  const start = (options: StartOptions): boolean => {
+    setActiveTab("steps");
+    setSelectedStepId(null);
+    return agent.startRun({
+      ...options,
+      persistSession,
+      operatorContext,
+      conversation: chats.conversation(),
+      userMemory: chats.memories,
+    });
+  };
+
+  const openNewChat = () => {
+    if (!finished) agent.send({ type: "stop" });
+    agent.reset();
+    chats.newChat();
+  };
+
+  const openChat = (id: string) => {
+    if (!finished) agent.send({ type: "stop" });
+    agent.reset();
+    setSelectedStepId(null);
+    chats.openChat(id);
+  };
 
   const statusText = (() => {
     if (state.run === "awaiting_approval" || currentApproval)
@@ -322,14 +345,16 @@ export function AgentApp() {
             connection={state.connection}
             reconnectAttempt={state.reconnectAttempt}
             hasProfileData={hasProfile}
-            historyCount={history.length}
+            historyCount={chats.chats.length}
+            memoryCount={chats.memories.length}
             onPause={() => agent.send({ type: "pause" })}
             onResume={() => agent.send({ type: "resume" })}
             onStop={() => agent.send({ type: "stop" })}
             onModeChange={(mode) => agent.changeMode(mode)}
-            onNewTask={agent.reset}
+            onNewTask={openNewChat}
             onOpenProfile={() => setShowProfileModal(true)}
-            onOpenHistory={() => setShowHistoryModal(true)}
+            onOpenHistory={() => setShowChatsModal(true)}
+            onOpenMemory={() => setShowMemoryModal(true)}
           />
 
           <div
@@ -391,6 +416,16 @@ export function AgentApp() {
 
               <Tabs.Content value="steps" className="sidebar-tab-content">
                 <Timeline
+                  past={
+                    <PastTurns
+                      turns={chats.pastTurns}
+                      showDivider={Boolean(state.goal)}
+                      selectedKey={pastSelected ? selectedStepId : null}
+                      onSelectKey={setSelectedStepId}
+                      onUseFollowUp={prefillFollowUp}
+                    />
+                  }
+                  hasPast={chats.pastTurns.length > 0}
                   goal={state.goal}
                   runState={state.run}
                   runDetail={state.detail}
@@ -457,32 +492,18 @@ export function AgentApp() {
                   setPinMode(false);
                 }}
                 onGuide={agent.guide}
-                onContinueOnPage={(followUpGoal) => {
-                  setActiveTab("steps");
-                  setSelectedStepId(null);
-                  return agent.startRun({
+                onContinueOnPage={(followUpGoal) =>
+                  start({
                     goal: followUpGoal,
                     startUrl: "",
                     mode: state.mode,
                     model: state.session?.model ?? "",
                     continueSession: true,
-                    persistSession,
-                    operatorContext,
-                  });
-                }}
-                onStartNewTask={(newGoal) => {
-                  setActiveTab("steps");
-                  setSelectedStepId(null);
-                  return agent.startRun({
-                    goal: newGoal,
-                    startUrl: "",
-                    mode: state.mode,
-                    model: state.session?.model ?? "",
-                    continueSession: false,
-                    persistSession,
-                    operatorContext,
-                  });
-                }}
+                  })
+                }
+                onStartNewTask={(newGoal) =>
+                  start({ goal: newGoal, startUrl: "", mode: state.mode, model: state.session?.model ?? "" })
+                }
               />
             </Tabs.Root>
 
@@ -498,9 +519,13 @@ export function AgentApp() {
 
             <div className="run-stage">
               <BrowserView
-                frame={selectedStepFrame ?? state.frame}
+                frame={selectedStepFrame ?? state.frame ?? stored.restoredFrame}
                 target={target}
-                statusText={statusText}
+                statusText={
+                  !state.frame && stored.restoredFrame && !selectedStepFrame
+                    ? "Saved view · your next message opens a fresh browser"
+                    : statusText
+                }
                 paused={state.run === "paused"}
                 takeoverEnabled={
                   state.run === "paused" ||
@@ -556,18 +581,14 @@ export function AgentApp() {
             persistSession={persistSession}
             hasSavedSession={state.session?.has_saved_session}
             hasProfileData={hasProfile}
-            historyCount={history.length}
+            historyCount={chats.chats.length}
+            memoryCount={chats.memories.length}
             onTogglePersistSession={togglePersistSession}
             onClearSavedSession={() => agent.send({ type: "clear_session" })}
             onOpenProfile={() => setShowProfileModal(true)}
-            onOpenHistory={() => setShowHistoryModal(true)}
-            onStart={(opts) =>
-              agent.startRun({
-                ...opts,
-                persistSession,
-                operatorContext,
-              })
-            }
+            onOpenHistory={() => setShowChatsModal(true)}
+            onOpenMemory={() => setShowMemoryModal(true)}
+            onStart={start}
           />
         </main>
       )}
@@ -583,26 +604,23 @@ export function AgentApp() {
         />
       ) : null}
 
-      {showHistoryModal ? (
-        <HistoryModal
-          entries={history}
-          onView={(entry) => {
-            agent.loadHistoryEntry(entry);
-            setActiveTab("result");
-          }}
-          onRerun={(rerunGoal) =>
-            agent.startRun({
-              goal: rerunGoal,
-              startUrl: "",
-              mode: state.mode,
-              model: state.session?.model ?? "",
-              persistSession,
-              operatorContext,
-            })
-          }
-          onDelete={(id) => setHistory(deleteRunHistoryItem(id))}
-          onClearAll={() => setHistory(clearRunHistory())}
-          onClose={() => setShowHistoryModal(false)}
+      {showChatsModal ? (
+        <ChatsModal
+          chats={chats.chats}
+          activeId={chats.activeChat?.id ?? null}
+          persistent={chats.persistent}
+          onOpen={openChat}
+          onNew={openNewChat}
+          onDelete={chats.removeChat}
+          onClose={() => setShowChatsModal(false)}
+        />
+      ) : null}
+
+      {showMemoryModal ? (
+        <MemoryModal
+          memories={chats.memories}
+          onChange={chats.setMemories}
+          onClose={() => setShowMemoryModal(false)}
         />
       ) : null}
     </div>

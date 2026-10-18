@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as Collapsible from "@radix-ui/react-collapsible";
 import {
   AlertTriangle,
@@ -23,6 +23,9 @@ import { StepCard } from "./StepCard";
 const NEAR_BOTTOM_PX = 100;
 
 interface TimelineProps {
+  /** Earlier turns of the open chat, rendered above the live run. */
+  past?: ReactNode;
+  hasPast?: boolean;
   goal?: string;
   runState?: string;
   runDetail?: string;
@@ -54,6 +57,8 @@ const PLAN_MARK: Record<PlanItem["status"], string> = {
 };
 
 export function Timeline({
+  past = null,
+  hasPast = false,
   goal = "",
   runState = "",
   runDetail = "",
@@ -110,7 +115,7 @@ export function Timeline({
     if (element && stickToBottom.current) {
       element.scrollTop = element.scrollHeight;
     }
-  }, [feed.length, steps, approvals, findings.length, result]);
+  }, [feed.length, steps, approvals, findings.length, result, hasPast]);
 
   const onScroll = () => {
     const element = scrollRef.current;
@@ -235,7 +240,7 @@ export function Timeline({
         }}
         onTouchStart={releaseStick}
       >
-        {!goal && feed.length === 0 && !result && findings.length === 0 ? (
+        {!goal && !hasPast && feed.length === 0 && !result && findings.length === 0 ? (
           <div className="empty-state">
             <Circle size={20} className="empty-icon" aria-hidden="true" />
             <p className="empty-title">Starting run</p>
@@ -243,6 +248,7 @@ export function Timeline({
           </div>
         ) : (
           <div className="stream-stack">
+            {past}
             {goal ? (
               <div className="feed-row feed-guidance">
                 <div className="guidance-bubble is-goal">

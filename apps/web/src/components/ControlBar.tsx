@@ -10,7 +10,8 @@ import {
   Clock,
   Coins,
   HelpCircle,
-  History,
+  Brain,
+  MessagesSquare,
   Pause,
   Play,
   Plus,
@@ -41,6 +42,7 @@ interface ControlBarProps {
   reconnectAttempt: number;
   hasProfileData?: boolean;
   historyCount?: number;
+  memoryCount?: number;
   onPause: () => void;
   onResume: () => void;
   onStop: () => void;
@@ -48,6 +50,7 @@ interface ControlBarProps {
   onNewTask: () => void;
   onOpenProfile?: () => void;
   onOpenHistory?: () => void;
+  onOpenMemory?: () => void;
 }
 
 const STATE_TEXT: Record<RunState, string> = {
@@ -107,6 +110,7 @@ export function ControlBar(props: ControlBarProps) {
     reconnectAttempt,
     hasProfileData,
     historyCount = 0,
+    memoryCount = 0,
     onPause,
     onResume,
     onStop,
@@ -114,6 +118,7 @@ export function ControlBar(props: ControlBarProps) {
     onNewTask,
     onOpenProfile,
     onOpenHistory,
+    onOpenMemory,
   } = props;
   const [confirmStop, setConfirmStop] = useState(false);
   const [goalExpanded, setGoalExpanded] = useState(false);
@@ -252,15 +257,27 @@ export function ControlBar(props: ControlBarProps) {
               </button>
             ) : null}
 
+            {onOpenMemory ? (
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={onOpenMemory}
+                title="What the agent remembers about you across chats"
+              >
+                <Brain size={13} aria-hidden="true" />
+                <span>{memoryCount > 0 ? `Memory (${memoryCount})` : "Memory"}</span>
+              </button>
+            ) : null}
+
             {onOpenHistory ? (
               <button
                 type="button"
                 className="btn btn-sm"
                 onClick={onOpenHistory}
-                title="Recent runs and saved reports"
+                title="Your saved chats in this browser"
               >
-                <History size={13} aria-hidden="true" />
-                <span>{historyCount > 0 ? `History (${historyCount})` : "History"}</span>
+                <MessagesSquare size={13} aria-hidden="true" />
+                <span>{historyCount > 0 ? `Chats (${historyCount})` : "Chats"}</span>
               </button>
             ) : null}
 
@@ -268,7 +285,7 @@ export function ControlBar(props: ControlBarProps) {
               {finished ? (
                 <button type="button" className="btn btn-primary btn-sm" onClick={onNewTask}>
                   <Plus size={14} aria-hidden="true" />
-                  New task
+                  New chat
                 </button>
               ) : (
                 <>
@@ -456,8 +473,8 @@ export function GuidanceComposer({
                 ? "Type your answer and press Enter…"
                 : finished
                   ? hasLiveBrowser
-                    ? "Follow up on this page, or start a new task…"
-                    : "Start a new task in a fresh browser…"
+                    ? "Ask a follow-up on this page, or in a fresh browser…"
+                    : "Ask a follow-up or a new question…"
                   : "Guide the agent or add instructions…"
           }
           autoComplete="off"
@@ -495,10 +512,10 @@ export function GuidanceComposer({
             type="submit"
             className="guide-submit"
             disabled={draft.trim().length === 0}
-            title={question ? "Send answer" : finished ? "Start new task" : "Send guidance"}
+            title={question ? "Send answer" : finished ? "Ask in this chat (opens a fresh browser)" : "Send guidance"}
           >
-            {finished && !question ? <Plus size={14} aria-hidden="true" /> : <Send size={14} aria-hidden="true" />}
-            <span>{question ? "Answer" : finished ? "New task" : "Send"}</span>
+            <Send size={14} aria-hidden="true" />
+            <span>{question ? "Answer" : "Send"}</span>
           </button>
         )}
       </form>

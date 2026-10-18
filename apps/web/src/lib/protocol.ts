@@ -153,6 +153,15 @@ export interface RunResult {
   checklist?: ChecklistItem[];
   assumptions?: string[];
   follow_ups?: string[];
+  /** Lasting facts the operator stated, proposed for long-term memory (grounded in their own words). */
+  remember?: string[];
+}
+
+export interface ConversationTurn {
+  goal: string;
+  answer: string;
+  columns?: string[];
+  rows?: Record<string, string>[];
 }
 
 export interface TabInfo {
@@ -215,6 +224,10 @@ export type ClientMessage =
       timezone?: string;
       continue_session?: boolean;
       persist_session?: boolean;
+      /** Earlier turns of this chat, so follow-ups can refer to them. */
+      conversation?: ConversationTurn[];
+      /** Facts the operator asked to be remembered across chats. */
+      user_memory?: string[];
       operator_context?: string;
     }
   | { type: "pause" }

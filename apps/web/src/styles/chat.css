@@ -1,0 +1,93 @@
+/* Chats: earlier turns in the stream, the chat list and the long-term memory panel. */
+
+.past-turns {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.past-turn {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.past-turn-toggle {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border: 1px solid var(--hairline);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.past-turn-toggle:hover {
+  color: var(--ink);
+  border-color: var(--hairline-strong);
+}
+
+.past-turn-toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+.past-turns-divider {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.past-turns-divider::before,
+.past-turns-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--hairline);
+}
+
+.history-item[data-active="true"] {
+  border-color: color-mix(in srgb, var(--signal) 45%, var(--hairline));
+}
+
+.memory-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.memory-item,
+.memory-add {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.memory-item .input,
+.memory-add .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.memory-add {
+  margin-top: 12px;
+}
+
+.memory-empty,
+.memory-hint {
+  margin: 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
