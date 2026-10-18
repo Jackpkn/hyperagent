@@ -17,6 +17,7 @@ from playwright.async_api import Error as PlaywrightError
 
 from .anthropic_backend import _recover_xml_params
 from .browser import ActionError, BrowserSession, Observation
+from .control_state import satisfied_action
 from .extract import ExtractMixin, normalize_url, resolve_urls
 from .fast import FastPolicy
 from .llm import Decision, LLMClient, LLMError
@@ -79,12 +80,15 @@ class Agent(FastLoopMixin, ExtractMixin):
         self.memory = ""
         self._observed_corpus = ""
         self._learned_domain_rules: dict[str, list[str]] = {}
+        self._fast_recovery = False
+        self._failed_controls: dict[str, int] = {}
 
     # ---------- operator controls (called from the socket handler) ----------
 
     async def pause(self) -> None:
         if not self.paused and not self.stopped:
             self.paused = True
+            self.guidance_version += 1  # resuming must not revive a decision made before the pause
             await self.notice("info", "Pausing. I'll finish the current action, then wait for you.")
             if self.state in ("thinking", "running", "acting", "awaiting_approval", "awaiting_user", "starting"):
                 return
@@ -94,6 +98,7 @@ class Agent(FastLoopMixin, ExtractMixin):
         if self.paused:
             self.paused = False
             self._consecutive_errors = 0
+            self._failed_controls.clear()  # an explicit resume starts a new attempt budget
             self._wake.set()
             await self.notice("info", "Resuming.")
 
@@ -299,6 +304,7 @@ class Agent(FastLoopMixin, ExtractMixin):
         self.usage["cost_usd"] += d.cost_usd
 
     async def _handle(self, step: dict[str, Any], d: Decision, page: Observation) -> None:
+        version = self.guidance_version
         await self.send_usage()
         args = _recover_xml_params(d.args)
         if d.name not in TOOL_NAMES:
@@ -318,6 +324,7 @@ class Agent(FastLoopMixin, ExtractMixin):
         await self._advance_plan(args.get("plan_step"))
         target_label = ""
         secret = False
+        element = None
         if "element_id" in args:
             try:
                 element = page.element(int(args["element_id"]))
@@ -331,6 +338,32 @@ class Agent(FastLoopMixin, ExtractMixin):
                 return
         shown = {**args, "text": "••••••••"} if secret else args
         step.update(thought=_thought(args, d.thinking), action=_action(d.name, shown, target_label), status="planned")
+        if element:
+            if "desired_state" in args and type(args["desired_state"]) is not bool:
+                await self._fail_step(step, "desired_state must be true or false; nothing was executed.")
+                return
+            satisfied = satisfied_action(d.name, args, element)
+            if satisfied:
+                await self._skip_satisfied(step, satisfied)
+                return
+        if self.fast and d.name in ("click", "type_text", "select_option") and not secret:
+            if self._fast_recovery:
+                self._fast_recovery = False
+                await self.notice("info", "Jev handed control back; the planner is making one recovery action.")
+            else:
+                intent = {"action": d.name, "target": target_label,
+                          **{k: args[k] for k in ("text", "option", "press_enter", "desired_state") if k in args}}
+                subgoal = ("Perform only this requested UI action if it is still needed: "
+                           + json.dumps(intent, ensure_ascii=False)
+                           + ". If the requested outcome already holds, choose SUBGOAL_DONE. "
+                             "Use the fresh observation's IDs. Do not make unrelated changes.")
+                risky, _ = needs_approval(d.name, args, target_label, self.approval_mode)
+                routed = {"subgoal": subgoal, "max_actions": 1,
+                          "irreversible": bool(args.get("irreversible")) or risky}
+                step["action"] = _action("delegate", routed, "")
+                step.pop("target", None)
+                await self._execute(step, "delegate", routed, decision_version=version)
+                return
         risky, reason = needs_approval(d.name, args, target_label, self.approval_mode)
         if secret:
             # Credentials are always the operator's call, whatever the approval mode; the value is never displayed.
@@ -344,7 +377,12 @@ class Agent(FastLoopMixin, ExtractMixin):
             step.update(status="skipped", result="Stopped before acting.", ended_at=time.time())
             await self.send_step(step)
             raise Stopped()
-        await self._execute(step, d.name, args)
+        await self._execute(step, d.name, args, decision_version=version)
+
+    async def _skip_satisfied(self, step: dict[str, Any], reason: str) -> None:
+        step.update(status="skipped", result=reason, ended_at=time.time())
+        await self.send_step(step)
+        self.history.append({"n": step["n"], "label": step["action"]["label"], "result": reason})
 
     async def _approve(self, step: dict[str, Any], reason: str) -> bool:
         fut: asyncio.Future = asyncio.get_running_loop().create_future()
@@ -377,14 +415,47 @@ class Agent(FastLoopMixin, ExtractMixin):
             return False
         return True
 
-    async def _execute(self, step: dict[str, Any], name: str, args: dict[str, Any]) -> None:
+    async def _execute(self, step: dict[str, Any], name: str, args: dict[str, Any],
+                       *, decision_version: int | None = None) -> None:
         step["status"] = "running"
         await self.send_step(step)
         await self.set_state("acting", step["action"]["label"])
         if step.get("target") and getattr(self.browser, "on_frame", None) is not None:
             await asyncio.sleep(0.22)
         try:
+            prepared = None
+            if name in ("click", "type_text", "select_option") and hasattr(self.browser, "element_state"):
+                current = await self.browser.element_state(int(args["element_id"]))
+                if current.get("disabled"):
+                    raise ActionError("[disabled] The control is now disabled; nothing was executed. "
+                                      "Check its prerequisite in a fresh observation before trying again.")
+                satisfied = satisfied_action(name, args, current)
+                if satisfied:
+                    await self._skip_satisfied(step, satisfied)
+                    return
+            if name in ("click", "type_text", "select_option") and hasattr(self.browser, "prepare_action"):
+                prepared = await self.browser.prepare_action(name, args)
+                if hasattr(self.browser, "check_prepared"):
+                    await self.browser.check_prepared(prepared)
+                if hasattr(self.browser, "element_state"):
+                    current = await self.browser.element_state(int(args["element_id"]))
+                    satisfied = satisfied_action(name, args, current)
+                    if satisfied:
+                        await self._skip_satisfied(step, satisfied)
+                        return
+            if self.stopped or self.paused or (decision_version is not None
+                                               and decision_version != self.guidance_version):
+                await self._skip_satisfied(step, "Decision discarded: stopped, paused, or new guidance arrived.")
+                return
             result = await self._run_tool(name, args, step)
+            if prepared is not None:
+                verification = await self.browser.verify_action(prepared)
+                step["verification"] = verification
+                if verification["status"] == "failed":
+                    self.actions_taken += 1  # the mutation happened, even though its outcome failed verification
+                    await self._fail_step(step, verification["detail"])
+                    return
+                result += " " + verification["detail"]
         except ActionError as exc:
             await self._fail_step(step, str(exc))
             return
@@ -403,7 +474,10 @@ class Agent(FastLoopMixin, ExtractMixin):
                 await self.browser.send_frame()
             except Exception:  # noqa: BLE001
                 pass
-        self._consecutive_errors = 0
+        if name != "delegate":
+            self._consecutive_errors = 0
+            if step.get("verification", {}).get("status") != "unverified":
+                self._failed_controls.pop(_control_signature(step), None)
         self.actions_taken += 1
         step.update(status="ok", result=result, ended_at=time.time())
         await self.send_step(step)
@@ -464,7 +538,9 @@ class Agent(FastLoopMixin, ExtractMixin):
             case "delegate":
                 if not self.fast:
                     raise ActionError("The fast System 1 policy is not configured on this server.")
-                return await self._delegate(str(args.get("subgoal", "")), step)
+                return await self._delegate(str(args.get("subgoal", "")), step,
+                                            max_actions=args.get("max_actions", 15),
+                                            force_approval=bool(args.get("irreversible")))
             case "ask_user":
                 return await self._ask(str(args.get("question", "")), step)
             case "done":
@@ -560,9 +636,17 @@ class Agent(FastLoopMixin, ExtractMixin):
         self._consecutive_errors += 1
         step.update(status="error", error=error, ended_at=time.time())
         await self.send_step(step)
+        signature = _control_signature(step)
         self.history.append({"n": step["n"], "label": step.get("action", {}).get("label", "Read the page"),
-                             "error": error})
-        if self._consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
+                             "error": error, "sig": signature})
+        if signature:
+            self._failed_controls[signature] = self._failed_controls.get(signature, 0) + 1
+        if signature and self._failed_controls[signature] >= 2:
+            self.paused = True
+            await self.notice("error", "The same control failed twice. I've paused to avoid spending more tokens "
+                              "on repeated attempts. Take over in the browser or give guidance, then Resume. "
+                              f"Last error: {error}")
+        elif self._consecutive_errors >= MAX_CONSECUTIVE_ERRORS:
             self.paused = True
             await self.notice("error", f"I'm stuck: {MAX_CONSECUTIVE_ERRORS} actions in a row failed. Last error: "
                                        f"{error} Give me a hint, take over in the browser, or stop.")
@@ -765,6 +849,15 @@ def _action(name: str, args: dict[str, Any], target_label: str) -> dict[str, Any
 
 def _signature(name: str, args: dict[str, Any], url: str) -> str:
     return f"{url}|{name}|{json.dumps(_public_args(args), sort_keys=True)}"
+
+
+def _control_signature(step: dict[str, Any]) -> str:
+    """Track a failing control across re-observation IDs, scrolls and planner/Jev handoffs."""
+    action = step.get("action", {})
+    if action.get("name") not in ("click", "type_text", "select_option"):
+        return ""
+    target = step.get("target", {}).get("label") or action.get("label", "")
+    return json.dumps([step.get("url", ""), action["name"], target])
 
 
 def _text(value: Any) -> str:

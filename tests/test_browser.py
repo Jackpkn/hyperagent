@@ -1,8 +1,15 @@
 """Real headless Chromium against a local page (no network, no model). Skipped if Chromium is missing."""
 
+import asyncio
+
 import pytest
 
+from hyperagent.agent import Agent
 from hyperagent.browser import ActionError, BrowserSession
+from hyperagent.control_state import satisfied_action
+from hyperagent.fast import build_request
+
+from .fakes import DONE, Recorder, ScriptedLLM, decision
 
 PAGE = """<!doctype html><title>Form</title>
 <h1>Order form</h1>
@@ -81,6 +88,204 @@ async def test_styled_checkbox_is_reachable_through_its_label(browser):
     assert "checkbox unchecked>Extra cheese" in obs.text
     await browser.click(toggle["id"])
     assert "checkbox checked>Extra cheese" in (await browser.observe()).text
+
+
+async def test_clipped_radio_uses_visible_label_and_changes_billing_once(browser):
+    await browser.navigate('data:text/html,' + '''<style>
+      .option {position:relative;display:inline-block}
+      input {position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0)}
+      label {display:inline-block;padding:12px}
+    </style><div class="option"><input id="annual" name="billing" type="radio" checked>
+      <label for="annual"><span>Annual billing</span></label></div>
+    <div class="option"><input id="monthly" name="billing" type="radio">
+      <label for="monthly"><span>Monthly billing</span></label></div>
+    <script>window.changes=0;document.addEventListener('change',()=>window.changes++)</script>''', trusted=True)
+    obs = await browser.observe()
+    monthly = element(obs, "Monthly billing")
+    assert monthly["checked"] is False
+    await browser.click(monthly["id"])
+    assert (await browser.element_state(monthly["id"]))["checked"] is True
+    assert await browser.page.evaluate("window.changes") == 1
+
+
+async def test_click_timeout_explains_pointer_interception(browser):
+    await browser.navigate('data:text/html,' + '''<button style="position:absolute;top:0;left:0">Continue</button>
+      <div style="position:fixed;inset:0;background:white">Blocking dialog</div>''', trusted=True)
+    obs = await browser.observe()
+    with pytest.raises(ActionError, match="intercepts pointer events"):
+        await browser.click(element(obs, "Continue")["id"])
+
+
+async def run_interaction(browser, name, target, **args):
+    obs = await browser.observe()
+    rec = Recorder()
+    agent = Agent(browser=browser, llm=ScriptedLLM([
+        decision(name, element_id=element(obs, target)["id"], **args), DONE]),
+        emit=rec, goal="Update the visible form", model="test", approval_mode="never", vision=False)
+    await agent.run()
+    return rec.last_step("s1")
+
+
+@pytest.mark.parametrize("updates_state", [True, False])
+async def test_toggle_result_requires_observed_state_change(browser, updates_state):
+    handler = "setTimeout(()=>this.setAttribute('aria-pressed','true'),1200)" if updates_state else "void 0"
+    await browser.navigate('data:text/html,<button aria-pressed="false" '
+                           f'onclick="window.clicks=(window.clicks||0)+1;{handler}">Enable</button>', trusted=True)
+    step = await run_interaction(browser, "click", "Enable", desired_state=True)
+    assert step["verification"]["status"] == ("verified" if updates_state else "failed")
+    assert step["status"] == ("ok" if updates_state else "error")
+    assert await browser.page.evaluate("window.clicks") == 1
+
+
+async def test_field_rejecting_value_is_not_reported_successful(browser):
+    await browser.navigate('data:text/html,<input aria-label="Name" oninput="this.value=\'\'">', trusted=True)
+    step = await run_interaction(browser, "type_text", "Name", text="Ada", press_enter=False)
+    assert step["status"] == "error" and step["verification"]["status"] == "failed"
+
+
+async def test_date_normalization_and_select_value_verify_without_false_failure(browser):
+    await browser.navigate('data:text/html,<input type=date aria-label="Date">'
+                           '<select aria-label="Size"><option value=s>Small</option>'
+                           '<option value=l>Large</option></select>', trusted=True)
+    date_step = await run_interaction(browser, "type_text", "Date", text="10/18/2026", press_enter=False)
+    assert date_step["verification"]["status"] == "verified"
+    select_step = await run_interaction(browser, "select_option", "Size", option="l")
+    assert select_step["verification"]["status"] == "verified"
+
+
+async def test_unknown_click_outcome_is_explicitly_unverified(browser):
+    await browser.navigate('data:text/html,<button onclick="void 0">Open panel</button>', trusted=True)
+    step = await run_interaction(browser, "click", "Open panel")
+    assert step["status"] == "ok" and step["verification"]["status"] == "unverified"
+
+
+async def test_enter_submission_can_clear_field_without_false_failure(browser):
+    await browser.navigate('data:text/html,<form onsubmit="event.preventDefault();window.submits=1;this.reset()">'
+                           '<input aria-label="Query"></form>', trusted=True)
+    step = await run_interaction(browser, "type_text", "Query", text="Ada", press_enter=True)
+    assert step["status"] == "ok" and step["verification"]["status"] == "unverified"
+    assert await browser.page.evaluate("window.submits") == 1
+
+
+async def test_rejected_text_is_not_submitted_by_enter(browser):
+    await browser.navigate('data:text/html,<form onsubmit="event.preventDefault();window.submits=1">'
+                           '<input aria-label="Query" oninput="this.value=\'\'"></form>', trusted=True)
+    step = await run_interaction(browser, "type_text", "Query", text="Ada", press_enter=True)
+    assert step["status"] == "error"
+    assert await browser.page.evaluate("window.submits || 0") == 0
+
+
+async def test_readiness_reports_blocker_without_dispatching_click(browser):
+    await browser.navigate('data:text/html,<button onclick="window.clicks=1">Continue</button>'
+                           '<div style="position:fixed;inset:0;background:white">Overlay</div>', trusted=True)
+    step = await run_interaction(browser, "click", "Continue")
+    assert step["status"] == "error" and "[blocked]" in step["error"]
+    assert await browser.page.evaluate("window.clicks || 0") == 0
+
+
+async def test_replacement_after_readiness_does_not_receive_old_action(browser):
+    await browser.navigate('data:text/html,<button onclick="window.clicks=1">Continue</button>', trusted=True)
+    original = browser.prepare_action
+    async def prepare(name, args):
+        prepared = await original(name, args)
+        await browser.page.locator('button').evaluate("e => e.replaceWith(e.cloneNode(true))")
+        return prepared
+    browser.prepare_action = prepare
+    step = await run_interaction(browser, "click", "Continue")
+    assert step["status"] == "error" and "[stale]" in step["error"]
+    assert await browser.page.evaluate("window.clicks || 0") == 0
+
+
+async def test_control_selected_during_readiness_is_not_toggled_again(browser):
+    await browser.navigate('data:text/html,<button aria-pressed="false" '
+                           'onclick="window.clicks=1">Enable</button>', trusted=True)
+    original = browser.prepare_action
+    async def prepare(name, args):
+        prepared = await original(name, args)
+        await browser.page.locator('button').evaluate("e => e.setAttribute('aria-pressed','true')")
+        return prepared
+    browser.prepare_action = prepare
+    step = await run_interaction(browser, "click", "Enable", desired_state=True)
+    assert step["status"] == "skipped"
+    assert await browser.page.evaluate("window.clicks || 0") == 0
+
+
+async def test_password_verification_preserves_approval_and_hides_value(browser):
+    await browser.navigate('data:text/html,<input type=password aria-label="Secret">', trusted=True)
+    obs = await browser.observe()
+    rec = Recorder()
+    agent = Agent(browser=browser, llm=ScriptedLLM([
+        decision("type_text", element_id=element(obs, "Secret")["id"], text="private-test-value", press_enter=False),
+        DONE]), emit=rec, goal="Fill the password", model="test", approval_mode="never", vision=False)
+    task = asyncio.create_task(agent.run())
+    try:
+        for _ in range(200):
+            if rec.of("approval"):
+                break
+            await asyncio.sleep(0.01)
+        assert rec.of("approval"), "passwords must still need approval in autonomous mode"
+        assert await browser.page.locator('input').input_value() == ""
+        agent.resolve_approval(rec.of("approval")[0]["step_id"], True)
+        await task
+        assert rec.last_step("s1")["verification"]["status"] == "verified"
+        assert "private-test-value" not in str(rec.events)
+    finally:
+        if not task.done():
+            await agent.stop()
+            await task
+
+
+async def test_state_facts_and_fresh_state_prevent_redundant_actions(browser):
+    await browser.navigate('data:text/html,<button aria-pressed="true">Monthly</button>'
+                           '<button role="tab" aria-selected="true">Overview</button>'
+                           '<textarea aria-label="Notes">  exact  text  </textarea>'
+                           '<button disabled>Unavailable</button>', trusted=True)
+    obs = await browser.observe(screenshot=False)
+    monthly, tab, notes = [element(obs, label) for label in ("Monthly", "Overview", "Notes")]
+    assert monthly["pressed"] == "true" and tab["selected"] == "true"
+    assert 'pressed=true' in obs.text and 'selected=true' in obs.text
+    assert notes["value"] == "  exact  text  " and not notes["value_truncated"]
+    body, targets, _ = build_request(obs, goal="g", subgoal="s", recent=[], guidance=[], model="test")
+    assert "image" not in body and obs.screenshot is None
+    assert str(monthly["id"]) not in targets.get("ACTIVATE", {})
+    assert str(tab["id"]) not in targets.get("CLICK", {})
+    state = await browser.element_state(monthly["id"])
+    assert satisfied_action("click", {"desired_state": True}, state)
+    await browser.page.locator('button').first.evaluate("e => e.setAttribute('aria-pressed','false')")
+    state = await browser.element_state(monthly["id"])
+    assert not satisfied_action("click", {"desired_state": True}, state)
+
+
+async def test_fresh_styled_checkbox_state_follows_native_input(browser):
+    obs = await browser.observe()
+    toggle = next(e for e in obs.elements.values() if e["tag"] == "label")
+    assert (await browser.element_state(toggle["id"]))["checked"] is False
+    await browser.page.locator('#t').evaluate("e => e.checked = true")
+    assert (await browser.element_state(toggle["id"]))["checked"] is True
+
+
+@pytest.mark.parametrize("action", ["click", "type_text", "select_option"])
+async def test_failed_browser_mutations_are_attempted_once(action, monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, Mock
+
+    from playwright.async_api import TimeoutError as PlaywrightTimeout
+
+    session = BrowserSession()
+    handle = SimpleNamespace(click=AsyncMock(side_effect=PlaywrightTimeout("uncertain outcome")),
+                             fill=AsyncMock(side_effect=PlaywrightTimeout("uncertain outcome")),
+                             select_option=AsyncMock(side_effect=PlaywrightTimeout("uncertain outcome")),
+                             evaluate=AsyncMock(side_effect=["SELECT", [{"label": "Large", "value": "l"}]])
+                             if action == "select_option" else AsyncMock(return_value="text"))
+    monkeypatch.setattr(session, "_handle", AsyncMock(return_value=handle))
+    monkeypatch.setattr(session, "_active", Mock(return_value=SimpleNamespace(url="https://example.test")))
+    monkeypatch.setattr(session, "_tabs_list", Mock(return_value=[]))
+    args = (1,) if action == "click" else (1, "Ada", False) if action == "type_text" else (1, "Large")
+    with pytest.raises(ActionError, match="not retried"):
+        await getattr(session, action)(*args)
+    mutations = handle.click.await_count + handle.fill.await_count + handle.select_option.await_count
+    assert mutations == 1
+    assert handle.evaluate.await_count == (0 if action == "click" else 1 if action == "type_text" else 2)
 
 
 async def test_frozen_page_becomes_a_visible_error_not_a_hang(browser, monkeypatch):

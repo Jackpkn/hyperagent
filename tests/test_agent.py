@@ -118,10 +118,12 @@ async def test_repeated_failures_pause_with_clear_message():
     agent, _, rec = make([*clicks, DONE], browser=browser, mode="never")
     task = asyncio.create_task(agent.run())
     await wait_for(lambda: agent.state == "paused")
-    assert [e for e in rec.of("notice") if "I'm stuck" in e["message"]]
-    assert [rec.last_step(f"s{i}")["error"] for i in (1, 2, 3)] == ["click failed"] * 3
+    assert [e for e in rec.of("notice") if "same control" in e["message"]]
+    assert len(agent.llm.requests) == 2
+    assert [rec.last_step(f"s{i}")["error"] for i in (1, 2)] == ["click failed"] * 2
     await agent.resume()
     await task
+    assert len(browser.calls) == 3, "explicit resume allows a fresh attempt"
 
 
 async def test_invalid_model_output_is_reported_not_executed():

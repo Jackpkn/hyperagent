@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any
 from playwright.async_api import Error as PlaywrightError
 
 from .browser import ActionError
+from .control_state import satisfied_action
 from .fast import FastError
 from .tools import needs_approval
 
@@ -18,18 +19,22 @@ if TYPE_CHECKING:
 FAST_MAX_ACTIONS = 15
 NO_CHANGE_LIMIT = 3
 OPERATION_TOOLS = {"CLICK": "click", "TYPE_TEXT": "type_text", "SELECT": "select_option",
+                   "ACTIVATE": "click", "DEACTIVATE": "click", "TYPE_TEXT_ENTER": "type_text",
                    "SCROLL_DOWN": "scroll", "SCROLL_UP": "scroll"}
 
 
 class FastLoopMixin:
     """Mixed into Agent. Each Jev action is a visible, approvable, interruptible step of its own."""
 
-    async def _delegate(self: Agent, subgoal: str, parent: dict[str, Any]) -> str:
+    async def _delegate(self: Agent, subgoal: str, parent: dict[str, Any], *,
+                        max_actions: int = FAST_MAX_ACTIONS, force_approval: bool = False) -> str:
+        self._fast_recovery = False
+        max_actions = max(1, min(FAST_MAX_ACTIONS, int(max_actions)))
         log: list[str] = []
         recent: list[str] = []
         unchanged = 0
         last_sig = None
-        for _ in range(FAST_MAX_ACTIONS):
+        for _ in range(max_actions):
             if self.stopped or self.paused:
                 return self._handback(log, "the operator paused or stopped the run")
             if self.actions_taken >= self.max_steps:
@@ -47,7 +52,7 @@ class FastLoopMixin:
             unchanged = unchanged + 1 if sig == last_sig else 0
             last_sig = sig
             if unchanged >= NO_CHANGE_LIMIT:
-                return self._handback(log, f"the last {NO_CHANGE_LIMIT} actions did not change the page")
+                return self._handback(log, f"the last {NO_CHANGE_LIMIT} actions did not change the page", recovery=True)
             step["url"] = page.url
             await self.send_step(step)
             version = self.guidance_version
@@ -56,7 +61,7 @@ class FastLoopMixin:
                                            guidance=self.guidance)
             except FastError as exc:
                 await self._fail_step(step, str(exc))
-                return self._handback(log, f"Jev failed: {exc}")
+                return self._handback(log, f"Jev failed: {exc}", recovery=True)
             self.usage["fast_calls"] += 1
             self.usage["fast_ms_total"] += d.latency_ms
             step.update(confidence=round(d.confidence, 3), alternatives=d.alternatives, latency_ms=d.latency_ms,
@@ -69,17 +74,17 @@ class FastLoopMixin:
             outcome = await self._fast_terminal(step, d, log)
             if outcome:
                 return outcome
-            result = await self._fast_act(step, d, page, subgoal, recent)
+            result = await self._fast_act(step, d, page, subgoal, recent, force_approval=force_approval)
             if step["status"] == "skipped":
-                return self._handback(log, "Jev tried to retype a field that already holds that value")
+                return self._handback(log, step.get("result", "the action was skipped"))
             if step["status"] == "error":
-                return self._handback(log, f"an action failed: {step.get('error')}")
+                return self._handback(log, f"an action failed: {step.get('error')}", recovery=True)
             if step["status"] == "rejected":
                 return self._handback(log, "you rejected an action")
             entry = f"{step['action']['label']} → {result}"
             log.append(entry)
             recent.append(entry)
-        return self._handback(log, f"Jev used its {FAST_MAX_ACTIONS}-action budget for this subgoal")
+        return self._handback(log, f"Jev used its {max_actions}-action budget; verify the outcome before continuing")
 
     async def _fast_terminal(self: Agent, step: dict[str, Any], d: Any, log: list[str]) -> str | None:
         pct = f"{d.confidence:.0%}"
@@ -92,18 +97,21 @@ class FastLoopMixin:
             step.update(status="ok", action={"name": "stuck", "args": {}, "label": "Hand back to the planner"},
                         result="Jev can't progress here with the visible controls.", ended_at=time.time())
             await self.send_step(step)
-            return self._handback(log, "Jev is stuck on this page")
+            return self._handback(log, "Jev is stuck on this page", recovery=True)
         if d.confidence < self.fast.config.min_confidence:
             step.update(status="skipped", action={"name": "unsure", "args": {}, "label": "Not confident enough"},
                         result=f"Jev was only {pct} sure; the planner will decide instead.", ended_at=time.time())
             await self.send_step(step)
-            return self._handback(log, f"Jev was unsure ({pct}) about the next action")
+            return self._handback(log, f"Jev was unsure ({pct}) about the next action", recovery=True)
         return None
 
     async def _fast_act(self: Agent, step: dict[str, Any], d: Any, page: Any, subgoal: str,
-                        recent: list[str]) -> str:
+                        recent: list[str], *, force_approval: bool = False) -> str:
+        version = self.guidance_version
         name = OPERATION_TOOLS[d.operation]
-        args: dict[str, Any] = {"irreversible": d.irreversible >= 0.6}
+        args: dict[str, Any] = {"irreversible": force_approval or d.irreversible >= 0.6}
+        if d.operation in ("ACTIVATE", "DEACTIVATE"):
+            args["desired_state"] = d.operation == "ACTIVATE"
         target_label = ""
         if d.element_id is not None:
             element = page.element(d.element_id)
@@ -128,25 +136,27 @@ class FastLoopMixin:
                 return ""
             self.usage["text_calls"] += 1
             step["latency_ms"] = step.get("latency_ms", 0) + ms
-            args.update(text=text, press_enter=False)
+            args.update(text=text, press_enter=d.operation == "TYPE_TEXT_ENTER")
         from .agent import _action  # local import avoids a cycle
-        if name == "type_text" and text == str(element.get("value") or ""):
-            # Retyping a filled field is how Jev loops when the rest of a subgoal is out of its reach.
-            step.update(action=_action(name, args, target_label), status="skipped", ended_at=time.time(),
-                        result="That field already holds this value; nothing was typed.")
-            await self.send_step(step)
-            return ""
         step.update(action=_action(name, args, target_label), status="planned")
+        if self.paused or self.stopped or self.guidance_version != version:
+            await self._skip_satisfied(step, "Decision discarded: stopped, paused, or new guidance arrived.")
+            return ""
+        if d.element_id is not None:
+            satisfied = satisfied_action(name, args, element)
+            if satisfied:
+                await self._skip_satisfied(step, satisfied)
+                return ""
         risky, reason = needs_approval(name, args, target_label, self.approval_mode)
         if risky:
             step["risk"] = {"risky": True, "reason": reason}
             if not await self._approve(step, reason):
                 return ""
-        await self._execute(step, name, args)
+        await self._execute(step, name, args, decision_version=version)
         return step.get("result", "")
 
-    @staticmethod
-    def _handback(log: list[str], reason: str) -> str:
+    def _handback(self, log: list[str], reason: str, *, recovery: bool = False) -> str:
+        self._fast_recovery = recovery
         done = f"Jev took {len(log)} action{'s' if len(log) != 1 else ''}"
         detail = (": " + "; ".join(log[-8:])) if log else ""
         return f"{done}{detail}. Returned control because {reason}."

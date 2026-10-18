@@ -92,7 +92,8 @@ TOOLS = [
     _tool("search", "Search the web (opens a search results page).",
           {"query": {"type": "string"}}, ["query"]),
     _tool("navigate", "Open a URL in the current tab.", {"url": {"type": "string"}}, ["url"]),
-    _tool("click", "Click an element.", ELEMENT, ["element_id"], risk=True),
+    _tool("click", "Click an element; when Jev is enabled use delegate instead. Set desired_state for toggles.",
+          {**ELEMENT, "desired_state": {"type": "boolean"}}, ["element_id"], risk=True),
     _tool("type_text", "Replace the text of an input field, optionally pressing Enter afterwards.",
           {**ELEMENT, "text": {"type": "string"}, "press_enter": {"type": "boolean"}},
           ["element_id", "text", "press_enter"], risk=True),
@@ -166,7 +167,8 @@ DELEGATE = _tool(
     "delegate",
     "Hand a concrete on-page UI subgoal to Jev, the fast System 1 policy (~0.3 s per action). Jev clicks, types, "
     "selects and scrolls on the CURRENT page until it judges the subgoal done, gets stuck, or is unsure, then "
-    "returns control to you with a log of what it did. Use it for multi-step form filling, menus, filters, "
+    "returns control to you with a log of what it did. Use it for ALL routine clicks, typing and selections, "
+    "including single actions. Bundle related form fields, menus, filters, "
     "date pickers and clicking through to a result. Jev cannot open URLs, read/extract data or ask questions.",
     {"subgoal": {"type": "string", "description": "One concrete, checkable UI subgoal with every value Jev needs, "
                  "e.g. 'Fill name Ada Lovelace, phone 555-0100, choose Large size, tick Bacon and Mushroom'."}},

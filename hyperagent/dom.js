@@ -72,7 +72,7 @@
     }
     if (el.isContentEditable) attrs.push(`value="${clean(el.innerText, 60)}"`);
     if (['checkbox', 'radio'].includes(el.type)) attrs.push(el.checked ? 'checked' : 'unchecked');
-    for (const a of ['aria-checked', 'aria-selected', 'aria-expanded']) {
+    for (const a of ['aria-checked', 'aria-selected', 'aria-pressed', 'aria-expanded']) {
       const v = el.getAttribute(a);
       if (v !== null) attrs.push(`${a.slice(5)}=${v}`);
     }
@@ -98,18 +98,25 @@
     const editable = !el.readOnly && !el.disabled && (el.isContentEditable || tag === 'TEXTAREA' ||
       (tag === 'INPUT' && !['checkbox', 'radio', 'button', 'submit', 'reset', 'image', 'file', 'range', 'color']
         .includes(el.type)));
-    const f = { role, editable };
-    if (el.type !== 'password' && (tag === 'INPUT' || tag === 'TEXTAREA') && editable) f.value = clean(el.value, 80);
+    const f = { role, editable, disabled: !!el.disabled || el.getAttribute('aria-disabled') === 'true' };
+    if (el.type !== 'password' && (tag === 'INPUT' || tag === 'TEXTAREA') && editable) {
+      f.value = el.value.slice(0, 80);
+      f.value_truncated = el.value.length > 80;
+    }
     if (el.type === 'password') f.value = el.value ? '(filled, hidden)' : '';
-    if (el.isContentEditable) f.value = clean(el.innerText, 80);
+    if (el.isContentEditable) {
+      f.value = el.innerText.slice(0, 80);
+      f.value_truncated = el.innerText.length > 80;
+    }
     if (['checkbox', 'radio'].includes(el.type)) f.checked = el.checked;
-    for (const a of ['aria-checked', 'aria-selected', 'aria-expanded']) {
+    for (const a of ['aria-checked', 'aria-selected', 'aria-pressed', 'aria-expanded']) {
       const v = el.getAttribute(a);
       if (v !== null) f[a.slice(5)] = v;
     }
     if (tag === 'SELECT') {
       f.options = [...el.options].slice(0, 40).filter((o) => !o.disabled).map((o) => clean(o.label, 40));
       f.value = [...el.selectedOptions].map((o) => clean(o.label, 40)).join(', ');
+      f.value_truncated = [...el.selectedOptions].some((o) => o.label !== clean(o.label, 40));
     }
     if (tag === 'A') f.href = clean(el.href, 120);
     return f;
@@ -137,10 +144,15 @@
     if (SKIP.has(el.tagName.toUpperCase()) || el.hasAttribute('data-ha-overlay')) return;
     if (el.getAttribute('aria-hidden') === 'true') return;
     const block = BLOCK.test(el.tagName);
-    // Styled checkboxes/radios are often hidden behind their label; expose the label as the control.
+    // Screen-reader-only inputs can pass checkVisibility despite being clipped to one pixel.
+    // Expose their associated label as the click target, while retaining the input's state.
     const toggle = el.tagName === 'INPUT' && ['checkbox', 'radio'].includes(el.type);
-    if (toggle && !visible(el)) {
-      const lbl = el.labels?.[0];
+    const toggleRect = toggle ? el.getBoundingClientRect() : null;
+    const toggleStyle = toggle ? getComputedStyle(el) : null;
+    const needsLabel = toggle && (!visible(el) || toggleRect.width <= 1 || toggleRect.height <= 1 ||
+      toggleStyle.clip !== 'auto' || toggleStyle.clipPath !== 'none' || toggleStyle.pointerEvents === 'none');
+    if (needsLabel) {
+      const lbl = [...(el.labels || [])].find((label) => visible(label) && hasBox(label));
       if (lbl && visible(lbl) && hasBox(lbl) && !state.labels?.has(lbl)) {
         (state.labels ||= new Set()).add(lbl);
         const id = state.next++;
@@ -150,6 +162,7 @@
         elements.push({
           id, tag: 'label', label: clean(lbl.innerText), type: el.type, ...facts(el), editable: false,
           rect: { x: r.x, y: r.y, w: r.width, h: r.height },
+          offscreen: r.bottom < 0 || r.top > vh,
         });
         line += ` [${id}]<label ${el.type} ${status}>${clean(lbl.innerText)}</label> `;
       }

@@ -24,6 +24,8 @@ from playwright.async_api import Browser, BrowserContext, Page, Playwright, Rout
 from playwright.async_api import Error as PlaywrightError
 from playwright.async_api import TimeoutError as PlaywrightTimeout
 
+from .control_state import can_deactivate, control_state, state_value
+
 log = logging.getLogger("hyperagent")
 
 OBSERVE_JS = Path(__file__).with_name("dom.js").read_text()
@@ -435,7 +437,7 @@ class BrowserSession:
         page = self._active()
         handle = await page.evaluate_handle("(id) => window.__ha?.nodes.get(id) ?? null", element_id)
         element = handle.as_element()
-        if element is None:
+        if element is None or not await element.evaluate("e => e.isConnected"):
             raise ActionError(f"Element [{element_id}] no longer exists; the page changed. Re-read the page.")
         return element
 
@@ -472,6 +474,131 @@ class BrowserSession:
             return f"Opened {page.url} but the server answered HTTP {status}."
         return f"Opened {page.url}"
 
+    @bounded(6)
+    async def element_state(self, element_id: int) -> dict[str, Any]:
+        """Fresh state of the same observed node, including a styled input's label, before acting."""
+        handle = await self._handle(element_id)
+        return await handle.evaluate("""node => {
+            const e = node.tagName === 'LABEL' ? node.control || node : node;
+            const state = {tag:e.tagName.toLowerCase(), type:e.type,
+                role:e.getAttribute('role') || (['checkbox','radio'].includes(e.type) ? e.type : ''),
+                disabled:!!e.disabled || e.getAttribute('aria-disabled') === 'true'};
+            if (['checkbox','radio'].includes(e.type)) state.checked=e.checked;
+            for (const key of ['checked','selected','pressed','expanded']) {
+                if (e.hasAttribute('aria-'+key)) state[key]=e.getAttribute('aria-'+key);
+            }
+            if (e.type !== 'password') {
+                if (e.tagName === 'SELECT') state.value=Array.from(e.selectedOptions,o=>o.label).join(', ');
+                else if ('value' in e) state.value=e.value;
+                else if (e.isContentEditable) state.value=e.innerText;
+            }
+            return state;
+        }""")
+
+    @bounded(8)
+    async def prepare_action(self, name: str, args: dict[str, Any]) -> dict[str, Any]:
+        """Readiness only: no click/fill/selection is dispatched and no model is called."""
+        node = await self._handle(int(args["element_id"]))
+        before = await self.element_state(int(args["element_id"]))
+        if before.get("disabled") or not await node.is_enabled():
+            raise ActionError("[disabled] The control is disabled. Wait for its prerequisite or choose another "
+                              "control from a fresh observation; no action was sent.")
+        if name == "click":
+            try:
+                await node.click(trial=True, timeout=4000)
+            except PlaywrightError as exc:
+                message = str(exc)
+                if "intercepts pointer events" in message:
+                    hint = "[blocked] Another element intercepts pointer events. Observe and address the overlay first"
+                elif "not stable" in message:
+                    hint = "[moving] The control is still moving. Wait for the animation and observe again"
+                elif "detached" in message:
+                    hint = "[stale] The control was replaced. Observe again and choose its new ID"
+                else:
+                    hint = "[not-ready] The control is not ready or visible. Observe again and check its location"
+                raise ActionError(f"{hint}; no click was sent.") from None
+        elif name == "type_text" and not await node.is_editable():
+            raise ActionError("[readonly] The field is not editable. Choose an editable field from a fresh "
+                              "observation; nothing was typed.")
+        expected = None
+        if name == "type_text" and not args.get("press_enter"):
+            value = str(args.get("text", ""))
+            if before.get("type") in NATIVE_FORMATS:
+                value = normalize_native(before["type"], value)
+            expected = ("value", value)
+        elif name == "select_option":
+            expected = ("option", str(args.get("option", "")))
+        elif name == "click":
+            state = control_state(before)
+            if state:
+                desired = args.get("desired_state")
+                if type(desired) is not bool and state[1] is not None:
+                    desired = not state[1] if can_deactivate(before) else True
+                if type(desired) is bool:
+                    expected = (state[0], desired)
+            elif state_value(before.get("expanded")) is not None:
+                expected = ("expanded", not state_value(before["expanded"]))
+        return {"node": node, "page": self._active(), "url": self._active().url,
+                "element_id": int(args["element_id"]), "expected": expected, "name": name,
+                "href": await node.evaluate("e => e.href || null")}
+
+    async def check_prepared(self, prepared: dict[str, Any]) -> None:
+        """Never transfer an approved action to a replacement node or a reused observation ID."""
+        try:
+            same = self._active() is prepared["page"] and await prepared["node"].evaluate(
+                "(node, id) => node.isConnected && window.__ha?.nodes.get(id) === node", prepared["element_id"])
+        except PlaywrightError:
+            same = False
+        if not same:
+            raise ActionError("[stale] The observed control changed. Observe again and choose a fresh ID; "
+                              "no action was sent.")
+
+    async def verify_action(self, prepared: dict[str, Any]) -> dict[str, str]:
+        """Bounded read-only verification. Values (including passwords) never enter the report."""
+        try:
+            return await asyncio.wait_for(self._verify_action(prepared), timeout=2.0)
+        except (PlaywrightError, TimeoutError):
+            return {"status": "unverified", "detail": "Outcome unverified: the page changed or could not be read. "
+                    "Observe before deciding whether anything else is needed; do not repeat the action blindly."}
+
+    async def _verify_action(self, prepared: dict[str, Any]) -> dict[str, str]:
+        expected = prepared["expected"]
+        if self._active() is not prepared["page"] or self._active().url != prepared["url"]:
+            if prepared.get("href") and self._active().url == prepared["href"]:
+                return {"status": "verified", "detail": "Verified navigation to the link's destination."}
+            return {"status": "unverified", "detail": "Navigation observed; confirm the destination and outcome "
+                    "from the new page before further action."}
+        if expected is None:
+            return {"status": "unverified", "detail": "Outcome unverified: this action has no deterministic "
+                    "completion check. Confirm the result from the page before repeating it."}
+        matched = await self._wait_for_control_value(prepared["node"], expected)
+        if matched is None:
+            return {"status": "unverified", "detail": "Outcome unverified: the control was replaced after acting. "
+                    "Observe the new page state before repeating the action."}
+        if matched:
+            return {"status": "verified", "detail": "Verified the requested field value or control state."}
+        return {"status": "failed", "detail": "[state-mismatch] The action was sent, but the requested value or "
+                "state did not hold within the verification window. Inspect validation or prerequisites first; "
+                "the action was not retried."}
+
+    async def _wait_for_control_value(self, node: Any, expected: tuple[str, Any]) -> bool | None:
+        deadline = time.monotonic() + 1.0
+        while True:
+            matches = await node.evaluate("""(node, [kind, wanted]) => {
+                const e = node.tagName === 'LABEL' ? node.control || node : node;
+                if (!node.isConnected || !e.isConnected) return null;
+                if (kind === 'value') return (e.isContentEditable ? e.innerText : e.value) === wanted;
+                if (kind === 'option') return Array.from(e.selectedOptions || [])
+                    .some(o => o.label === wanted || o.value === wanted);
+                const raw = e.getAttribute('aria-' + kind);
+                const actual = raw === 'true' ? true : raw === 'false' ? false :
+                    kind === 'checked' && ['checkbox','radio'].includes(e.type) ? e.checked : null;
+                return actual === null ? null : actual === wanted;
+            }""", expected)
+            if matches is not False or time.monotonic() >= deadline:
+                return matches
+            await asyncio.sleep(0.05)
+
     @bounded(40, mutation=True)
     async def click(self, element_id: int) -> str:
         page = self._active()
@@ -479,12 +606,13 @@ class BrowserSession:
         before_url, before_tabs = page.url, len(self._tabs_list())
         try:
             await handle.click(timeout=4000)
-        except PlaywrightTimeout:
-            # Covered or animating; a direct DOM click still reaches the intended element only.
-            try:
-                await handle.evaluate("(e) => e.click()")
-            except PlaywrightError:
-                raise ActionError(f"Element [{element_id}] could not be clicked (covered or detached).") from None
+        except PlaywrightTimeout as exc:
+            reasons = {"intercepts pointer events": "Another element intercepts pointer events",
+                       "not visible": "The control is not visible", "not stable": "The control is moving",
+                       "not enabled": "The control is disabled", "detached": "The control left the page"}
+            detail = next((v for k, v in reasons.items() if k in str(exc)), "The control was not ready for a click")
+            raise ActionError(f"Click on [{element_id}] timed out: {detail}; it was not retried. "
+                              "Observe the page before deciding what to do next.") from None
         except PlaywrightError as exc:
             raise ActionError(f"Click failed: {str(exc).splitlines()[0][:160]}") from None
         await asyncio.sleep(0.35)
@@ -505,14 +633,13 @@ class BrowserSession:
             text = normalize_native(kind, text)
         try:
             await handle.fill(text, timeout=4000)
-        except PlaywrightError:
-            try:
-                await handle.click(timeout=3000)
-                await self._active().keyboard.press("ControlOrMeta+A")
-                await self._active().keyboard.type(text, delay=8)
-            except PlaywrightError as exc:
-                raise ActionError(f"Could not type into [{element_id}]: {str(exc).splitlines()[0][:160]}") from None
+        except PlaywrightError as exc:
+            raise ActionError(f"Could not type into [{element_id}]; it was not retried: "
+                              f"{str(exc).splitlines()[0][:160]}") from None
         if press_enter:
+            if not await self._wait_for_control_value(handle, ("value", text)):
+                raise ActionError("[state-mismatch] The field did not retain the requested text. Enter was not "
+                                  "pressed. Inspect the field's validation before making a new decision.")
             before = self._active().url
             await handle.press("Enter")
             await asyncio.sleep(0.4)
@@ -529,13 +656,15 @@ class BrowserSession:
         tag = await handle.evaluate("(e) => e.tagName")
         if tag != "SELECT":
             raise ActionError(f"[{element_id}] is not a dropdown; click it and choose the option instead.")
+        options = await handle.evaluate("e => Array.from(e.options, o => ({label: o.label, value: o.value}))")
+        by_label = any(o["label"] == option for o in options)
+        if not by_label and not any(o["value"] == option for o in options):
+            raise ActionError(f"Option {option!r} is not available in [{element_id}].")
         try:
-            chosen = await handle.select_option(label=option, timeout=3000)
+            chosen = await handle.select_option(**{"label" if by_label else "value": option}, timeout=3000)
         except PlaywrightError:
-            try:
-                chosen = await handle.select_option(value=option, timeout=3000)
-            except PlaywrightError:
-                raise ActionError(f"Option {option!r} is not available in [{element_id}].") from None
+            raise ActionError(f"Selection in [{element_id}] failed; it was not retried. "
+                              "Observe the page first.") from None
         await self._settle(self._active(), 3000)
         return f"Selected {option!r}." if chosen else f"Option {option!r} was not selected."
 
