@@ -344,14 +344,14 @@ export function AgentApp() {
       {showRun ? (
         <main className="run-shell">
           <ControlBar
-            goal={state.goal}
-            run={state.run}
-            hasResult={Boolean(state.result)}
+            goal={shown.goal}
+            run={restored ? restored.run : state.run}
+            hasResult={Boolean(shown.result)}
             detail={state.detail}
-            stepNumber={state.stepNumber}
+            stepNumber={restored ? restored.steps.length : state.stepNumber}
             maxSteps={state.session?.max_steps ?? 0}
-            elapsedS={elapsedS}
-            usage={state.usage}
+            elapsedS={restored ? restored.usage?.elapsed_s ?? 0 : elapsedS}
+            usage={shown.usage}
             mode={state.mode}
             finished={finished}
             connection={state.connection}
