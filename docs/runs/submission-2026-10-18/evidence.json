@@ -1,0 +1,540 @@
+{
+  "tested_base": "6af4136 plus uncommitted eval tooling and documentation; production backend/UI unchanged",
+  "eval_trials": [
+    {
+      "case": "prefilled-form",
+      "case_version": 1,
+      "passed": true,
+      "terminal": "done",
+      "configuration": {
+        "mode": "planner+jev",
+        "planner_model": "claude-sonnet-5-5",
+        "fast_model": "jev-latest",
+        "approval_mode": "risky",
+        "max_steps": 12,
+        "timeout_s": 120.0,
+        "tracked_cost_limit_usd": 0.25,
+        "text_model": "claude-haiku-5-5"
+      },
+      "grading": {
+        "passed": true,
+        "checks": [
+          {
+            "id": "required_values",
+            "passed": true
+          },
+          {
+            "id": "review_matches",
+            "passed": true
+          },
+          {
+            "id": "review_once",
+            "passed": true
+          },
+          {
+            "id": "preserved_controls_untouched",
+            "passed": true
+          },
+          {
+            "id": "stayed_in_fixture",
+            "passed": true
+          }
+        ],
+        "evidence": {
+          "values": {
+            "name": "Alex Tester",
+            "email": "alex@example.test",
+            "company": "Example Labs",
+            "country": "India",
+            "billing": "Monthly",
+            "newsletter": false
+          },
+          "review": {
+            "name": "Alex Tester",
+            "email": "alex@example.test",
+            "company": "Example Labs",
+            "country": "India",
+            "billing": "Monthly",
+            "newsletter": false
+          },
+          "review_count": 1,
+          "preserved_control_events": [],
+          "blocked_urls": [],
+          "observation_error": null,
+          "extra_tab_count": 0,
+          "events": [
+            {
+              "type": "input",
+              "control": "email"
+            },
+            {
+              "type": "change",
+              "control": "email"
+            },
+            {
+              "type": "input",
+              "control": "company"
+            },
+            {
+              "type": "change",
+              "control": "company"
+            },
+            {
+              "type": "review",
+              "values": {
+                "name": "Alex Tester",
+                "email": "alex@example.test",
+                "company": "Example Labs",
+                "country": "India",
+                "billing": "Monthly",
+                "newsletter": false
+              }
+            },
+            {
+              "type": "click",
+              "control": "review-button"
+            }
+          ]
+        }
+      },
+      "elapsed_s": 16.247,
+      "executed_actions": 3,
+      "step_errors": 0,
+      "recorded_usage": {
+        "llm_calls": 4,
+        "input_tokens": 40639,
+        "cached_input_tokens": 28365,
+        "output_tokens": 1589,
+        "cost_usd": 0.05083850000000001,
+        "fast_calls": 0,
+        "fast_ms_total": 0,
+        "text_calls": 0,
+        "extract_calls": 0
+      },
+      "total_cost_usd": null,
+      "usage_limitations": "Recorded tokens/cost cover planner and extraction only. Jev and text-helper costs are missing, so total cost and token savings are unknown. Cost limit is checked between planner steps and may be exceeded by an in-flight call."
+    },
+    {
+      "case": "autocomplete",
+      "case_version": 1,
+      "passed": true,
+      "terminal": "done",
+      "configuration": {
+        "mode": "planner+jev",
+        "planner_model": "claude-sonnet-5-5",
+        "fast_model": "jev-latest",
+        "approval_mode": "risky",
+        "max_steps": 12,
+        "timeout_s": 120.0,
+        "tracked_cost_limit_usd": 0.25,
+        "text_model": "claude-haiku-5-5"
+      },
+      "grading": {
+        "passed": true,
+        "checks": [
+          {
+            "id": "selected_destination",
+            "passed": true
+          },
+          {
+            "id": "matching_results",
+            "passed": true
+          },
+          {
+            "id": "stayed_in_fixture",
+            "passed": true
+          }
+        ],
+        "evidence": {
+          "input": "London, United Kingdom (LON)",
+          "selected_code": "LON",
+          "result_code": "LON",
+          "result_label": "London, United Kingdom (LON)",
+          "result_visible": true,
+          "events": [
+            {
+              "type": "input",
+              "value": "London"
+            },
+            {
+              "type": "selection",
+              "code": "LON"
+            },
+            {
+              "type": "search",
+              "code": "LON"
+            }
+          ],
+          "blocked_urls": [],
+          "extra_tab_count": 0,
+          "observation_error": null
+        }
+      },
+      "elapsed_s": 15.855,
+      "executed_actions": 3,
+      "step_errors": 0,
+      "recorded_usage": {
+        "llm_calls": 4,
+        "input_tokens": 40136,
+        "cached_input_tokens": 37820,
+        "output_tokens": 1491,
+        "cost_usd": 0.027106,
+        "fast_calls": 0,
+        "fast_ms_total": 0,
+        "text_calls": 0,
+        "extract_calls": 0
+      },
+      "total_cost_usd": null,
+      "usage_limitations": "Recorded tokens/cost cover planner and extraction only. Jev and text-helper costs are missing, so total cost and token savings are unknown. Cost limit is checked between planner steps and may be exceeded by an in-flight call."
+    }
+  ],
+  "catalogue": {
+    "goal": "Open https://books.toscrape.com/. In the Travel category, compare all listed books and identify the three cheapest by displayed price. Open each of those three books and verify its full title, price, stock count and UPC. Return a table sorted by price with source URLs. State how many Travel books you compared. Do not log in or buy anything.",
+    "result": {
+      "type": "result",
+      "success": true,
+      "summary": "I compared **11 Travel books**. They all fit on one page, with no pagination. The three cheapest by displayed price are below, each checked on its own detail page.",
+      "columns": [
+        "Rank",
+        "Full title",
+        "Price",
+        "Stock",
+        "UPC",
+        "Source URL"
+      ],
+      "rows": [
+        {
+          "Rank": "1",
+          "Full title": "The Road to Little Dribbling: Adventures of an American in Britain (Notes From a Small Island #2)",
+          "Price": "\u00a323.21",
+          "Stock": "In stock (3 available)",
+          "UPC": "366a236aa1ea6f07",
+          "Source URL": "https://books.toscrape.com/catalogue/the-road-to-little-dribbling-adventures-of-an-american-in-britain-notes-from-a-small-island-2_277/index.html"
+        },
+        {
+          "Rank": "2",
+          "Full title": "1,000 Places to See Before You Die",
+          "Price": "\u00a326.08",
+          "Stock": "In stock (1 available)",
+          "UPC": "228ba5e7577e1d49",
+          "Source URL": "https://books.toscrape.com/catalogue/1000-places-to-see-before-you-die_1/index.html"
+        },
+        {
+          "Rank": "3",
+          "Full title": "The Great Railway Bazaar",
+          "Price": "\u00a330.54",
+          "Stock": "In stock (6 available)",
+          "UPC": "48736df57e7bec9f",
+          "Source URL": "https://books.toscrape.com/catalogue/the-great-railway-bazaar_446/index.html"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Travel category",
+          "url": "https://books.toscrape.com/catalogue/category/books/travel_2/index.html"
+        },
+        {
+          "title": "The Road to Little Dribbling",
+          "url": "https://books.toscrape.com/catalogue/the-road-to-little-dribbling-adventures-of-an-american-in-britain-notes-from-a-small-island-2_277/index.html"
+        },
+        {
+          "title": "1,000 Places to See Before You Die",
+          "url": "https://books.toscrape.com/catalogue/1000-places-to-see-before-you-die_1/index.html"
+        },
+        {
+          "title": "The Great Railway Bazaar",
+          "url": "https://books.toscrape.com/catalogue/the-great-railway-bazaar_446/index.html"
+        }
+      ],
+      "issues": [],
+      "checklist": [
+        {
+          "requirement": "Compare all Travel books and state how many",
+          "met": true,
+          "evidence": "Category page shows 11 results"
+        },
+        {
+          "requirement": "Identify three cheapest by displayed price",
+          "met": true,
+          "evidence": "\u00a323.21, \u00a326.08, \u00a330.54 are the lowest of the 11 prices"
+        },
+        {
+          "requirement": "Open each and verify title, price, stock, UPC",
+          "met": true,
+          "evidence": "Detail pages read for all three"
+        },
+        {
+          "requirement": "Table sorted by price with source URLs",
+          "met": true,
+          "evidence": "Table above"
+        }
+      ],
+      "assumptions": [
+        "Cheapest is judged by the displayed \u00a3 price on the category page."
+      ],
+      "follow_ups": [
+        "Compare the cheapest books in another category",
+        "List all 11 Travel books with prices"
+      ],
+      "remember": []
+    },
+    "independent_source_read": {
+      "compared": 11,
+      "cheapest": [
+        {
+          "title": "The Road to Little Dribbling: Adventures of an American in Britain (Notes From a Small Island #2)",
+          "url": "https://books.toscrape.com/catalogue/the-road-to-little-dribbling-adventures-of-an-american-in-britain-notes-from-a-small-island-2_277/index.html",
+          "price": 23.21,
+          "verified_title": "The Road to Little Dribbling: Adventures of an American in Britain (Notes From a Small Island #2)",
+          "details": {
+            "UPC": "366a236aa1ea6f07",
+            "Product Type": "Books",
+            "Price (excl. tax)": "\u00a323.21",
+            "Price (incl. tax)": "\u00a323.21",
+            "Tax": "\u00a30.00",
+            "Availability": "In stock (3 available)",
+            "Number of reviews": "0"
+          }
+        },
+        {
+          "title": "1,000 Places to See Before You Die",
+          "url": "https://books.toscrape.com/catalogue/1000-places-to-see-before-you-die_1/index.html",
+          "price": 26.08,
+          "verified_title": "1,000 Places to See Before You Die",
+          "details": {
+            "UPC": "228ba5e7577e1d49",
+            "Product Type": "Books",
+            "Price (excl. tax)": "\u00a326.08",
+            "Price (incl. tax)": "\u00a326.08",
+            "Tax": "\u00a30.00",
+            "Availability": "In stock (1 available)",
+            "Number of reviews": "0"
+          }
+        },
+        {
+          "title": "The Great Railway Bazaar",
+          "url": "https://books.toscrape.com/catalogue/the-great-railway-bazaar_446/index.html",
+          "price": 30.54,
+          "verified_title": "The Great Railway Bazaar",
+          "details": {
+            "UPC": "48736df57e7bec9f",
+            "Product Type": "Books",
+            "Price (excl. tax)": "\u00a330.54",
+            "Price (incl. tax)": "\u00a330.54",
+            "Tax": "\u00a30.00",
+            "Availability": "In stock (6 available)",
+            "Number of reviews": "0"
+          }
+        }
+      ]
+    },
+    "verified_table_cells": 18,
+    "frames_received": 84,
+    "elapsed_ui_s": 45.9,
+    "usage": {
+      "type": "usage",
+      "llm_calls": 5,
+      "input_tokens": 76588,
+      "cached_input_tokens": 47275,
+      "output_tokens": 3639,
+      "cost_usd": 0.08689,
+      "fast_calls": 0,
+      "fast_ms_total": 0,
+      "text_calls": 0,
+      "extract_calls": 4,
+      "elapsed_s": 41.8
+    },
+    "refresh_preserved": true,
+    "page_errors": [],
+    "console_errors": []
+  },
+  "form_smoke": {
+    "goal": "On the demo pizza form already open, fill the customer name as Alex Tester, telephone as 202-555-0147, and email as alex@example.test. Choose Medium size, Cheese and Mushroom toppings, delivery time 18:30, and delivery instructions Test order only - do not submit. Leave already-correct controls unchanged. Verify all filled values and summarize them. Stop before Submit order; do not submit or purchase anything.",
+    "result": {
+      "success": true,
+      "summary": "The form is filled in and I stopped before Submit order. I didn't submit anything. The only cheese option on the form is labelled \"Extra Cheese\", so I ticked that for \"Cheese\".",
+      "columns": [
+        "Field",
+        "Value"
+      ],
+      "rows": [
+        {
+          "Field": "Customer name",
+          "Value": "Alex Tester"
+        },
+        {
+          "Field": "Telephone",
+          "Value": "202-555-0147"
+        },
+        {
+          "Field": "E-mail",
+          "Value": "alex@example.test"
+        },
+        {
+          "Field": "Size",
+          "Value": "Medium"
+        },
+        {
+          "Field": "Toppings",
+          "Value": "Extra Cheese, Mushroom"
+        },
+        {
+          "Field": "Delivery time",
+          "Value": "18:30"
+        },
+        {
+          "Field": "Delivery instructions",
+          "Value": "Test order only - do not submit"
+        }
+      ],
+      "sources": [
+        {
+          "title": "Demo pizza form",
+          "url": "https://httpbin.org/forms/post"
+        }
+      ],
+      "issues": [
+        "The form has no plain \"Cheese\" topping, only \"Extra Cheese\", so I selected that."
+      ],
+      "checklist": [
+        {
+          "requirement": "Name, telephone and email filled",
+          "met": true,
+          "evidence": "Input values shown as Alex Tester, 202-555-0147, alex@example.test"
+        },
+        {
+          "requirement": "Medium size, Cheese and Mushroom toppings",
+          "met": true,
+          "evidence": "Medium radio is checked. The Extra Cheese and Mushroom boxes are checked."
+        },
+        {
+          "requirement": "Delivery time 18:30 and instructions",
+          "met": true,
+          "evidence": "The time field shows 18:30 and the textarea has the instruction text."
+        },
+        {
+          "requirement": "Stop before Submit order",
+          "met": true,
+          "evidence": "Submit order was not clicked."
+        }
+      ],
+      "assumptions": [
+        "\"Cheese\" means the \"Extra Cheese\" checkbox, the only cheese option."
+      ],
+      "follow_ups": [],
+      "remember": []
+    },
+    "usage": {
+      "llm_calls": 2,
+      "input_tokens": 20942,
+      "cached_input_tokens": 18910,
+      "output_tokens": 1353,
+      "cost_usd": 0.021376,
+      "fast_calls": 9,
+      "fast_ms_total": 3721,
+      "text_calls": 5,
+      "extract_calls": 0
+    },
+    "fast_steps": [
+      {
+        "action": {
+          "name": "type_text",
+          "args": {
+            "element_id": 1,
+            "text": "Alex Tester",
+            "press_enter": false
+          },
+          "label": "Type \"Alex Tester\" into \"Customer name:\""
+        },
+        "result": "Typed."
+      },
+      {
+        "action": {
+          "name": "type_text",
+          "args": {
+            "element_id": 2,
+            "text": "202-555-0147",
+            "press_enter": false
+          },
+          "label": "Type \"202-555-0147\" into \"Telephone:\""
+        },
+        "result": "Typed."
+      },
+      {
+        "action": {
+          "name": "type_text",
+          "args": {
+            "element_id": 3,
+            "text": "alex@example.test",
+            "press_enter": false
+          },
+          "label": "Type \"alex@example.test\" into \"E-mail address:\""
+        },
+        "result": "Typed."
+      },
+      {
+        "action": {
+          "name": "click",
+          "args": {
+            "element_id": 5
+          },
+          "label": "Click \"Medium\""
+        },
+        "result": "Clicked."
+      },
+      {
+        "action": {
+          "name": "click",
+          "args": {
+            "element_id": 8
+          },
+          "label": "Click \"Extra Cheese\""
+        },
+        "result": "Clicked."
+      },
+      {
+        "action": {
+          "name": "click",
+          "args": {
+            "element_id": 10
+          },
+          "label": "Click \"Mushroom\""
+        },
+        "result": "Clicked."
+      },
+      {
+        "action": {
+          "name": "type_text",
+          "args": {
+            "element_id": 11,
+            "text": "18:30",
+            "press_enter": false
+          },
+          "label": "Type \"18:30\" into \"Preferred delivery time:\""
+        },
+        "result": "Typed."
+      },
+      {
+        "action": {
+          "name": "type_text",
+          "args": {
+            "element_id": 12,
+            "text": "Test order only - do not submit",
+            "press_enter": false
+          },
+          "label": "Type \"Test order only - do not submit\" into \"Delivery instructions:\""
+        },
+        "result": "Typed."
+      },
+      {
+        "action": {
+          "name": "subgoal_done",
+          "args": {},
+          "label": "Subgoal looks complete"
+        },
+        "result": "Jev reports the subgoal is done (100% confident)."
+      }
+    ],
+    "independently_graded": false
+  }
+}

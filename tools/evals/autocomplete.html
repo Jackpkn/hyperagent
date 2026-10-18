@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Route explorer</title>
+<style>
+body {font: 18px system-ui; max-width: 700px; margin: 40px auto; padding: 20px;}
+label {display: block; margin-bottom: 12px;}
+input, button {font: inherit; padding: 10px;}
+[role=option] {display: block; width: 100%; text-align: left; margin: 4px 0;}
+#suggestions {margin: 12px 0;}
+</style>
+<h1>Route explorer</h1>
+<p>Enter a destination, choose a suggestion, then show routes. This is a demonstration; no bookings are made.</p>
+<label for="destination">Destination</label>
+<input id="destination" role="combobox" aria-autocomplete="list" aria-controls="suggestions"
+       aria-expanded="false" autocomplete="off">
+<div id="suggestions" role="listbox" aria-label="Destination suggestions" hidden></div>
+<button id="show" type="button">Show routes</button>
+<p id="message" role="status"></p>
+<section id="results" hidden><h2>Routes</h2><p>Destination: <strong id="result-label"></strong></p></section>
+<script>
+const input = document.getElementById('destination');
+const suggestions = document.getElementById('suggestions');
+const results = document.getElementById('results');
+const resultLabel = document.getElementById('result-label');
+const message = document.getElementById('message');
+const cities = [
+  {code: 'YXU', label: 'London, Ontario, Canada (YXU)'},
+  {code: 'LON', label: 'London, United Kingdom (LON)'},
+  {code: 'LDY', label: 'Londonderry, United Kingdom (LDY)'}
+];
+let selected = null;
+window.evalPending = Promise.resolve();
+const record = event => {
+  window.evalPending = window.evalPending.then(() => window.recordEvalEvent(event));
+};
+function choose(city) {
+  selected = city;
+  input.value = city.label;
+  suggestions.hidden = true;
+  input.setAttribute('aria-expanded', 'false');
+  message.textContent = 'Selected: ' + city.label;
+  record({type: 'selection', code: city.code});
+}
+input.addEventListener('input', () => {
+  selected = null;
+  results.hidden = true;
+  resultLabel.textContent = '';
+  resultLabel.removeAttribute('data-code');
+  message.textContent = '';
+  suggestions.replaceChildren();
+  const query = input.value.trim().toLowerCase();
+  const matches = query ? cities.filter(city => city.label.toLowerCase().includes(query)) : [];
+  for (const city of matches) {
+    const option = document.createElement('button');
+    option.type = 'button';
+    option.setAttribute('role', 'option');
+    option.setAttribute('aria-selected', 'false');
+    option.textContent = city.label;
+    option.addEventListener('click', () => choose(city));
+    suggestions.append(option);
+  }
+  suggestions.hidden = matches.length === 0;
+  input.setAttribute('aria-expanded', String(matches.length > 0));
+  record({type: 'input', value: input.value});
+});
+input.addEventListener('keydown', event => {
+  if (event.key === 'ArrowDown' && !suggestions.hidden) {
+    event.preventDefault();
+    suggestions.firstElementChild?.focus();
+  }
+});
+suggestions.addEventListener('keydown', event => {
+  const options = Array.from(suggestions.children);
+  const index = options.indexOf(document.activeElement);
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault();
+    options[(index + (event.key === 'ArrowDown' ? 1 : -1) + options.length) % options.length]?.focus();
+  }
+});
+document.getElementById('show').addEventListener('click', () => {
+  record({type: 'search', code: selected?.code ?? null});
+  if (!selected) {
+    results.hidden = true;
+    message.textContent = 'Choose a destination from the suggestions first.';
+    return;
+  }
+  resultLabel.textContent = selected.label;
+  resultLabel.dataset.code = selected.code;
+  results.hidden = false;
+  message.textContent = 'Routes loaded.';
+});
+window.readEvalState = () => ({
+  input: input.value, selected_code: selected?.code ?? null,
+  result_code: resultLabel.dataset.code ?? null, result_label: resultLabel.textContent,
+  result_visible: !results.hidden
+});
+</script>
+</html>

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Contact preferences</title>
+<style>
+body {font: 18px system-ui; max-width: 700px; margin: 40px auto; padding: 20px;}
+label {display: block; margin: 16px 0;}
+input, select, button {font: inherit; padding: 8px;}
+fieldset {margin: 18px 0;}
+</style>
+<h1>Contact preferences</h1>
+<p>Check your details before continuing. This page does not submit a purchase.</p>
+<form id="preferences">
+  <label>Name <input name="name" value="Alex Tester"></label>
+  <label>Email <input name="email" type="email"></label>
+  <label>Company <input name="company"></label>
+  <label for="country">Country</label>
+  <select id="country" name="country"><option>Canada</option><option selected>India</option></select>
+  <fieldset><legend>Billing</legend>
+    <label><input name="billing" type="radio" value="Monthly" checked>Monthly</label>
+    <label><input name="billing" type="radio" value="Annual">Annual</label>
+  </fieldset>
+  <label><input name="newsletter" type="checkbox">Newsletter</label>
+  <button type="button" id="review-button">Review details</button>
+</form>
+<section id="review" hidden><h2>Review</h2><dl id="review-values"></dl></section>
+<script>
+const form = document.getElementById('preferences');
+const values = () => ({
+  name: form.elements.name.value, email: form.elements.email.value,
+  company: form.elements.company.value, country: form.elements.country.value,
+  billing: form.elements.billing.value, newsletter: form.elements.newsletter.checked
+});
+window.evalPending = Promise.resolve();
+const record = event => {
+  window.evalPending = window.evalPending.then(() => window.recordEvalEvent(event));
+};
+for (const type of ['click', 'input', 'change', 'submit']) {
+  form.addEventListener(type, event => {
+    if (type === 'submit') event.preventDefault();
+    const control = event.target.closest('input,select,button');
+    if (control) record({type, control: control.name || control.id});
+  });
+}
+document.getElementById('review-button').addEventListener('click', () => {
+  const state = values();
+  const list = document.getElementById('review-values');
+  list.replaceChildren();
+  for (const [key, value] of Object.entries(state)) {
+    const term = document.createElement('dt'), detail = document.createElement('dd');
+    term.textContent = key; detail.textContent = String(value);
+    list.append(term, detail);
+  }
+  document.getElementById('review').hidden = false;
+  record({type: 'review', values: state});
+});
+window.readEvalState = () => ({values: values(), reviewVisible: !document.getElementById('review').hidden});
+</script>
+</html>

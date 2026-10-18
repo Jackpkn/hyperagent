@@ -3,7 +3,7 @@
 A dual-system autonomous browser agent with a transparent, steerable 2-pane operator console.
 
 - **System 2 (Planner LLM — Claude Sonnet / Haiku / OpenRouter)** handles high-level strategy: planning, multi-step navigation, parallel multi-tab reading (`read_urls_parallel`), structured data extraction (`record_findings`), and final report synthesis (`done`).
-- **System 1 ([TypeSafe Jev](https://docs.typesafe.ai/introduction) + Haiku text micro-helper)** executes delegated on-page UI subgoals (`delegate(subgoal)`). It picks an operation (`CLICK`, `TYPE_TEXT`, `SELECT`, `SCROLL_*`, `SUBGOAL_DONE`, `STUCK`) and a typed target element `[id]` in one ~300–500 ms request **without sending screenshots**, saving ~4,000 vision/prompt tokens per UI action.
+- **System 1 ([TypeSafe Jev](https://docs.typesafe.ai/introduction) + Haiku text micro-helper)** executes delegated on-page UI subgoals (`delegate(subgoal)`). It picks an operation (`CLICK`, `TYPE_TEXT`, `SELECT`, `SCROLL_*`, `SUBGOAL_DONE`, `STUCK`) and a typed target element `[id]` **without sending screenshots**. Latency varies by request; the UI's token-savings figure is a heuristic, not a measured comparison.
 
 Give it any natural-language goal. It drives a real Chromium browser, streams every thought and target bounding box live, pauses before irreversible actions, lets you take over or drop a visual pin on the page to steer it mid-run, and finishes with a verified summary, sortable/diffable table, and CSV/JSON/Markdown exports.
 
@@ -18,7 +18,7 @@ Give it any natural-language goal. It drives a real Chromium browser, streams ev
 | **Natural-language goal & follow-ups** | Enter any plain-English goal, optional start URL, model choice, and approval policy. When a run finishes, continue on the **same open browser page** (`Continue here`) or launch a fresh browser (`New browser`). |
 | **Dual-System LLM + Jev orchestration** | When Jev is configured, the Planner prefers focused groups of related UI interactions with known values and a visible stopping condition. Direct tools stay available for isolated actions, ambiguous controls and recovery requiring several decisions. Jev returns an action/skip log; the Planner checks the current page before continuing, extracting or reporting. Recovery uses fresh observations and never automatically replays mutations. Password typing always requires approval. Without Jev, the Planner uses direct tools. |
 | **Token-saving Smart Vision & zero-screenshot System 1** | Live 2.5 fps JPEG frames stream directly to the operator UI over WebSocket (zero LLM tokens). Jev (`system1.py`) runs with `screenshot=False` over compact DOM element labels, and the Planner (`agent.py`) reads the same indexed element list with no screenshots by default (`AGENT_VISION=1` attaches one only after repeated errors or a click that changed nothing). `read_page`/`extract` use `reader.js`, which keeps the main content and drops nav, sidebars, cookie banners and tracking-link noise. Live token savings (`~Xk tok saved`) appear in the top telemetry bar and Final Result report. |
-| **Transparent 2-pane workspace** | **Right pane**: Full-height live browser viewport with animated cursor/bounding-box target highlights (`target-box`) and clickable multi-tab bar. **Left sidebar**: Clean 3-tab layout (`Steps`, `Findings`, `Final Result`) with collapsible thinking/memory drawers, collapsible plan progress, and expandable report view. |
+| **Transparent 2-pane workspace** | A persistent chat sidebar sits beside the task workspace. The left pane offers `Live Stream`, `Findings`, and `Report Only` tabs; the right pane shows the live browser, target highlights, and browser tabs. The launcher groups browser settings behind one control and keeps the goal composer central. |
 | **Visual Time-Travel Scrubber** | Every step captures its browser viewport snapshot. Click any step card (or its **Inspect** pill) in `Steps` to scrub back to the exact screenshot and target highlight from that moment, then click **Back to Live** to return. |
 | **Visual "Point & Steer" Pin** | Click **Pin target** in the browser toolbar (or **Alt+Click** any element on the live viewport) to drop a coordinate pin `(x, y)`. The server resolves the exact underlying DOM element `[id]` via `elementFromPoint` and attaches it to your guidance message. |
 | **Human-in-the-Loop control & Takeover** | **Pause / Resume (`Esc`) / Stop** at any time; pausing or sending guidance immediately invalidates any in-flight LLM decision so stale actions never execute. **Risky action gates**: `submit`, `buy`, `book`, `delete`, `send` (detected by keyword + model/Jev `irreversible` flag) and all `password` fields wait for operator approval. **Interactive Takeover**: click, type, scroll with your mouse wheel/trackpad, or switch tabs directly on the live browser when paused or waiting for input. |
@@ -81,6 +81,15 @@ Give it any natural-language goal. It drives a real Chromium browser, streams ev
 
 ## Verified Runs
 
+For independently graded browser tasks, see [the evaluation suite](docs/evals/README.md). Its first two cases
+check prefilled forms and committed autocomplete selections using actual browser state. Offline tests validate the graders;
+paid live trials are separate and explicit. The older stress runs below use agent-reported success plus
+manual review, not this independent grader.
+
+The latest [submission verification](docs/runs/submission-2026-10-18/README.md) records live fixture trials,
+a real frontend-to-backend catalogue task, source checks, and report persistence after refresh.
+Usage totals currently cover planner/extraction calls; Jev and text-helper costs are not included.
+
 **Stress test on 18 unseen goals** ([details and raw logs](docs/runs/stress-test/README.md)): research, tables, docs lookups, forms, logins, prices, flights, news, and pagination. On Claude Sonnet as planner, 16 of 18 complete end-to-end in 13–60 s; the remaining two end with an explicit partial report when blocked by a bot wall or insufficient upstream results.
 
 **Dual system** (Planner + TypeSafe Jev):
@@ -138,8 +147,8 @@ hyperagent/   agent.py (planner loop + controls + smart vision) · system1.py (J
 apps/web/     Next.js 15 console: AgentApp, Launcher, ControlBar, Timeline, StepCard,
               BrowserView, ApprovalCard, ResultsPanel, ResultReport, DataTable, OperatorModals
 docs/         protocol.md (WebSocket contract) · runs/ (verified run logs & stress tests)
-tests/        50 offline unit, agent, System 1, and real-Chromium integration tests
-tools/        run_task.py live CLI runner
+tests/        offline unit, agent, System 1, console, and real-Chromium eval tests
+tools/        run_task.py live CLI runner · evals/ independent browser outcome graders
 ```
 
 Run the full verification suite (no paid API calls):
