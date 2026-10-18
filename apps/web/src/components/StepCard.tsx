@@ -62,6 +62,7 @@ export function StepCard({ step, now, selected, hasSnapshot, onSelect }: StepCar
   const evaluation = step.thought?.evaluation?.trim() || "";
   const nativeThinking = step.thought?.thinking?.trim() || "";
   const memory = step.thought?.memory?.trim() || "";
+  const narration = step.thought?.message?.trim() || "";
   const showThinking = step.status === "thinking";
   const isFast = step.system === "fast";
   const showEvaluation =
@@ -89,6 +90,9 @@ export function StepCard({ step, now, selected, hasSnapshot, onSelect }: StepCar
       data-status={step.status}
       aria-label={`Step ${step.n}: ${actionLabel || nextGoal || "Thinking"}`}
     >
+      {/* 0. Narration: the agent's plain-language update for the person watching (streams live). */}
+      {narration && !isFast ? <p className="stream-narration">{narration}</p> : null}
+
       {/* 1. Thought row: ○ Thought for Xs (...) */}
       {showThinking ? (
         <div className="stream-line stream-line-thought is-live">

@@ -1093,6 +1093,16 @@
   padding-left: 14px;
 }
 
+/* Plain-language narration between steps, read like a colleague's running update. */
+.stream-narration {
+  margin: 6px 0 2px;
+  padding: 0 6px;
+  font-size: 13.5px;
+  line-height: 1.5;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
 .stream-line {
   display: flex;
   align-items: baseline;

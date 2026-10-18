@@ -41,6 +41,8 @@ export interface Thought {
   evaluation: string;
   memory: string;
   next_goal: string;
+  /** One or two plain sentences of narration for the person watching. */
+  message?: string;
   /** Native model thinking block (e.g. Claude ThinkingBlock.thinking / OpenRouter reasoning). */
   thinking?: string;
 }
@@ -120,6 +122,8 @@ export interface Usage {
   fast_calls?: number;
   fast_ms_total?: number;
   text_calls?: number;
+  /** Page-to-rows calls made by the extract tool (their tokens and cost are included in the totals). */
+  extract_calls?: number;
 }
 
 export interface SourceLink {

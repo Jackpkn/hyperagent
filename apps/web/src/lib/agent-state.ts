@@ -259,6 +259,7 @@ function handleServer(state: AgentState, message: ServerMessage): AgentState {
           fast_calls: message.fast_calls,
           fast_ms_total: message.fast_ms_total,
           text_calls: message.text_calls,
+          extract_calls: message.extract_calls,
         },
       };
     case "result":

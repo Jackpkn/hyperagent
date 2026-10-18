@@ -165,7 +165,8 @@ class MockRun {
       id,
       n: this.stepCounter,
       status: "planned",
-      thought: { evaluation, memory, next_goal: next },
+      // Narration mirrors what the real planner writes: what it learned, then what it does next.
+      thought: { evaluation, memory, next_goal: next, message: `${evaluation} ${next}.`.replace(/\.\.$/, ".") },
       action: { name: action.name, args: action.args ?? {}, label },
       target,
       risk,

@@ -174,6 +174,9 @@ export function ResultReport({
               ? ` · ${(usage.input_tokens + usage.output_tokens).toLocaleString()} tok`
               : ""}
             {usage.cost_usd > 0 ? ` · ${formatCost(usage.cost_usd)}` : ""}
+            {usage.extract_calls
+              ? ` (incl. ${usage.extract_calls} page ${usage.extract_calls === 1 ? "extraction" : "extractions"})`
+              : ""}
           </span>
           {fastCalls > 0 ? (
             <span className="efficiency-item efficiency-highlight">

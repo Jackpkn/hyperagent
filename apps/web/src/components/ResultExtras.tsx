@@ -40,7 +40,7 @@ function pageName(url: string): string {
     if (!last) return hostname.replace(/^www\./, "");
     const words = decodeURIComponent(last)
       .replace(/\.\w+$/, "")
-      .replace(/[_-]\d+$/, "")
+      .replace(/_\d+$/, "") // a trailing "_657" is an id; "page-2" is a real name
       .replace(/[-_+]+/g, " ")
       .trim();
     return words.length > 32 ? `${words.slice(0, 31)}…` : words || hostname;
@@ -59,8 +59,14 @@ export function RunRecap({ steps }: { steps: StepRecord[] }) {
   const start = Math.min(...ordered.map((s) => s.started_at));
   const end = Math.max(...ordered.map((s) => s.ended_at ?? s.started_at));
 
+  // The path follows the tab the agent drove; the count also includes pages read in background tabs.
   const pages: string[] = [];
+  const visited = new Set<string>();
   for (const s of ordered) {
+    const background = s.action?.args?.urls;
+    for (const url of [s.url, ...(Array.isArray(background) ? background : [])]) {
+      if (typeof url === "string" && /^https?:\/\//i.test(url)) visited.add(url.split("#")[0].replace(/\/$/, ""));
+    }
     if (!s.url || !/^https?:\/\//i.test(s.url)) continue;
     const name = pageName(s.url.split("#")[0]);
     if (pages[pages.length - 1] !== name) pages.push(name);
@@ -90,7 +96,7 @@ export function RunRecap({ steps }: { steps: StepRecord[] }) {
           </span>
         ) : null}
         {end > start ? ` · ${formatDuration(end - start)}` : ""}
-        {pages.length > 0 ? ` · ${pages.length} ${pages.length === 1 ? "page" : "pages"}` : ""}
+        {visited.size > 0 ? ` · ${visited.size} ${visited.size === 1 ? "page" : "pages"}` : ""}
       </div>
     </div>
   );
