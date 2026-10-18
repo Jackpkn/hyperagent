@@ -17,7 +17,7 @@ from playwright.async_api import Error as PlaywrightError
 
 from .anthropic_backend import _recover_xml_params
 from .browser import ActionError, BrowserSession, Observation
-from .extract import ExtractMixin, resolve_urls
+from .extract import ExtractMixin, normalize_url, resolve_urls
 from .fast import FastPolicy
 from .llm import Decision, LLMClient, LLMError
 from .prompts import SYSTEM, SYSTEM_FAST, step_context
@@ -27,6 +27,7 @@ from .tools import TOOL_NAMES, TOOLS, TOOLS_WITH_FAST, label, missing_args, need
 Emit = Callable[[dict[str, Any]], Awaitable[None]]
 SEARCH_URL = "https://www.bing.com/search?q={}"
 MAX_CONSECUTIVE_ERRORS = 3
+MAX_CHECKED = 40
 
 
 class Stopped(Exception):
@@ -36,7 +37,7 @@ class Stopped(Exception):
 class Agent(FastLoopMixin, ExtractMixin):
     def __init__(
         self, *, browser: BrowserSession, llm: LLMClient, emit: Emit, goal: str, model: str,
-        approval_mode: str = "risky", max_steps: int = 40, vision: bool = True, search_url: str = SEARCH_URL,
+        approval_mode: str = "risky", max_steps: int = 40, vision: bool = False, search_url: str = SEARCH_URL,
         max_cost_usd: float = 3.0, fast: FastPolicy | None = None, timezone: str | None = None,
         domain_memory: dict[str, list[str]] | None = None, conversation: list[dict[str, Any]] | None = None,
         user_memory: list[str] | None = None,
@@ -56,6 +57,8 @@ class Agent(FastLoopMixin, ExtractMixin):
         self.plan: list[dict[str, str]] = []
         self.history: list[dict[str, Any]] = []
         self.findings: list[dict[str, Any]] = []
+        self.checked: dict[str, str] = {}  # page → what was saved from it, including "nothing"
+        self.extracted: set[tuple[str, frozenset[str]]] = set()  # (page, fields + filter) already run through extract
         self.guidance: list[str] = []
         self.guidance_version = 0
         self.read_output: dict[str, Any] | None = None
@@ -185,17 +188,12 @@ class Agent(FastLoopMixin, ExtractMixin):
                 await self._wake.wait()
 
     def _needs_vision(self) -> bool:
-        """Attach a screenshot only when visual layout changed or a step had trouble."""
-        if not self.vision:
+        """The indexed element list is what the planner acts on, so screenshots stay off by default. With vision
+        enabled, one is attached only when that text failed it: repeated errors or a click that changed nothing."""
+        if not self.vision or not self.history:
             return False
-        if not self.history or self._consecutive_errors > 0:
-            return True
         last = self.history[-1]
-        if last.get("error") or "did not visibly change" in str(last.get("result", "")):
-            return True
-        if last.get("name") in ("record_findings", "read_page", "read_urls_parallel", "type_text", "select_option"):
-            return False
-        return True
+        return self._consecutive_errors >= 2 or "did not visibly change" in str(last.get("result", ""))
 
     def _remember_text(self, text: str) -> None:
         if not text:
@@ -245,6 +243,7 @@ class Agent(FastLoopMixin, ExtractMixin):
             step=self.actions_taken + 1,
             max_steps=self.max_steps, events=events, memory=self.memory, now=local_now(self.timezone),
             domain_notes=domain_notes, conversation=self.conversation, user_memory=self.user_memory,
+            checked=self.checked,
         )
         self.read_output = None
         content: list[dict[str, Any]] = [{"type": "text", "text": context}]
@@ -445,7 +444,7 @@ class Agent(FastLoopMixin, ExtractMixin):
                 return f"Read {self.read_output['length']:,} characters of page text."
             case "read_urls_parallel":
                 raw_urls = args.get("urls") if isinstance(args.get("urls"), list) else []
-                clean_urls = resolve_urls(b.page.url, raw_urls)
+                clean_urls = resolve_urls(b.page.url, raw_urls, limit=4)
                 fresh, skipped = self._split_already_read(clean_urls)
                 note = (f" Skipped {len(skipped)} already saved in findings (re-reading them only repeats what "
                         "findings_saved holds)." if skipped else "")
@@ -530,9 +529,19 @@ class Agent(FastLoopMixin, ExtractMixin):
                 self.findings[partial] = entry  # a richer copy of the same item replaces the partial one
             added += 1
         await self.emit({"type": "findings", "items": self.findings})
+        self._mark_checked(source, f"recorded {added} new row{'s' if added != 1 else ''}" if items
+                           else "checked, nothing on it to record")
         suffix = (f" (⚠ unverified in page text: {', '.join(suspect_fields[:3])})"
                   if suspect_fields else " (✓ verified against page text)")
         return f"Saved {added} new finding{'s' if added != 1 else ''} ({len(self.findings)} total){suffix}."
+
+    def _mark_checked(self, url: str, note: str) -> None:
+        """Remember that a page was covered even when nothing on it qualified, so it is not re-read."""
+        key = normalize_url(url)
+        self.checked.pop(key, None)
+        self.checked[key] = note
+        while len(self.checked) > MAX_CHECKED:
+            self.checked.pop(next(iter(self.checked)))
 
     async def _ask(self, question: str, step: dict[str, Any]) -> str:
         self._question = asyncio.get_running_loop().create_future()

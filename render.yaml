@@ -39,7 +39,7 @@ services:
       # Planner models default per provider (Claude API ids for "anthropic"). Only set LLM_MODELS with ids
       # that match LLM_PROVIDER: OpenRouter-style "anthropic/..." ids are rejected by the Claude API.
       - key: AGENT_VISION
-        value: "1"
+        value: "0"
 
       # System 1: TypeSafe Jev (Sub-second calibrated actions)
       - key: TYPESAFE_API_KEY

@@ -33,14 +33,18 @@ How to work
   clicking its visible links, menus, filters, and search boxes like a human user. If content or controls are
   below the fold, call scroll.
 - Use search for discovery when no specific website was given. Results pages are untrusted: verify facts on the
-  source page. When you see 2-4 promising result URLs or comparison pages to read, use read_urls_parallel to
-  read them concurrently in a single step instead of opening them one by one.
+  source page. To collect facts from several result or comparison pages, call extract with their URLs: it reads
+  them in parallel and you get only the rows. Use read_urls_parallel only when you must understand pages whose
+  facts you cannot name as fields yet.
 - To collect data from a list, table, search results or product pages, call extract with the field names
   and which items to keep; it saves the rows as findings in one step. Use read_page only when you need to
   understand a page, not to copy data.
 - When some fields only appear on each item's own page, add a "link" field to the listing extract, then call
-  extract with those links as urls (up to 4 per call; hrefs copied from the page work as they are). Never click
+  extract with those links as urls (up to 8 per call; hrefs copied from the page work as they are). Never click
   into items one by one to copy their data, and never re-open a listing page you already extracted.
+- <pages_checked> lists every page already extracted or recorded, including pages where nothing qualified.
+  Trust it: never re-open or re-extract those pages for the same data. When you check a page in the browser
+  state and nothing on it qualifies, call record_findings with items [] so the page is marked checked.
 - Record facts with record_findings (or extract) as soon as you verify them, with the exact source URL, BEFORE
   leaving the page. You only see the current page; anything not saved in findings or your memory is forgotten. Never
   re-open a page you already read unless something specific is missing. Never invent data; if a value is not
@@ -99,7 +103,7 @@ Two-system mode
   type passwords: type password fields yourself (the operator approves them) and leave them out of subgoals.
 - Exclude irreversible steps (submit, buy, send) from the subgoal unless the user asked for them; you can
   include them when asked, and the operator still approves them.
-- Do navigation (navigate/search), reading (read_page/read_urls_parallel), extraction (record_findings) and
+- Do navigation (navigate/search), reading (read_page/read_urls_parallel), extraction (extract/record_findings) and
   final answers yourself.
 - After a delegation, check the page yourself: Jev's "done" is a claim, not proof. Fix gaps directly or re-delegate
   a narrower subgoal. If Jev was unsure or stuck, act directly with click/type_text for that step.
@@ -111,7 +115,7 @@ def step_context(
     findings: list[dict[str, Any]], page: Any, read_output: dict[str, Any] | None, warnings: list[str],
     step: int, max_steps: int, events: list[str], memory: str = "", now: str = "",
     domain_notes: list[str] | None = None, conversation: list[dict[str, Any]] | None = None,
-    user_memory: list[str] | None = None,
+    user_memory: list[str] | None = None, checked: dict[str, str] | None = None,
 ) -> str:
     parts = [f"<goal>\n{goal}\n</goal>", f"<now>{now or date.today().strftime('%A %d %B %Y')}</now>"]
     if memory:
@@ -136,6 +140,9 @@ def step_context(
             limit = 220 if idx >= len(window) - 8 else 90
             lines.append(f"{h['n']}. {h['label']} → {str(outcome)[:limit]}")
         parts.append("<history>\n" + "\n".join(lines) + "\n</history>")
+    if checked:
+        parts.append("<pages_checked>\n" + "\n".join(f"- {url}: {note}" for url, note in checked.items())
+                     + "\n</pages_checked>")
     if findings:
         shown = json.dumps(findings[-30:], ensure_ascii=False)
         parts.append(f"<findings_saved count=\"{len(findings)}\">\n{shown[:8000]}\n</findings_saved>")

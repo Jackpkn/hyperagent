@@ -20,6 +20,8 @@ if TYPE_CHECKING:
 
 MAX_FIELDS = 12
 MAX_ROWS = 60
+MAX_URLS = 8
+BATCH = 4  # background tabs open at once
 
 EXTRACT_RULES = """Extract structured rows from the page text the user sends.
 Return a JSON object {"rows": [...]} where every row uses exactly the requested keys.
@@ -38,7 +40,7 @@ def normalize_url(url: str) -> str:
     return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), path, parts.query, ""))
 
 
-def resolve_urls(base: str, urls: list[Any], limit: int = 4) -> list[str]:
+def resolve_urls(base: str, urls: list[Any], limit: int = MAX_URLS) -> list[str]:
     """Hrefs copied from the page are often relative; resolve them against the page they came from.
     Non-http(s) results are passed through so the browser rejects them visibly."""
     return [urljoin(base, str(u).strip()) for u in urls[:limit] if str(u).strip()]
@@ -64,10 +66,20 @@ class ExtractMixin:
         instruction = str(args.get("instruction") or "").strip()[:400]
         raw_urls = args.get("urls") if isinstance(args.get("urls"), list) else []
         urls = resolve_urls(self.browser.page.url, raw_urls)
+        key = frozenset([*(f.lower() for f in fields), "\x00" + " ".join(instruction.lower().split())])
+        targets = urls or [self.browser.page.url]
+        repeats = [u for u in targets if (normalize_url(u), key) in self.extracted]
+        if len(repeats) == len(targets):
+            return ("Already extracted these fields from " + ", ".join(repeats[:4]) + "; the rows are in "
+                    "findings_saved, so nothing was read again. Use them, or extract different fields or pages.")
+        urls = [u for u in urls if u not in repeats]
         if urls:
-            data = await self.browser.read_urls_parallel(urls)
-            pages = [(p["url"], p["text"]) for p in data.get("pages", []) if p.get("length")]
-            unreadable = [p["url"] for p in data.get("pages", []) if not p.get("length")]
+            read: list[dict[str, Any]] = []
+            for start in range(0, len(urls), BATCH):
+                data = await self.browser.read_urls_parallel(urls[start:start + BATCH])
+                read.extend(data.get("pages", []))
+            pages = [(p["url"], p["text"]) for p in read if p.get("length")]
+            unreadable = [p["url"] for p in read if not p.get("length")]
         else:
             data = await self.browser.read_page()
             pages = [(self.browser.page.url, str(data.get("text", "")))]
@@ -90,6 +102,9 @@ class ExtractMixin:
                 continue
             if isinstance(answer, BaseException):
                 raise answer
+            self.extracted.add((normalize_url(url), key))
+            filtered = f", filter: {instruction[:60]}" if instruction else ""
+            self._mark_checked(url, f"extracted {', '.join(fields)}{filtered} → {len(answer)} rows")
             total += len(answer)
             if answer:
                 saved_notes.append(await self._record({"items": answer, "source_url": url}, step))
@@ -103,6 +118,11 @@ class ExtractMixin:
             summary += f" {flags[0]}"
         if failures:
             summary += f". Could not extract from: {', '.join(failures[:4])}"
+        if repeats:
+            summary += f". Skipped {len(repeats)} page(s) already extracted with these fields and filter"
+        skipped = len([u for u in raw_urls if str(u).strip()]) - len(urls) - len(repeats)
+        if skipped > 0:
+            summary += f". Only the first {MAX_URLS} URLs were read; {skipped} skipped, extract them in another call"
         return summary + "."
 
     async def _extract_page(self: Agent, fields: list[str], instruction: str, text: str) -> list[dict[str, str]]:

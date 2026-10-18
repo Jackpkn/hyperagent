@@ -36,36 +36,8 @@ TEXT_BUDGET = 14000
 TIME_SCALE = 1.0  # multiplies every @bounded limit; tests shrink it
 READ_BUDGET = 40000
 
-# Full-page text with link targets, for extraction beyond the viewport.
-READ_PAGE_JS = """(budget) => {
-  const lines = [];
-  const walk = (el) => {
-    for (const n of el.childNodes) {
-      if (n.nodeType === 3) { lines.push(n.textContent); continue; }
-      if (n.nodeType !== 1) continue;
-      if (['SCRIPT','STYLE','NOSCRIPT','TEMPLATE','SVG'].includes(n.tagName.toUpperCase())) continue;
-      if (n.checkVisibility && !n.checkVisibility({checkVisibilityCSS: true})) continue;
-      if (n.tagName === 'A' && n.href && /^https?:/.test(n.href)) {
-        const t = n.innerText.replace(/\\s+/g, ' ').trim();
-        lines.push(t ? ` [${t}](${n.href}) ` : '');
-        continue;
-      }
-      const block = /^(P|DIV|LI|TR|H[1-6]|SECTION|ARTICLE|TABLE|UL|OL|BR|HEADER|FOOTER|DT|DD)$/.test(n.tagName);
-      if (/^H[1-6]$/.test(n.tagName)) lines.push('\\n' + '#'.repeat(+n.tagName[1]) + ' ');
-      else if (block) lines.push('\\n');
-      const cls = typeof n.className === 'string' ? n.className : '';
-      const rating = cls.split(/\\s+/).some(c => /rating/i.test(c) || /^stars?$/i.test(c));
-      if (rating && !n.innerText.trim()) lines.push(` [${cls.trim().slice(0, 60)}] `);
-      if (n.tagName === 'TD' || n.tagName === 'TH') lines.push(' | ');
-      if (n.tagName === 'LI') lines.push('- ');
-      walk(n);
-      if (block) lines.push('\\n');
-    }
-  };
-  walk(document.body);
-  const text = lines.join('').replace(/[ \\t]+/g, ' ').replace(/\\n\\s*\\n+/g, '\\n').trim();
-  return { text: text.slice(0, budget), truncated: text.length > budget, length: text.length };
-}"""
+# Full-page text with link targets and the noise removed, for extraction beyond the viewport.
+READ_PAGE_JS = Path(__file__).with_name("reader.js").read_text()
 
 
 # Native date/time inputs only accept these value formats; typed text is converted to them.

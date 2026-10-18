@@ -193,3 +193,26 @@ async def test_password_field_reports_filled_without_revealing_it(browser):
     await browser.type_text(secret["id"], "hunter2", False, secret_ok=True)
     obs = await browser.observe()
     assert "hunter2" not in obs.text and "filled" in obs.text
+
+
+async def test_read_page_drops_page_chrome_and_compacts_links(browser):
+    tracked = "https://shop.example/ad/click?url=%2Fitem%2F42%3Fcolor%3Dred%26utm_source%3Dx&sig=" + "z" * 80
+    page = f"""<header><a href="https://shop.example/account">Sign in</a></header>
+<nav><a href="https://shop.example/deals">Deals menu</a></nav>
+<div id="cookie-banner">We use cookies</div>
+<main><h1>Results</h1><p>{"Plenty of real listing text. " * 20}</p>
+<ul><li><a href="{tracked}">Red widget</a> $9.99</li><li></li>
+<li><a href="https://shop.example/item/7/ref=sr_1_2?keywords=widget&qid=123">Blue widget</a>
+<a href="https://shop.example/item/7?keywords=widget">Blue widget</a></li></ul>
+<button>Fare $120 Select</button></main>
+<aside>Sponsored sidebar</aside><footer>Copyright footer</footer>"""
+    await browser.navigate("data:text/html," + page.replace("#", "%23"), trusted=True)
+    text = (await browser.read_page())["text"]
+
+    assert "Results" in text and "$9.99" in text and "Fare $120" in text
+    for noise in ("Sign in", "Deals menu", "cookies", "Sponsored sidebar", "Copyright footer", "utm_source", "zzz"):
+        assert noise not in text
+    assert "[Red widget](https://shop.example/item/42?color=red)" in text
+    assert text.count("https://shop.example/item/7?keywords=widget") == 1
+    assert "\n-\n" not in text and not text.endswith("-")
+    assert "$9.99\n\n" in text  # each list item is its own block

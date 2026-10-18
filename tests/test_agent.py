@@ -301,6 +301,34 @@ async def test_extract_over_urls_records_each_source_and_reports_unreadable_page
     assert "Could not extract from: https://a.test/broken" in result
 
 
+async def test_extract_reads_up_to_eight_urls_in_batches_of_four():
+    urls = [f"https://a.test/{i}" for i in range(1, 10)]
+    agent, browser, _ = make([decision("extract", fields=["title"], urls=urls), DONE])
+    agent.llm.json_replies = [{"rows": [{"title": f"t{i}"}]} for i in range(8)]
+    await agent.run()
+    assert browser.calls[:2] == [("read_urls_parallel", *urls[:4]), ("read_urls_parallel", *urls[4:8])]
+    assert len(agent.findings) == 8
+    assert "1 skipped" in [h for h in agent.history if h["n"] == 1][0]["result"]
+
+
+async def test_extract_does_not_reread_pages_already_extracted_with_the_same_fields():
+    first = decision("extract", fields=["title", "price"], urls=["https://a.test/1", "https://a.test/2"])
+    again = decision("extract", fields=["Price", "title"], urls=["https://a.test/1#top", "https://a.test/2"])
+    partly = decision("extract", fields=["title", "price"], urls=["https://a.test/2", "https://a.test/3"])
+    other = decision("extract", fields=["stock"], urls=["https://a.test/1"])
+    refilter = decision("extract", fields=["title", "price"], urls=["https://a.test/1"], instruction="under £5")
+    agent, browser, _ = make([first, again, partly, other, refilter, DONE])
+    agent.llm.json_replies = [{"rows": [{"title": "t", "price": "1", "stock": "2"}]}] * 5
+    await agent.run()
+    reads = [c for c in browser.calls if c[0] == "read_urls_parallel"]
+    assert reads == [("read_urls_parallel", "https://a.test/1", "https://a.test/2"),
+                     ("read_urls_parallel", "https://a.test/3"), ("read_urls_parallel", "https://a.test/1"),
+                     ("read_urls_parallel", "https://a.test/1")]
+    results = {h["n"]: h["result"] for h in agent.history}
+    assert "nothing was read again" in results[2]
+    assert "Skipped 1 page(s) already extracted" in results[3]
+
+
 async def test_extract_model_failure_is_a_visible_step_error():
     agent, _, rec = make([decision("extract", fields=["title"]), DONE])
     agent.llm.json_replies = [LLMError("The extraction model failed (HTTP 500).")]
@@ -384,3 +412,33 @@ async def test_a_close_paraphrase_of_the_users_request_is_remembered():
     agent, _ = make_with([_done(remember=remember)], goal=goal)
     result = await agent.run()
     assert result["remember"] == [remember[0]]
+
+
+def test_planner_gets_screenshots_only_when_the_element_text_failed_it():
+    off, _ = make_with([DONE])
+    off.history = [{"n": 1, "name": "click", "result": "Clicked; the page did not visibly change."}]
+    assert not off._needs_vision()
+
+    agent = Agent(browser=FakeBrowser(), llm=ScriptedLLM([DONE]), emit=Recorder(), goal="Buy the thing",
+                  model="test-model", vision=True)
+    assert not agent._needs_vision()
+    agent.history = [{"n": 1, "name": "navigate", "result": "Opened https://shop.example."}]
+    assert not agent._needs_vision()
+    agent._consecutive_errors = 2
+    assert agent._needs_vision()
+    agent._consecutive_errors = 0
+    agent.history.append({"n": 2, "name": "click", "result": "Clicked; the page did not visibly change."})
+    assert agent._needs_vision()
+
+
+async def test_pages_with_nothing_to_save_are_still_listed_as_checked():
+    browser = FakeBrowser()
+    agent, _, _ = make([decision("record_findings", items=[], source_url="https://shop.test/page-3"),
+                        decision("extract", fields=["title"], urls=["https://shop.test/page-4"]),
+                        decision("wait", seconds=1), DONE], browser=browser)
+    agent.llm.json_replies = [{"rows": []}]
+    await agent.run()
+    context = agent.llm.requests[2]["messages"][1]["content"][0]["text"]
+    assert "<pages_checked>" in context
+    assert "- https://shop.test/page-3: checked, nothing on it to record" in context
+    assert "- https://shop.test/page-4: extracted title → 0 rows" in context

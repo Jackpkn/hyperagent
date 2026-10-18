@@ -72,7 +72,7 @@ def settings() -> dict[str, Any]:
         "max_sessions": int(os.environ.get("MAX_SESSIONS", "3")),
         "start_url": os.environ.get("START_PAGE_URL", "https://www.bing.com/"),
         "search_url": os.environ.get("SEARCH_URL", SEARCH_URL),
-        "vision": os.environ.get("AGENT_VISION", "1") != "0",
+        "vision": os.environ.get("AGENT_VISION", "0") != "0",
         "max_cost_usd": float(os.environ.get("MAX_RUN_COST_USD", "3.0")),
         "idle_close_seconds": int(os.environ.get("IDLE_CLOSE_SECONDS", "300")),
         "max_sockets_per_ip": int(os.environ.get("MAX_SOCKETS_PER_IP", "4")),

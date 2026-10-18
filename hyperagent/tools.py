@@ -108,12 +108,12 @@ TOOLS = [
     _tool("close_tab", "Close the current tab.", {}, []),
     _tool("read_page", "Read the FULL text of the current page including content below the fold and link URLs. "
           "The output is shown to you once, in the next step only, so record what you need right after.", {}, []),
-    _tool("read_urls_parallel", "Open and read 2 to 4 http(s) URLs concurrently in background tabs and return their "
-          "full text in a single step. Ideal when comparing multiple pages, repositories, products, or sources.",
+    _tool("read_urls_parallel", "Open 2 to 4 http(s) URLs in background tabs and show you their full text once. Only "
+          "for understanding pages whose facts you cannot name as fields; to collect data use extract with urls.",
           {"urls": {"type": "array", "maxItems": 4, "items": {"type": "string"},
                     "description": "2 to 4 http(s) URLs to read concurrently."}},
           ["urls"]),
-    _tool("extract", "Pull structured rows from the current page, or from 1-4 http(s) URLs read in parallel, and "
+    _tool("extract", "Pull structured rows from the current page, or from 1-8 http(s) URLs read in parallel, and "
           "save them as findings in one step. A fast extraction model reads the page text, not you: you get a "
           "one-line summary and the rows appear in findings_saved. Prefer this over read_page + record_findings "
           "for lists, tables, search results and product details.",
@@ -121,11 +121,12 @@ TOOLS = [
                       "description": "Column names to fill for every item, e.g. [\"title\", \"price\"]."},
            "instruction": {"type": "string", "description": "Which items to keep, e.g. 'only books rated 4-5 "
                            "stars under £20'. Leave empty to keep every item."},
-           "urls": {"type": "array", "maxItems": 4, "items": {"type": "string"},
+           "urls": {"type": "array", "maxItems": 8, "items": {"type": "string"},
                     "description": "Optional http(s) URLs read from the page; empty means the current page."}},
           ["fields"]),
     _tool("record_findings", "Save structured facts you have verified on the current page. Use flat objects with "
-          "consistent keys across items. Saved findings persist for the rest of the task and feed the final result.",
+          "consistent keys across items. Saved findings persist for the rest of the task and feed the final result. "
+          "Pass items [] to mark a page checked when nothing on it qualifies.",
           {"items": {"type": "array", "items": ROW},
            "source_url": {"type": "string", "description": "URL of the page the facts were read from."}},
           ["items", "source_url"]),
