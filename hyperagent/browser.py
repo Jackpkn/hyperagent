@@ -165,7 +165,11 @@ class BrowserSession:
             else:
                 self.browser = await self.playwright.chromium.launch(
                     headless=os.environ.get("HEADLESS", "1") != "0",
-                    args=["--disable-blink-features=AutomationControlled", "--disable-dev-shm-usage"],
+                    args=[
+                        "--disable-blink-features=AutomationControlled",
+                        "--disable-dev-shm-usage",
+                        "--no-sandbox",
+                    ],
                 )
             ctx_kwargs: dict[str, Any] = {
                 "viewport": VIEWPORT, "user_agent": USER_AGENT, "locale": "en-US", "accept_downloads": False,

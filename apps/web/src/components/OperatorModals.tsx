@@ -51,7 +51,7 @@ export function ProfileModal({ profile, onSave, onClose }: ProfileModalProps) {
 
         <form onSubmit={handleSubmit} className="modal-body">
           <p className="modal-desc">
-            Store reusable non-sensitive details once so the agent and Jev can fill forms (name,
+            Store reusable non-sensitive details once so the agent can fill forms (name,
             email, address, preferences) automatically without re-typing them in every prompt. Never
             enter passwords or card numbers here.
           </p>

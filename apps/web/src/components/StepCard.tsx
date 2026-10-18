@@ -157,7 +157,7 @@ export function StepCard({ step, now, selected, hasSnapshot, onSelect }: StepCar
             {step.status === "running" || step.status === "awaiting_approval" ? "○" : "●"}
           </span>
           <div className="stream-action-main">
-            {isFast ? <span className="stream-fast-tag">⚡ Jev</span> : null}
+            {isFast ? <span className="stream-fast-tag">⚡ Fast</span> : null}
             <span className="stream-action-title">{actionLabel || status.label}</span>
             {inlineDetail ? (
               <span className="stream-action-detail"> ({inlineDetail})</span>

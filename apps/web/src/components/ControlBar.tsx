@@ -203,11 +203,11 @@ export function ControlBar(props: ControlBarProps) {
               {usage?.fast_calls ? (
                 <span
                   className="telemetry-chip telemetry-fast"
-                  title={`Jev (System 1) executed ${usage.fast_calls} calibrated UI actions without screenshots or frontier LLM turns (~${(usage.fast_calls * 4000).toLocaleString()} tokens saved)`}
+                  title={`Fast Executor (System 1) ran ${usage.fast_calls} calibrated UI actions without frontier LLM turns (~${(usage.fast_calls * 4000).toLocaleString()} tokens saved)`}
                 >
                   <Zap size={13} aria-hidden="true" />
                   <strong>
-                    {usage.fast_calls} Jev · ~{Math.round(usage.fast_calls * 4)}k tok saved ·{" "}
+                    {usage.fast_calls} Fast · ~{Math.round(usage.fast_calls * 4)}k tok saved ·{" "}
                     {Math.round((usage.fast_ms_total ?? 0) / usage.fast_calls)}ms
                   </strong>
                 </span>

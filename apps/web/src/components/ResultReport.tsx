@@ -161,7 +161,7 @@ export function ResultReport({
           {fastCalls > 0 ? (
             <span className="efficiency-item efficiency-highlight">
               <Zap size={12} aria-hidden="true" />
-              <strong>Jev (System 1):</strong> {fastCalls}{" "}
+              <strong>Fast (System 1):</strong> {fastCalls}{" "}
               {fastCalls === 1 ? "action" : "actions"} ({avgFastMs}ms avg) ·{" "}
               <strong>~{estTokensSaved.toLocaleString()} tokens saved</strong> (no screenshots)
             </span>

@@ -57,7 +57,6 @@ export function Launcher({
   connected,
   models,
   defaultModel,
-  fastModel,
   persistSession,
   hasSavedSession,
   hasProfileData,
@@ -87,13 +86,9 @@ export function Launcher({
       <div className="launch-hero">
         <div className="launch-badge">
           <Sparkles size={13} aria-hidden="true" />
-          <span>Dual-System Browser Operator</span>
-          {fastModel ? (
-            <span className="launch-badge-fast">
-              <Zap size={11} aria-hidden="true" />
-              Jev {fastModel}
-            </span>
-          ) : null}
+          <span>Autonomous Browser Operator</span>
+          <span className="launch-badge-dot" aria-hidden="true" />
+          <span className="launch-badge-sub">Live Multimodal Execution</span>
         </div>
         <h1 id="launch-title" className="launch-title">
           What should the agent <em>get done</em> in the browser?
@@ -242,6 +237,47 @@ export function Launcher({
           </p>
         ) : null}
       </form>
+
+      <section className="starter-presets" aria-labelledby="starter-presets-heading">
+        <div className="starter-presets-header">
+          <Compass size={13} className="starter-presets-icon" aria-hidden="true" />
+          <span id="starter-presets-heading">One-Click Showcase Workflows</span>
+        </div>
+        <div className="starter-grid">
+          {PRESET_TASKS.map((preset) => {
+            const isSelected = goal.trim() === preset.goal.trim();
+            let domain = "";
+            try {
+              domain = new URL(preset.startUrl).hostname.replace(/^www\./, "");
+            } catch {
+              domain = preset.startUrl;
+            }
+            return (
+              <button
+                key={preset.title}
+                type="button"
+                className={`starter-card${isSelected ? " is-selected" : ""}`}
+                onClick={() => {
+                  setGoal(preset.goal);
+                  setStartUrl(preset.startUrl);
+                  setShowUrlInput(true);
+                }}
+                title={`Load workflow: ${preset.title}`}
+              >
+                <div className="starter-card-top">
+                  <span className="starter-tag">{preset.badge}</span>
+                  <div className="starter-meta">
+                    <span className="starter-domain">{domain}</span>
+                    <ArrowUpRight size={12} className="starter-arrow" aria-hidden="true" />
+                  </div>
+                </div>
+                <h3 className="starter-card-title">{preset.title}</h3>
+                <p className="starter-card-desc">{preset.summary}</p>
+              </button>
+            );
+          })}
+        </div>
+      </section>
 
       <fieldset className="mode-group" aria-label="Approval policy">
         <legend className="sr-only">How much should the agent check with you?</legend>

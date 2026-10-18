@@ -406,6 +406,7 @@ app = FastAPI(title="HyperAgent", version="0.2.0", lifespan=lifespan)
 
 
 @app.get("/api/health")
+@app.get("/healthz")
 async def health() -> dict[str, Any]:
     return {"status": "ok", "model_configured": bool(LLM.config.api_key), "fast_configured": FAST is not None}
 

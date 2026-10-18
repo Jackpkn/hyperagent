@@ -1,0 +1,32 @@
+# Render Blueprint Specification (Official)
+# https://render.com/docs/blueprint-spec
+services:
+  - type: web
+    name: hyperagent
+    runtime: docker
+    region: oregon
+    # 'starter' plan (1 CPU / 1GB RAM) is recommended to ensure Chromium runs smoothly
+    # without running out of memory. If using 'free', ensure single-tab browsing.
+    plan: starter
+    branch: main
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: HEADLESS
+        value: "1"
+      # Model credentials - managed securely via Render Dashboard
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: LLM_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: TEXT_MODEL_BASE_URL
+        sync: false
+      - key: ALLOWED_ORIGINS
+        value: "*"
