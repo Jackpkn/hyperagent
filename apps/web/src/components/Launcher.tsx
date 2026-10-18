@@ -3,8 +3,10 @@
 import { useState } from "react";
 import {
   ArrowRight,
+  ArrowUpRight,
   BookmarkCheck,
   Bot,
+  Compass,
   Globe,
   History,
   ShieldAlert,
@@ -31,6 +33,38 @@ interface LauncherProps {
   onOpenHistory: () => void;
   onStart: (options: StartOptions) => boolean;
 }
+
+interface PresetTask {
+  readonly title: string;
+  readonly badge: string;
+  readonly startUrl: string;
+  readonly summary: string;
+  readonly goal: string;
+}
+
+const PRESET_TASKS: readonly PresetTask[] = [
+  {
+    title: "Product Specs & Price Matrix",
+    badge: "Research",
+    startUrl: "https://www.rtings.com/headphones",
+    summary: "Extract ANC score, battery life, comfort rating, and price into a verified matrix.",
+    goal: "Navigate to RTINGS or Wirecutter, research the top 3 wireless noise-cancelling headphones currently recommended, extract their active noise isolation score, tested battery life, and price into a comparison matrix with source citations.",
+  },
+  {
+    title: "Catalog Filter & Extraction",
+    badge: "Workflow",
+    startUrl: "https://books.toscrape.com",
+    summary: "Filter Fiction books with 4+ stars under £20, extracting titles, star ratings, and stock counts.",
+    goal: "Navigate to Books to Scrape, filter for Fiction books that have a 4 or 5-star rating priced under £20. Extract title, star rating, price, and in-stock count for each, normalizing the data into a clean table.",
+  },
+  {
+    title: "AI Sentiment & Consensus Brief",
+    badge: "Synthesis",
+    startUrl: "https://news.ycombinator.com",
+    summary: "Scan top trending AI discussions, extract key technical arguments, and synthesize an executive brief.",
+    goal: "Scan today's top stories on Hacker News for the highest-voted AI or LLM discussions. Read the discussion threads, summarize the dominant community consensus and criticisms, and compile a structured executive brief with links.",
+  },
+];
 
 const MODES: { value: ApprovalMode; label: string; short: string; detail: string }[] = [
   {
