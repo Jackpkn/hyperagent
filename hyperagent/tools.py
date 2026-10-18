@@ -189,7 +189,9 @@ def missing_args(name: str, args: dict[str, Any]) -> list[str]:
 MUTATING = {"search", "navigate", "click", "type_text", "select_option", "press_key", "go_back", "close_tab"}
 RISKY_WORDS = re.compile(
     r"\b(submit|buy|purchase|pay|order|checkout|check out|place|confirm|delete|remove|send|book|reserve|"
-    r"subscribe|sign ?up|register|publish|post|transfer|apply|donate|unsubscribe|cancel (?:my )?(?:account|order))\b",
+    r"subscribe|sign ?up|register|publish|post|transfer|donate|unsubscribe|cancel (?:my )?(?:account|order)|"
+    # "Apply" commits an application, not a search filter ("Apply Anker filter to narrow results").
+    r"apply(?!.{0,40}\b(?:filters?|sort(?:ing)?|refinements?)\b))\b",
     re.I,
 )
 

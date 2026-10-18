@@ -19,7 +19,9 @@ export type ConnectionState = "connecting" | "open" | "reconnecting" | "closed";
 export type FeedItem =
   | { kind: "step"; key: string; stepId: string }
   | { kind: "notice"; key: string; level: NoticeLevel; message: string }
-  | { kind: "guidance"; key: string; text: string };
+  | { kind: "guidance"; key: string; text: string }
+  /** A plan item just finished, shown in the stream at the moment it happened. */
+  | { kind: "milestone"; key: string; index: number; total: number; text: string };
 
 export interface AgentState {
   connection: ConnectionState;
@@ -146,6 +148,15 @@ function handleStatus(
   };
 }
 
+// Items that became done since the previous plan each get a line in the stream.
+function planMilestones(state: AgentState, before: PlanItem[], after: PlanItem[]): AgentState {
+  return after.reduce((acc, item, index) => {
+    const was = before[index];
+    if (item.status !== "done" || (was?.status === "done" && was.text === item.text)) return acc;
+    return appendFeed(acc, (key) => ({ kind: "milestone", key, index: index + 1, total: after.length, text: item.text }));
+  }, state);
+}
+
 function handleServer(state: AgentState, message: ServerMessage): AgentState {
   switch (message.type) {
     case "hello":
@@ -185,7 +196,7 @@ function handleServer(state: AgentState, message: ServerMessage): AgentState {
     case "step":
       return handleStep(state, message);
     case "plan":
-      return { ...state, plan: message.items };
+      return planMilestones({ ...state, plan: message.items }, state.plan, message.items);
     case "findings":
       return { ...state, findings: message.items };
     case "approval":
@@ -253,6 +264,10 @@ function handleServer(state: AgentState, message: ServerMessage): AgentState {
           extract_calls: message.extract_calls,
         },
       };
+    case "attached":
+      return { ...state, mode: message.approval_mode };
+    case "attach_failed":
+      return appendFeed(state, (key) => ({ kind: "notice", key, level: "warn", message: message.message }));
     case "result":
       return {
         ...state,

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import * as Tabs from "@radix-ui/react-tabs";
 import {
   Database,
@@ -211,10 +211,14 @@ export function AgentApp() {
     : selectedStepId
       ? state.steps.find((s) => s.id === selectedStepId) ?? null
       : null;
+  const stepFrames = useMemo(
+    () => ({ ...chats.liveSavedFrames, ...state.stepFrames }),
+    [chats.liveSavedFrames, state.stepFrames],
+  );
   const selectedStepFrame = pastSelected
     ? stored.pastFrame
     : selectedStep
-      ? state.stepFrames[selectedStep.id] ?? null
+      ? stepFrames[selectedStep.id] ?? null
       : null;
 
   // Find the best step to highlight on the live browser:
@@ -440,7 +444,7 @@ export function AgentApp() {
                   fastModel={state.session?.fast_model}
                   finished={finished}
                   endedWithoutResult={endedWithoutResult}
-                  stepFrames={state.stepFrames}
+                  stepFrames={stepFrames}
                   selectedStepId={selectedStepId}
                   now={now}
                   onSelectStep={setSelectedStepId}

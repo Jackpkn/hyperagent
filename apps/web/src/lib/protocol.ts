@@ -188,6 +188,8 @@ export interface Hello {
   /** TypeSafe model used for System 1, or null when the fast policy is not configured. */
   fast_model?: string | null;
   has_saved_session?: boolean;
+  /** Secret for re-attaching to this session's run after a reload; keep it in this tab only. */
+  resume_token?: string;
 }
 
 export interface StatusMessage {
@@ -209,7 +211,10 @@ export type ServerMessage =
   | ({ type: "question" } & Question)
   | { type: "notice"; level: NoticeLevel; message: string }
   | ({ type: "usage" } & Usage)
-  | ({ type: "result" } & RunResult);
+  | ({ type: "result" } & RunResult)
+  /** Re-attached to a run after a reload; the run's messages so far follow, then live ones. */
+  | { type: "attached"; goal: string; running: boolean; approval_mode: ApprovalMode }
+  | { type: "attach_failed"; message: string };
 
 // Client -> server
 
@@ -242,7 +247,8 @@ export type ClientMessage =
   | { type: "takeover_scroll"; dy: number }
   | { type: "takeover_tab"; tab_index: number }
   | { type: "save_session" }
-  | { type: "clear_session" };
+  | { type: "clear_session" }
+  | { type: "attach"; token: string };
 
 const RUN_STATES: readonly RunState[] = [
   "idle",
@@ -290,6 +296,8 @@ export function parseServerMessage(raw: string): ServerMessage | null {
     case "notice":
     case "usage":
     case "result":
+    case "attached":
+    case "attach_failed":
       if (data.type === "status" && !isRunState(data.state)) return null;
       if (data.type === "step" && (typeof data.id !== "string" || typeof data.n !== "number")) {
         return null;

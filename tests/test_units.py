@@ -176,3 +176,10 @@ def test_start_command_bounds_conversation_and_memory():
         Command.model_validate({"type": "start", "goal": "x", "user_memory": ["m" * 300]})
     with pytest.raises(ValidationError):
         Command.model_validate({"type": "start", "goal": "x", "conversation": [{"goal": "g"}] * 13})
+
+
+def test_search_filters_named_apply_do_not_need_approval_but_applications_do():
+    assert not needs_approval("click", {}, "Apply Anker filter to narrow results", "risky")[0]
+    assert not needs_approval("click", {}, "Apply filters", "risky")[0]
+    assert needs_approval("click", {}, "Apply now", "risky")[0]
+    assert needs_approval("click", {}, "Apply for this job", "risky")[0]
