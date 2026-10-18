@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from copy import deepcopy
 from typing import Any
 
 REASONING = {
@@ -164,17 +165,31 @@ TOOLS = [
 ]
 DELEGATE = _tool(
     "delegate",
-    "Hand a concrete on-page UI subgoal to Jev, the fast System 1 policy (~0.3 s per action). Jev clicks, types, "
-    "selects and scrolls on the CURRENT page until it judges the subgoal done, gets stuck, or is unsure, then "
-    "returns control to you with a log of what it did. Use it for multi-step form filling, menus, filters, "
-    "date pickers and clicking through to a result. Jev cannot open URLs, read/extract data or ask questions.",
-    {"subgoal": {"type": "string", "description": "One concrete, checkable UI subgoal with every value Jev needs, "
-                 "e.g. 'Fill name Ada Lovelace, phone 555-0100, choose Large size, tick Bacon and Mushroom'."}},
+    "Give Jev a complete bounded UI interaction sequence with all known values and an observable stopping "
+    "condition. It clicks, types, selects and scrolls through menus, dates, filters, suggestions and page "
+    "transitions, observing after each action. It returns an action/skip log when done, stuck or unsure. "
+    "Its completion claim must be checked on the page. It cannot open URLs, extract data or ask questions.",
+    {"subgoal": {"type": "string", "description": "The complete interaction sequence, every known field value "
+                 "and choice, and the visible page state at which Jev should stop. Exclude password typing."}},
     ["subgoal"],
 )
-TOOLS_WITH_FAST = [*TOOLS[:-1], DELEGATE, TOOLS[-1]]
-TOOL_NAMES = {t["function"]["name"] for t in TOOLS_WITH_FAST}
-_REQUIRED = {t["function"]["name"]: t["function"]["parameters"]["required"] for t in TOOLS_WITH_FAST}
+ROUTINE_UI = {"click", "type_text", "select_option", "scroll"}
+TOOLS_WITH_FAST = [t for t in TOOLS[:-1] if t["function"]["name"] not in ROUTINE_UI] + [DELEGATE, TOOLS[-1]]
+TOOL_NAMES = {t["function"]["name"] for t in [*TOOLS, DELEGATE]}
+_REQUIRED = {t["function"]["name"]: t["function"]["parameters"]["required"] for t in [*TOOLS, DELEGATE]}
+
+
+def planner_tools(*, fast: bool, recovery: bool, password_ids: list[int]) -> list[dict]:
+    if not fast:
+        return TOOLS
+    if recovery:
+        return [*TOOLS[:-1], DELEGATE, TOOLS[-1]]
+    if not password_ids:
+        return TOOLS_WITH_FAST
+    password = deepcopy(next(t for t in TOOLS if t["function"]["name"] == "type_text"))
+    password["function"]["description"] = "Type into an observed password field; always requires operator approval."
+    password["function"]["parameters"]["properties"]["element_id"]["enum"] = password_ids
+    return [*TOOLS_WITH_FAST, password]
 _REASONING_KEYS = set(REASONING) | set(RISK_FIELDS)
 # Asked of the model, but a finished run is never thrown away for leaving it out.
 _LENIENT_KEYS = {"checklist"}

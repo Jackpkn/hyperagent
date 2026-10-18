@@ -159,8 +159,8 @@ def test_tool_schemas_stay_compact():
 
     from hyperagent.tools import TOOLS_WITH_FAST
     assert len(json.dumps(TOOLS_WITH_FAST)) < 18000
-    click = next(t for t in TOOLS_WITH_FAST if t["function"]["name"] == "click")
-    assert "description" not in click["function"]["parameters"]["properties"]["memory"]
+    delegate = next(t for t in TOOLS_WITH_FAST if t["function"]["name"] == "delegate")
+    assert "description" not in delegate["function"]["parameters"]["properties"]["memory"]
 
 
 def test_start_command_bounds_conversation_and_memory():

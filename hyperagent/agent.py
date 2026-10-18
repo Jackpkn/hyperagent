@@ -22,7 +22,7 @@ from .fast import FastPolicy
 from .llm import Decision, LLMClient, LLMError
 from .prompts import SYSTEM, SYSTEM_FAST, step_context
 from .system1 import FastLoopMixin
-from .tools import TOOL_NAMES, TOOLS, TOOLS_WITH_FAST, label, missing_args, needs_approval
+from .tools import ROUTINE_UI, TOOL_NAMES, TOOLS, label, missing_args, needs_approval, planner_tools
 
 Emit = Callable[[dict[str, Any]], Awaitable[None]]
 SEARCH_URL = "https://www.bing.com/search?q={}"
@@ -51,7 +51,7 @@ class Agent(FastLoopMixin, ExtractMixin):
         self.conversation = conversation or []  # earlier turns of this chat, summarised by the console
         self.user_memory = user_memory or []  # facts the operator asked to be remembered across chats
         self.fast = fast if fast and fast.config.enabled else None
-        self.tools = TOOLS_WITH_FAST if self.fast else TOOLS
+        self._planner_recovery = False
         self.system_prompt = SYSTEM + (SYSTEM_FAST if self.fast else "")
         self.detached = False  # the operator's socket closed; skip anything that only serves them
         self.plan: list[dict[str, str]] = []
@@ -85,6 +85,7 @@ class Agent(FastLoopMixin, ExtractMixin):
     async def pause(self) -> None:
         if not self.paused and not self.stopped:
             self.paused = True
+            self.guidance_version += 1  # a quick pause/resume must still invalidate pending decisions
             await self.notice("info", "Pausing. I'll finish the current action, then wait for you.")
             if self.state in ("thinking", "running", "acting", "awaiting_approval", "awaiting_user", "starting"):
                 return
@@ -231,7 +232,10 @@ class Agent(FastLoopMixin, ExtractMixin):
             step.update(status="skipped", result=why, ended_at=time.time())
             await self.send_step(step)
             return
-        await self._handle(step, decision, page)
+        recovery, self._planner_recovery = self._planner_recovery, False
+        await self._handle(step, decision, page, recovery=recovery, version=version)
+        if recovery and step["status"] == "skipped" and (self.paused or self.guidance_version != version):
+            self._planner_recovery = True
 
     async def _decide(self, page: Observation, step: dict[str, Any] | None = None) -> Decision | None:
         events, self.browser.events = self.browser.events, []
@@ -250,6 +254,11 @@ class Agent(FastLoopMixin, ExtractMixin):
         if page.screenshot:
             content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{page.screenshot}"}})
         messages = [{"role": "system", "content": self.system_prompt}, {"role": "user", "content": content}]
+        tools = planner_tools(fast=bool(self.fast), recovery=self._planner_recovery,
+                              password_ids=[e["id"] for e in page.elements.values() if e.get("type") == "password"])
+        if self._planner_recovery:
+            content[0]["text"] += ("\nJev could not proceed. This decision has direct UI tools for one explicit "
+                                    "recovery action on the current observation. Normal delegation resumes next turn.")
         last_delta_at = 0.0
 
         async def _on_delta(partial: dict[str, str]) -> None:
@@ -264,7 +273,7 @@ class Agent(FastLoopMixin, ExtractMixin):
             await self.send_step(step)
 
         call = asyncio.create_task(
-            self.llm.decide(self.model, messages, self.tools, on_retry=self._retry_notice, on_delta=_on_delta)
+            self.llm.decide(self.model, messages, tools, on_retry=self._retry_notice, on_delta=_on_delta)
         )
         stop_watch = asyncio.create_task(self._until_stopped())
         try:
@@ -298,7 +307,8 @@ class Agent(FastLoopMixin, ExtractMixin):
         self.usage["output_tokens"] += d.output_tokens
         self.usage["cost_usd"] += d.cost_usd
 
-    async def _handle(self, step: dict[str, Any], d: Decision, page: Observation) -> None:
+    async def _handle(self, step: dict[str, Any], d: Decision, page: Observation, *,
+                      recovery: bool = False, version: int | None = None) -> None:
         await self.send_usage()
         args = _recover_xml_params(d.args)
         if d.name not in TOOL_NAMES:
@@ -331,6 +341,12 @@ class Agent(FastLoopMixin, ExtractMixin):
                 return
         shown = {**args, "text": "••••••••"} if secret else args
         step.update(thought=_thought(args, d.thinking), action=_action(d.name, shown, target_label), status="planned")
+        if self.fast and d.name in ROUTINE_UI and not recovery and not secret:
+            await self._fail_step(step, "Routine UI actions must use delegate; this decision has no direct UI "
+                                       "recovery permission. Nothing was executed.")
+            return
+        if await self._discard_interrupted(step, version):
+            return
         risky, reason = needs_approval(d.name, args, target_label, self.approval_mode)
         if secret:
             # Credentials are always the operator's call, whatever the approval mode; the value is never displayed.
@@ -344,7 +360,15 @@ class Agent(FastLoopMixin, ExtractMixin):
             step.update(status="skipped", result="Stopped before acting.", ended_at=time.time())
             await self.send_step(step)
             raise Stopped()
-        await self._execute(step, d.name, args)
+        await self._execute(step, d.name, args, version=version)
+
+    async def _discard_interrupted(self, step: dict[str, Any], version: int | None) -> bool:
+        if self.stopped or self.paused or (version is not None and version != self.guidance_version):
+            step.update(status="skipped", result="Discarded because the operator interrupted the decision.",
+                        ended_at=time.time())
+            await self.send_step(step)
+            return True
+        return False
 
     async def _approve(self, step: dict[str, Any], reason: str) -> bool:
         fut: asyncio.Future = asyncio.get_running_loop().create_future()
@@ -377,12 +401,15 @@ class Agent(FastLoopMixin, ExtractMixin):
             return False
         return True
 
-    async def _execute(self, step: dict[str, Any], name: str, args: dict[str, Any]) -> None:
+    async def _execute(self, step: dict[str, Any], name: str, args: dict[str, Any], *,
+                       version: int | None = None) -> None:
         step["status"] = "running"
         await self.send_step(step)
         await self.set_state("acting", step["action"]["label"])
         if step.get("target") and getattr(self.browser, "on_frame", None) is not None:
             await asyncio.sleep(0.22)
+        if await self._discard_interrupted(step, version):
+            return
         try:
             result = await self._run_tool(name, args, step)
         except ActionError as exc:

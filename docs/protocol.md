@@ -60,6 +60,19 @@ A complete step record; sent when created and whenever it changes (same `id`, re
 }
 ```
 
+With Jev configured, ordinary UI work uses `delegate`; the planner retains navigation, reading, extraction,
+questions, keyboard and tab operations. Direct password typing is limited to observed password fields and
+always waits for approval. An unoffered direct UI action produces a planner `step` with `status: "error"`
+without executing a browser mutation.
+
+Each delegated action uses the existing `system: "fast"` and `parent` fields. A field already holding the
+requested text produces `status: "skipped"`, enters Jev's recent-action context, and does not count as a
+browser mutation. Jev continues the remaining subgoal; repeated unchanged attempts return control visibly
+without automatically pausing. Errors, stuck/unsure decisions, unchanged-state limits and subgoal budgets
+allow one explicit planner recovery decision on a fresh observation. Completion, rejection and interruption
+do not grant recovery. A decision discarded after pause or new guidance does not consume that opportunity.
+Jev's completion step remains a claim for the planner to check against the current page.
+
 ### `plan`
 `{ type, items: { text: string, status: "pending" | "active" | "done" | "skipped" }[] }`: the agent's own evolving plan.
 
