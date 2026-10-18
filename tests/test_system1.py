@@ -119,7 +119,7 @@ async def test_interruption_during_fast_decision_discards_it_and_returns_to_plan
     gate.set()
     await task
     assert browser.calls == [] and "new guidance arrived" in rec.last_step("s1")["result"]
-    assert "click" not in offered(agent, 1)
+    assert "click" in offered(agent, 1)
 
 
 async def test_fast_failure_and_no_change_hand_back():
@@ -179,17 +179,16 @@ def offered(agent, turn=0):
 
 
 @pytest.mark.parametrize("configured", [True, False])
-async def test_planner_routes_routine_ui_to_configured_jev(configured):
+async def test_planner_keeps_direct_ui_available_with_optional_jev(configured):
     agent, browser, rec = make([], [decision("click", element_id=1), DONE], mode="never", configured=configured)
     await agent.run()
     routine = {"click", "type_text", "select_option", "scroll"}
-    assert routine.isdisjoint(offered(agent)) if configured else routine <= offered(agent)
+    assert routine <= offered(agent)
     assert ("delegate" in offered(agent)) == configured
     assert {"navigate", "search", "press_key", "go_back", "switch_tab", "close_tab", "read_page",
             "extract", "record_findings", "ask_user", "done"} <= offered(agent)
-    assert browser.calls == ([] if configured else [("click", 1)])
-    if configured:
-        assert rec.last_step("s1")["status"] == "error"
+    assert browser.calls == [("click", 1)]
+    assert rec.last_step("s1")["status"] == "ok"
 
 
 class FormBrowser(FakeBrowser):
@@ -257,39 +256,37 @@ async def test_repeated_noop_fields_hand_back_visibly_without_pausing():
 
 
 @pytest.mark.parametrize("inability", [FastError("unavailable"), fast("STUCK"), fast("CLICK", 2, confidence=0.2)])
-async def test_jev_inability_grants_exactly_one_explicit_recovery_decision(inability):
+async def test_jev_inability_allows_multiple_explicit_recovery_decisions(inability):
     agent, browser, rec = make([inability], [decision("delegate", subgoal="Continue"),
                               decision("click", element_id=1), decision("click", element_id=1), DONE], mode="never")
     await agent.run()
-    assert "click" not in offered(agent, 0)
+    assert "click" in offered(agent, 0)
     assert "click" in offered(agent, 1)
-    assert "click" not in offered(agent, 2)
-    assert browser.calls == [("click", 1)]
-    assert any(s["status"] == "error" for s in rec.of("step") if s.get("system") == "planner")
+    assert "click" in offered(agent, 2)
+    assert browser.calls == [("click", 1), ("click", 1)]
+    assert not any(s["status"] == "error" for s in rec.of("step") if s.get("system") == "planner")
 
 
-async def test_successful_jev_handback_does_not_grant_direct_recovery():
+async def test_successful_jev_handback_keeps_direct_actions_available():
     agent, browser, rec = make([fast("SUBGOAL_DONE")], [decision("delegate", subgoal="Check fields"),
                               decision("click", element_id=1), DONE], mode="never")
     await agent.run()
-    assert "click" not in offered(agent, 1)
-    assert browser.calls == []
+    assert "click" in offered(agent, 1)
+    assert browser.calls == [("click", 1)]
 
 
-async def test_password_tool_is_limited_to_observed_passwords_and_requires_approval():
+async def test_direct_password_typing_still_requires_approval_with_jev():
     agent, browser, rec = make([], [decision("type_text", element_id=3, text="secret", press_enter=False),
                               decision("type_text", element_id=1, text="ordinary", press_enter=False,
                                        secret=True), DONE], browser=FormBrowser(password=True), mode="never")
     task = asyncio.create_task(agent.run())
     await wait_for(lambda: rec.of("approval"))
     assert browser.calls == []
-    tool = next(t["function"] for t in agent.llm.requests[0]["tools"] if t["function"]["name"] == "type_text")
-    assert tool["parameters"]["properties"]["element_id"]["enum"] == [3]
     assert "secret" not in str(rec.of("approval")[0]["args"])
     agent.resolve_approval(rec.of("approval")[0]["step_id"], True)
     await task
-    assert browser.calls == [("type_text", 3, "secret", False)]
-    assert rec.last_step("s2")["status"] == "error"
+    assert browser.calls == [("type_text", 3, "secret", False), ("type_text", 1, "ordinary", False)]
+    assert len(rec.of("approval")) == 1
 
 
 @pytest.mark.parametrize("interrupt", ["guide", "pause"])
@@ -314,10 +311,10 @@ async def test_interrupt_during_text_helper_discards_pending_fast_action(interru
     await task
     assert browser.calls == []
     assert rec.last_step("s2")["status"] == "skipped"
-    assert "click" not in offered(agent, 1)
+    assert "click" in offered(agent, 1)
 
 
-async def test_discarded_recovery_decision_keeps_single_opportunity():
+async def test_guidance_discards_recovery_action_without_limiting_later_actions():
     gate = asyncio.Event()
     agent, browser, rec = make([fast("STUCK")], [decision("delegate", subgoal="Continue"), gate,
                               decision("click", element_id=2), decision("click", element_id=1),
@@ -328,8 +325,8 @@ async def test_discarded_recovery_decision_keeps_single_opportunity():
     gate.set()
     await task
     assert "click" in offered(agent, 1) and "click" in offered(agent, 2)
-    assert "click" not in offered(agent, 3)
-    assert browser.calls == [("click", 1)]
+    assert "click" in offered(agent, 3)
+    assert browser.calls == [("click", 1), ("click", 1)]
 
 
 async def test_failed_fast_mutation_is_not_replayed_on_handback():
@@ -341,15 +338,17 @@ async def test_failed_fast_mutation_is_not_replayed_on_handback():
     assert "click" in offered(agent, 1)
 
 
-@pytest.mark.parametrize("action", [decision("click", element_id=1),
-                                    decision("type_text", element_id=1, text="Ada", press_enter=False),
-                                    decision("select_option", element_id=1, option="Ada"),
-                                    decision("scroll", direction="down")])
-async def test_unoffered_routine_actions_are_blocked_before_mutation(action):
+@pytest.mark.parametrize("action,expected", [
+    (decision("click", element_id=1), ("click", 1)),
+    (decision("type_text", element_id=1, text="Ada", press_enter=False), ("type_text", 1, "Ada", False)),
+    (decision("select_option", element_id=1, option="Ada"), ("select_option", 1, "Ada")),
+    (decision("scroll", direction="down"), ("scroll", "down", 1)),
+])
+async def test_direct_ui_actions_execute_when_jev_is_configured(action, expected):
     agent, browser, rec = make([], [action, DONE], mode="never")
     await agent.run()
-    assert browser.calls == []
-    assert "must use delegate" in rec.last_step("s1")["error"]
+    assert browser.calls == [expected]
+    assert rec.last_step("s1")["status"] == "ok"
 
 
 async def test_jev_done_is_a_claim_until_planner_inspects_current_page():
@@ -360,23 +359,57 @@ async def test_jev_done_is_a_claim_until_planner_inspects_current_page():
     assert "verify on the page" in rec.last_step("s1")["result"]
 
 
-async def test_rejection_does_not_grant_recovery():
+async def test_rejected_fast_action_is_not_automatically_replayed():
     agent, browser, rec = make([fast("CLICK", 2)], [decision("delegate", subgoal="Continue"),
-                              decision("click", element_id=1), DONE])
+                              DONE])
     task = asyncio.create_task(agent.run())
     await wait_for(lambda: rec.of("approval"))
     agent.resolve_approval(rec.of("approval")[0]["step_id"], False)
     await task
-    assert "click" not in offered(agent, 1)
+    assert "click" in offered(agent, 1)
     assert browser.calls == []
 
 
-async def test_nonmutating_recovery_decision_also_uses_opportunity():
+async def test_reading_after_jev_failure_does_not_remove_direct_click():
     agent, browser, _ = make([fast("STUCK")], [decision("delegate", subgoal="Continue"),
                             decision("read_page"), decision("click", element_id=1), DONE], mode="never")
     await agent.run()
-    assert "click" in offered(agent, 1) and "click" not in offered(agent, 2)
-    assert browser.calls == [("read_page",)]
+    assert "click" in offered(agent, 1) and "click" in offered(agent, 2)
+    assert browser.calls == [("read_page",), ("click", 1)]
+
+
+async def test_jev_http_422_allows_planner_to_finish_multi_action_recovery():
+    requests = []
+
+    def reject(request):
+        requests.append(request)
+        return httpx.Response(422, json={"detail": "Invalid request"})
+
+    agent, browser, rec = make([], [decision("delegate", subgoal="Fill name and continue"),
+        decision("read_page"), decision("type_text", element_id=1, text="Ada", press_enter=False),
+        decision("click", element_id=2), DONE], browser=FormBrowser(), mode="never")
+    policy = FastPolicy(CONFIG, transport=httpx.MockTransport(reject))
+    agent.fast = policy
+    try:
+        result = await agent.run()
+    finally:
+        await policy.close()
+    assert len(requests) == 1
+    assert "HTTP 422" in rec.last_step("s2")["error"]
+    assert browser.calls == [("read_page",), ("type_text", 1, "Ada", False), ("click", 2)]
+    assert browser.values[1] == "Ada" and browser.page.url == "https://shop.test/next"
+    assert result["success"]
+
+
+async def test_direct_risky_recovery_with_jev_still_waits_for_approval():
+    agent, browser, rec = make([fast("STUCK")], [decision("delegate", subgoal="Continue"),
+                              decision("click", element_id=2), DONE])
+    task = asyncio.create_task(agent.run())
+    await wait_for(lambda: rec.of("approval"))
+    assert browser.calls == []
+    agent.resolve_approval(rec.of("approval")[0]["step_id"], True)
+    await task
+    assert browser.calls == [("click", 2)]
 
 
 async def test_unchanged_limit_grants_recovery_without_replaying_actions():
@@ -388,7 +421,7 @@ async def test_unchanged_limit_grants_recovery_without_replaying_actions():
     assert "click" in offered(agent, 1)
 
 
-async def test_fast_action_budget_grants_one_recovery_decision(monkeypatch):
+async def test_fast_action_budget_returns_control_without_replaying_actions(monkeypatch):
     monkeypatch.setattr("hyperagent.system1.FAST_MAX_ACTIONS", 2)
     agent, browser, rec = make([fast("CLICK", 1)] * 3,
                                [decision("delegate", subgoal="Continue"), DONE], mode="never",
@@ -399,7 +432,7 @@ async def test_fast_action_budget_grants_one_recovery_decision(monkeypatch):
     assert "click" in offered(agent, 1)
 
 
-async def test_guidance_during_fast_approval_discards_action_without_recovery():
+async def test_guidance_during_fast_approval_discards_action():
     agent, browser, rec = make([fast("CLICK", 2)], [decision("delegate", subgoal="Continue"), DONE])
     task = asyncio.create_task(agent.run())
     await wait_for(lambda: rec.of("approval"))
@@ -407,10 +440,10 @@ async def test_guidance_during_fast_approval_discards_action_without_recovery():
     agent.resolve_approval(rec.of("approval")[0]["step_id"], True)
     await task
     assert browser.calls == []
-    assert "click" not in offered(agent, 1)
+    assert "click" in offered(agent, 1)
 
 
-async def test_interrupted_recovery_approval_preserves_opportunity():
+async def test_interrupted_planner_recovery_approval_discards_stale_action():
     agent, browser, rec = make([fast("STUCK")], [decision("delegate", subgoal="Continue"),
                               decision("click", element_id=2), decision("click", element_id=1), DONE])
     task = asyncio.create_task(agent.run())
@@ -419,10 +452,10 @@ async def test_interrupted_recovery_approval_preserves_opportunity():
     agent.resolve_approval(rec.of("approval")[0]["step_id"], True)
     await task
     assert browser.calls == [("click", 1)]
-    assert "click" in offered(agent, 2) and "click" not in offered(agent, 3)
+    assert "click" in offered(agent, 2) and "click" in offered(agent, 3)
 
 
-async def test_guidance_during_fast_error_handback_does_not_grant_recovery():
+async def test_guidance_during_fast_error_handback_does_not_execute_an_action():
     agent, browser, rec = make([FastError("unavailable")], [decision("delegate", subgoal="Continue"), DONE])
 
     async def emit(event):
@@ -432,5 +465,5 @@ async def test_guidance_during_fast_error_handback_does_not_grant_recovery():
 
     agent.emit = emit
     await agent.run()
-    assert "click" not in offered(agent, 1)
+    assert "click" in offered(agent, 1)
     assert browser.calls == []

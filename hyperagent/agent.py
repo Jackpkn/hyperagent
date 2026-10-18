@@ -22,7 +22,7 @@ from .fast import FastPolicy
 from .llm import Decision, LLMClient, LLMError
 from .prompts import SYSTEM, SYSTEM_FAST, step_context
 from .system1 import FastLoopMixin
-from .tools import ROUTINE_UI, TOOL_NAMES, TOOLS, label, missing_args, needs_approval, planner_tools
+from .tools import TOOL_NAMES, TOOLS, TOOLS_WITH_FAST, label, missing_args, needs_approval
 
 Emit = Callable[[dict[str, Any]], Awaitable[None]]
 SEARCH_URL = "https://www.bing.com/search?q={}"
@@ -51,7 +51,7 @@ class Agent(FastLoopMixin, ExtractMixin):
         self.conversation = conversation or []  # earlier turns of this chat, summarised by the console
         self.user_memory = user_memory or []  # facts the operator asked to be remembered across chats
         self.fast = fast if fast and fast.config.enabled else None
-        self._planner_recovery = False
+        self.tools = TOOLS_WITH_FAST if self.fast else TOOLS
         self.system_prompt = SYSTEM + (SYSTEM_FAST if self.fast else "")
         self.detached = False  # the operator's socket closed; skip anything that only serves them
         self.plan: list[dict[str, str]] = []
@@ -232,10 +232,7 @@ class Agent(FastLoopMixin, ExtractMixin):
             step.update(status="skipped", result=why, ended_at=time.time())
             await self.send_step(step)
             return
-        recovery, self._planner_recovery = self._planner_recovery, False
-        await self._handle(step, decision, page, recovery=recovery, version=version)
-        if recovery and step["status"] == "skipped" and (self.paused or self.guidance_version != version):
-            self._planner_recovery = True
+        await self._handle(step, decision, page, version=version)
 
     async def _decide(self, page: Observation, step: dict[str, Any] | None = None) -> Decision | None:
         events, self.browser.events = self.browser.events, []
@@ -254,11 +251,6 @@ class Agent(FastLoopMixin, ExtractMixin):
         if page.screenshot:
             content.append({"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{page.screenshot}"}})
         messages = [{"role": "system", "content": self.system_prompt}, {"role": "user", "content": content}]
-        tools = planner_tools(fast=bool(self.fast), recovery=self._planner_recovery,
-                              password_ids=[e["id"] for e in page.elements.values() if e.get("type") == "password"])
-        if self._planner_recovery:
-            content[0]["text"] += ("\nJev could not proceed. This decision has direct UI tools for one explicit "
-                                    "recovery action on the current observation. Normal delegation resumes next turn.")
         last_delta_at = 0.0
 
         async def _on_delta(partial: dict[str, str]) -> None:
@@ -273,7 +265,7 @@ class Agent(FastLoopMixin, ExtractMixin):
             await self.send_step(step)
 
         call = asyncio.create_task(
-            self.llm.decide(self.model, messages, tools, on_retry=self._retry_notice, on_delta=_on_delta)
+            self.llm.decide(self.model, messages, self.tools, on_retry=self._retry_notice, on_delta=_on_delta)
         )
         stop_watch = asyncio.create_task(self._until_stopped())
         try:
@@ -308,7 +300,7 @@ class Agent(FastLoopMixin, ExtractMixin):
         self.usage["cost_usd"] += d.cost_usd
 
     async def _handle(self, step: dict[str, Any], d: Decision, page: Observation, *,
-                      recovery: bool = False, version: int | None = None) -> None:
+                      version: int | None = None) -> None:
         await self.send_usage()
         args = _recover_xml_params(d.args)
         if d.name not in TOOL_NAMES:
@@ -341,10 +333,6 @@ class Agent(FastLoopMixin, ExtractMixin):
                 return
         shown = {**args, "text": "••••••••"} if secret else args
         step.update(thought=_thought(args, d.thinking), action=_action(d.name, shown, target_label), status="planned")
-        if self.fast and d.name in ROUTINE_UI and not recovery and not secret:
-            await self._fail_step(step, "Routine UI actions must use delegate; this decision has no direct UI "
-                                       "recovery permission. Nothing was executed.")
-            return
         if await self._discard_interrupted(step, version):
             return
         risky, reason = needs_approval(d.name, args, target_label, self.approval_mode)

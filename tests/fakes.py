@@ -48,6 +48,12 @@ class FakeBrowser:
     async def type_text(self, element_id: int, text: str, press_enter: bool, *, secret_ok: bool = False) -> str:
         return await self._act("type_text", element_id, text, press_enter)
 
+    async def select_option(self, element_id: int, option: str) -> str:
+        return await self._act("select_option", element_id, option)
+
+    async def scroll(self, direction: str, pages: float = 1) -> str:
+        return await self._act("scroll", direction, pages)
+
     async def read_page(self) -> dict[str, Any]:
         self.calls.append(("read_page",))
         return {"text": "full text", "truncated": False, "length": 9}

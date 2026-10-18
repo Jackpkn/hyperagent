@@ -60,17 +60,17 @@ A complete step record; sent when created and whenever it changes (same `id`, re
 }
 ```
 
-With Jev configured, ordinary UI work uses `delegate`; the planner retains navigation, reading, extraction,
-questions, keyboard and tab operations. Direct password typing is limited to observed password fields and
-always waits for approval. An unoffered direct UI action produces a planner `step` with `status: "error"`
-without executing a browser mutation.
+With Jev configured, the planner prefers `delegate` for focused groups of related UI interactions with known
+values and a visible stopping condition. All direct planner tools remain available for isolated actions and
+recovery, including recovery requiring several decisions. Each action uses the latest observation and keeps
+the existing approval policy; typing into an observed password field always requires approval.
 
 Each delegated action uses the existing `system: "fast"` and `parent` fields. A field already holding the
 requested text produces `status: "skipped"`, enters Jev's recent-action context, and does not count as a
 browser mutation. Jev continues the remaining subgoal; repeated unchanged attempts return control visibly
 without automatically pausing. Errors, stuck/unsure decisions, unchanged-state limits and subgoal budgets
-allow one explicit planner recovery decision on a fresh observation. Completion, rejection and interruption
-do not grant recovery. A decision discarded after pause or new guidance does not consume that opportunity.
+return control to the planner. Recovery is explicitly chosen from fresh observations, never an automatic
+replay of a browser mutation. Pausing or new guidance still discards pending decisions.
 Jev's completion step remains a claim for the planner to check against the current page.
 
 ### `plan`
