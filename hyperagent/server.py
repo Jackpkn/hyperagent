@@ -10,7 +10,7 @@ import os
 from collections import Counter
 from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -26,6 +26,18 @@ log = logging.getLogger("hyperagent")
 Mode = Literal["risky", "always", "never"]
 
 
+Short = Annotated[str, Field(max_length=200)]
+
+
+class ConversationTurn(BaseModel):
+    """One earlier turn of the chat, summarised by the console for follow-up questions."""
+    model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
+    goal: str = Field(default="", max_length=1000)
+    answer: str = Field(default="", max_length=2000)
+    columns: list[Short] = Field(default_factory=list, max_length=12)
+    rows: list[dict[Short, Annotated[str, Field(max_length=300)]]] = Field(default_factory=list, max_length=20)
+
+
 class Command(BaseModel):
     model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
     type: Literal["start", "pause", "resume", "stop", "guide", "approve", "reject", "set_mode",
@@ -39,6 +51,8 @@ class Command(BaseModel):
     continue_session: bool = False
     persist_session: bool = False
     operator_context: str | None = Field(default=None, max_length=2000)
+    conversation: list[ConversationTurn] = Field(default_factory=list, max_length=12)
+    user_memory: list[Short] = Field(default_factory=list, max_length=20)
     text: str | None = Field(default=None, max_length=4000)
     step_id: str | None = Field(default=None, max_length=32)
     reason: str | None = Field(default=None, max_length=500)
@@ -292,6 +306,7 @@ class Session:
             approval_mode=cmd.approval_mode or "risky", max_steps=self.cfg["max_steps"],
             vision=self.cfg["vision"], search_url=self.cfg["search_url"], max_cost_usd=self.cfg["max_cost_usd"],
             fast=self.fast, timezone=cmd.timezone, domain_memory=domain_mem,
+            conversation=[t.model_dump() for t in cmd.conversation], user_memory=list(cmd.user_memory),
         )
         if prev_findings:
             self.agent.findings = prev_findings

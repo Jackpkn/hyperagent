@@ -155,7 +155,10 @@ TOOLS = [
            "assumptions": {"type": "array", "items": {"type": "string"},
                            "description": "Interpretations you chose where the goal was ambiguous."},
            "follow_ups": {"type": "array", "maxItems": 3, "items": {"type": "string"},
-                          "description": "Up to 3 short next goals this user might plausibly want."}},
+                          "description": "Up to 3 short next goals this user might plausibly want."},
+           "remember": {"type": "array", "maxItems": 3, "items": {"type": "string"},
+                        "description": "Lasting preferences or facts the user stated about themselves, in their "
+                                       "own words. Usually empty."}},
           ["success", "summary", "columns", "rows", "sources", "issues", "checklist"]),
 ]
 DELEGATE = _tool(

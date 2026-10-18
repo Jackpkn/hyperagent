@@ -7,7 +7,7 @@ All messages are JSON objects with a `type` field. The server never sends secret
 
 | type | fields | meaning |
 | --- | --- | --- |
-| `start` | `goal: string`, `start_url?: string`, `approval_mode?: "risky" \| "always" \| "never"`, `model?: string`, `timezone?: string`, `continue_session?: boolean`, `persist_session?: boolean`, `operator_context?: string` | Begin a run (or continue on the currently open browser page when `continue_session` is true). Default approval mode `risky`. |
+| `start` | `goal: string`, `start_url?: string`, `approval_mode?: "risky" \| "always" \| "never"`, `model?: string`, `timezone?: string`, `continue_session?: boolean`, `persist_session?: boolean`, `operator_context?: string`, `conversation?: { goal, answer, columns?, rows? }[]` (≤12 earlier turns of this chat), `user_memory?: string[]` (≤20 remembered facts, ≤200 chars each) | Begin a run (or continue on the currently open browser page when `continue_session` is true). Default approval mode `risky`. `conversation` lets follow-ups refer to earlier turns; `user_memory` carries what the operator asked to be remembered. Both are summarised and stored by the console (in the browser), never on the server. |
 | `pause` | – | Finish the in-flight action, then hold before the next decision. |
 | `resume` | – | Continue a paused run. |
 | `stop` | – | End the run; the agent produces a partial result from what it has. |
@@ -99,7 +99,8 @@ A complete step record; sent when created and whenever it changes (same `id`, re
     step_n?: number
   }[],
   assumptions: string[],     /* interpretations chosen where the goal was ambiguous */
-  follow_ups: string[]       /* up to 3 suggested next goals; the UI only pre-fills them, never runs them */
+  follow_ups: string[],      /* up to 3 suggested next goals; the UI only pre-fills them, never runs them */
+  remember: string[]         /* ≤3 lasting facts/preferences, kept only if grounded in the operator's own words */
 }
 ```
 `success` is forced to `false` (with an issue) when any checklist item is unmet.

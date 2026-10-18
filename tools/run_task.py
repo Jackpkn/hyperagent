@@ -23,6 +23,9 @@ async def main() -> None:
     parser.add_argument("--out", default="")
     parser.add_argument("--no-fast", action="store_true", help="disable the Jev System 1 policy")
     parser.add_argument("--timezone", default=None, help="operator IANA time zone, e.g. Europe/London")
+    parser.add_argument("--conversation", default="", help="JSON file of earlier chat turns "
+                        "([{goal, answer, columns?, rows?}]) to test follow-up questions")
+    parser.add_argument("--memory", action="append", default=[], help="a long-term memory item (repeatable)")
     args = parser.parse_args()
     config = LLMConfig.from_env()
     llm = LLMClient(config)
@@ -61,7 +64,9 @@ async def main() -> None:
     browser = BrowserSession()
     await browser.start(args.url)
     agent = Agent(browser=browser, llm=llm, emit=emit, goal=args.goal, model=args.model or config.default_model,
-                  approval_mode=args.mode, max_steps=args.max_steps, fast=fast, timezone=args.timezone)
+                  approval_mode=args.mode, max_steps=args.max_steps, fast=fast, timezone=args.timezone,
+                  conversation=json.loads(Path(args.conversation).read_text()) if args.conversation else None,
+                  user_memory=args.memory)
     try:
         result = await agent.run()
     finally:

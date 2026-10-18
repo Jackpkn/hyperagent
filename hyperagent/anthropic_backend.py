@@ -26,7 +26,7 @@ _INT_FIELDS = {"element_id", "tab_index", "plan_step"}
 _NUM_FIELDS = {"pages", "seconds"}
 _BOOL_FIELDS = {"press_enter", "irreversible", "success"}
 _JSON_FIELDS = {"plan", "items", "rows", "columns", "sources", "issues", "urls", "checklist", "assumptions",
-                "follow_ups", "fields"}
+                "follow_ups", "fields", "remember"}
 
 
 def _recover_xml_params(inputs: dict[str, Any]) -> dict[str, Any]:

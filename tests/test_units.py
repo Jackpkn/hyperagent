@@ -161,3 +161,18 @@ def test_tool_schemas_stay_compact():
     assert len(json.dumps(TOOLS_WITH_FAST)) < 18000
     click = next(t for t in TOOLS_WITH_FAST if t["function"]["name"] == "click")
     assert "description" not in click["function"]["parameters"]["properties"]["memory"]
+
+
+def test_start_command_bounds_conversation_and_memory():
+    import pytest
+    from pydantic import ValidationError
+
+    from hyperagent.server import Command
+    cmd = Command.model_validate({"type": "start", "goal": "Sort them", "user_memory": ["Prices in INR"],
+                                  "conversation": [{"goal": "Find books", "answer": "Five qualify.",
+                                                    "columns": ["title"], "rows": [{"title": "Thirst"}]}]})
+    assert cmd.conversation[0].rows == [{"title": "Thirst"}] and cmd.user_memory == ["Prices in INR"]
+    with pytest.raises(ValidationError):
+        Command.model_validate({"type": "start", "goal": "x", "user_memory": ["m" * 300]})
+    with pytest.raises(ValidationError):
+        Command.model_validate({"type": "start", "goal": "x", "conversation": [{"goal": "g"}] * 13})

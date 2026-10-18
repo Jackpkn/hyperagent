@@ -38,7 +38,8 @@ class Agent(FastLoopMixin, ExtractMixin):
         self, *, browser: BrowserSession, llm: LLMClient, emit: Emit, goal: str, model: str,
         approval_mode: str = "risky", max_steps: int = 40, vision: bool = True, search_url: str = SEARCH_URL,
         max_cost_usd: float = 3.0, fast: FastPolicy | None = None, timezone: str | None = None,
-        domain_memory: dict[str, list[str]] | None = None,
+        domain_memory: dict[str, list[str]] | None = None, conversation: list[dict[str, Any]] | None = None,
+        user_memory: list[str] | None = None,
     ):
         self.browser, self.llm, self.emit = browser, llm, emit
         self.goal, self.model, self.approval_mode = goal, model, approval_mode
@@ -46,6 +47,8 @@ class Agent(FastLoopMixin, ExtractMixin):
         self.max_cost_usd = max_cost_usd
         self.timezone = timezone
         self.domain_memory = domain_memory or {}
+        self.conversation = conversation or []  # earlier turns of this chat, summarised by the console
+        self.user_memory = user_memory or []  # facts the operator asked to be remembered across chats
         self.fast = fast if fast and fast.config.enabled else None
         self.tools = TOOLS_WITH_FAST if self.fast else TOOLS
         self.system_prompt = SYSTEM + (SYSTEM_FAST if self.fast else "")
@@ -241,7 +244,7 @@ class Agent(FastLoopMixin, ExtractMixin):
             page=page, read_output=self.read_output, warnings=self._loop_warnings() + _page_warnings(page),
             step=self.actions_taken + 1,
             max_steps=self.max_steps, events=events, memory=self.memory, now=local_now(self.timezone),
-            domain_notes=domain_notes,
+            domain_notes=domain_notes, conversation=self.conversation, user_memory=self.user_memory,
         )
         self.read_output = None
         content: list[dict[str, Any]] = [{"type": "text", "text": context}]
@@ -609,7 +612,19 @@ class Agent(FastLoopMixin, ExtractMixin):
             "columns": columns, "rows": rows, "sources": sources[:30], "issues": issues,
             "checklist": checklist, "assumptions": _strings(args.get("assumptions"), 6, 240),
             "follow_ups": _strings(args.get("follow_ups"), 3, 160),
+            "remember": self._grounded_memories(args.get("remember")),
         }
+
+    def _grounded_memories(self, raw: Any) -> list[str]:
+        """Keep only memories the operator actually stated (goal, guidance, earlier goals), never page content."""
+        said = "\n".join([self.goal, *self.guidance, *(str(t.get("goal", "")) for t in self.conversation)])
+        kept = []
+        for item in _strings(raw, 3, 160):
+            # Meaningful words only (3+ characters): "as", "in" and the like would make any text look grounded.
+            words = [w for w in re.findall(r"[a-z0-9£$€₹%]{3,}", item.lower()) if w not in _MEMORY_FRAMING]
+            if words and sum(w in said.lower() for w in words) / len(words) >= 0.6:
+                kept.append(item)
+        return kept
 
     def _checklist(self, raw: Any) -> list[dict[str, Any]]:
         """The model's requirement checklist; evidence steps are kept only if they really ran in this run."""
@@ -713,6 +728,11 @@ def _thought(args: dict[str, Any], native_thinking: str = "") -> dict[str, str]:
     if native_thinking:
         out["thinking"] = _text(native_thinking)
     return out
+
+
+# Words a model adds when restating a preference; they are not evidence the user said it.
+_MEMORY_FRAMING = {"the", "user", "users", "prefers", "prefer", "wants", "want", "likes", "like", "always",
+                   "their", "they", "should", "to", "be", "in", "a", "an", "of", "for", "and", "is"}
 
 
 def _contains(big: dict[str, Any], small: dict[str, Any]) -> bool:

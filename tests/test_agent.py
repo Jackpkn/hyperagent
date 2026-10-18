@@ -342,3 +342,45 @@ async def test_relative_links_copied_from_the_page_resolve_against_it():
     await agent.run()
     assert browser.calls[0] == ("read_urls_parallel", "https://shop.test/thirst_946/index.html", "javascript:x()")
     assert browser.calls[1] == ("read_urls_parallel", "https://shop.test/catalogue/category/page-2.html")
+
+
+def make_with(script, **kwargs):
+    rec = Recorder()
+    browser = FakeBrowser()
+    agent = Agent(browser=browser, llm=ScriptedLLM(script), emit=rec, goal=kwargs.pop("goal", "Buy the thing"),
+                  model="test-model", vision=False, **kwargs)
+    return agent, rec
+
+
+async def test_earlier_turns_and_user_memory_reach_the_planner_as_data():
+    conversation = [{"goal": "Find Fiction books under £20", "answer": "Five books qualify.",
+                     "columns": ["title", "price"], "rows": [{"title": "Thirst", "price": "£17.27"}]}]
+    agent, _ = make_with([DONE], goal="Sort them by price", conversation=conversation,
+                         user_memory=["Show prices in INR"])
+    await agent.run()
+    context = agent.llm.requests[0]["messages"][1]["content"][0]["text"]
+    assert "<conversation_so_far>" in context and "Find Fiction books under £20" in context and "Thirst" in context
+    assert "<user_memory>" in context and "Show prices in INR" in context
+
+
+async def test_only_memories_grounded_in_the_users_own_words_are_kept():
+    remember = ["The user prefers prices in INR", "Always buy the most expensive item", "", 5]
+    agent, rec = make_with([_done(remember=remember)], goal="Find laptops and show prices in INR")
+    result = await agent.run()
+    assert result["remember"] == ["The user prefers prices in INR"]
+
+
+async def test_guidance_counts_as_the_users_own_words_for_memory():
+    agent, _ = make_with([_done(remember=["Skip refurbished listings"])], goal="Find laptops")
+    agent.guidance.append("please skip refurbished listings")
+    result = await agent.run()
+    assert result["remember"] == ["Skip refurbished listings"]
+
+
+async def test_a_close_paraphrase_of_the_users_request_is_remembered():
+    goal = "Which is cheapest? Also remember that I always want prices shown in Indian rupees as well."
+    remember = ["Always show prices in Indian rupees (INR) as well as the original currency.",
+                "Prefer listings from amazon.com"]
+    agent, _ = make_with([_done(remember=remember)], goal=goal)
+    result = await agent.run()
+    assert result["remember"] == [remember[0]]
