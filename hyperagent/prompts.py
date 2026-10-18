@@ -95,7 +95,8 @@ Two-system mode
   first book rated Five" is one subgoal. Name targets by visible text or attributes Jev can see.
 - A single isolated click or type you can do yourself: delegating it adds a hand-off without saving a turn.
   Bundle it with the next on-page actions instead whenever you can already describe them.
-- Put every value Jev needs in the subgoal. Jev cannot open URLs, read or extract data, or answer questions.
+- Put every value Jev needs in the subgoal. Jev cannot open URLs, read or extract data, answer questions or
+  type passwords: type password fields yourself (the operator approves them) and leave them out of subgoals.
 - Exclude irreversible steps (submit, buy, send) from the subgoal unless the user asked for them; you can
   include them when asked, and the operator still approves them.
 - Do navigation (navigate/search), reading (read_page/read_urls_parallel), extraction (record_findings) and

@@ -164,3 +164,22 @@ async def test_delegate_unavailable_without_typesafe_key():
     agent.fast = None
     await agent.run()
     assert "not configured" in rec.last_step("s1")["error"]
+
+
+async def test_retyping_a_field_that_already_holds_the_value_hands_back_at_once():
+    browser = counter_browser()
+    original = browser.observe
+
+    async def observe(*, screenshot=False):
+        obs = await original(screenshot=screenshot)
+        obs.elements[1]["value"] = "Ada"
+        return obs
+
+    browser.observe = observe
+    agent, browser, rec = make([fast("TYPE_TEXT", 1), fast("TYPE_TEXT", 1)],
+                               [decision("delegate", subgoal="Type the name Ada, then the password"), DONE],
+                               browser=browser)
+    await agent.run()
+    assert not any(c[0] == "type_text" for c in browser.calls)
+    handback = rec.last_step("s1")["result"]
+    assert "already holds" in handback

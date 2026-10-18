@@ -70,6 +70,8 @@ class FastLoopMixin:
             if outcome:
                 return outcome
             result = await self._fast_act(step, d, page, subgoal, recent)
+            if step["status"] == "skipped":
+                return self._handback(log, "Jev tried to retype a field that already holds that value")
             if step["status"] == "error":
                 return self._handback(log, f"an action failed: {step.get('error')}")
             if step["status"] == "rejected":
@@ -128,6 +130,12 @@ class FastLoopMixin:
             step["latency_ms"] = step.get("latency_ms", 0) + ms
             args.update(text=text, press_enter=False)
         from .agent import _action  # local import avoids a cycle
+        if name == "type_text" and text == str(element.get("value") or ""):
+            # Retyping a filled field is how Jev loops when the rest of a subgoal is out of its reach.
+            step.update(action=_action(name, args, target_label), status="skipped", ended_at=time.time(),
+                        result="That field already holds this value; nothing was typed.")
+            await self.send_step(step)
+            return ""
         step.update(action=_action(name, args, target_label), status="planned")
         risky, reason = needs_approval(name, args, target_label, self.approval_mode)
         if risky:

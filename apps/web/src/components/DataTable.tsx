@@ -18,6 +18,9 @@ interface DataTableProps {
 
 type SortState = { column: string; direction: "asc" | "desc" } | null;
 
+// Rows that are themselves totals (from a receipt or order summary) must not be summed again.
+const SUMMARY_ROW_RE = /^\s*(sub\s*-?\s*total|item\s+total|grand\s+total|total|tax(es)?|vat|gst|shipping|delivery|fees?|discount)\b/i;
+
 const QUANTITATIVE_COL_RE =
   /price|cost|amount|total|subtotal|fee|tax|payout|balance|revenue|margin|qty|quantity|count|stock|score|points|comments/i;
 
@@ -83,7 +86,9 @@ export function DataTable({
 
   // Deterministic numeric column summaries (never relying on LLM arithmetic).
   const columnTotals = useMemo(() => {
-    if (rows.length < 2) return null;
+    const itemRows = rows.filter((row) => !SUMMARY_ROW_RE.test(formatCell(row[keyColumn])));
+    // A table that already carries its own totals needs no second, computed one.
+    if (itemRows.length < 2 || itemRows.length < rows.length) return null;
     const map = new Map<string, { sum: number; avg: number; prefix: string; isDecimal: boolean }>();
     for (const col of columns) {
       const parsed: { num: number; prefix: string; raw: string }[] = [];
@@ -102,7 +107,7 @@ export function DataTable({
       map.set(col, { sum, avg, prefix, isDecimal });
     }
     return map.size > 0 ? map : null;
-  }, [columns, rows]);
+  }, [columns, rows, keyColumn]);
 
   const toggle = (column: string) => {
     setSort((current) => {

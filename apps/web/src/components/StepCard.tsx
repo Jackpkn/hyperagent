@@ -32,6 +32,8 @@ function cleanStepResult(step: StepRecord): string | null {
     return null;
   }
   if (step.action?.name === "delegate" && raw.startsWith("Jev took ")) {
+    // "Jev took 0 actions. Returned control because …" has no action log to shorten.
+    if (!raw.includes(":")) return raw;
     const [head] = raw.split(":");
     const tailMatch = raw.match(/Returned control because [^.]+\.?/);
     return tailMatch ? `${head}. ${tailMatch[0]}` : `${head}.`;

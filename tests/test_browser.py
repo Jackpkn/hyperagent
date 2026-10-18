@@ -166,3 +166,30 @@ async def test_unreachable_remote_browser_names_the_setting_and_hides_the_endpoi
     assert "BROWSER_WS_URL" in str(err.value)
     assert "SECRET123" not in str(err.value) and "SECRET123" not in caplog.text
     assert "remote browser" in caplog.text, "the real cause must reach the server log"
+
+
+async def test_script_driven_link_without_href_is_clickable():
+    page = ('<!doctype html><style>.cart{cursor:pointer;display:inline-block;width:40px;height:40px}</style>'
+            '<div class=header><a class="cart" data-test="shopping-cart-link" onmousedown="">'
+            '<span class=badge style="cursor:pointer">2</span></a></div>'
+            '<div style="cursor:pointer" id=card><span>Bike Light</span></div>')
+    session = BrowserSession()
+    try:
+        await session.start("data:text/html," + page)
+    except ActionError as exc:
+        pytest.skip(f"Chromium unavailable: {exc}")
+    try:
+        obs = await session.observe()
+        labels = [e["label"] for e in obs.elements.values()]
+        assert any("2" in label or "cart" in label for label in labels), labels
+        assert sum("2" in label for label in labels) == 1, "the badge inside the link is not a second target"
+    finally:
+        await session.close()
+
+
+async def test_password_field_reports_filled_without_revealing_it(browser):
+    secret = element(await browser.observe(), "Secret")
+    assert "empty" in (await browser.observe()).text
+    await browser.type_text(secret["id"], "hunter2", False, secret_ok=True)
+    obs = await browser.observe()
+    assert "hunter2" not in obs.text and "filled" in obs.text

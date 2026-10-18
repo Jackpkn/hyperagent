@@ -15,9 +15,15 @@
 
   const visible = (el) => !el.checkVisibility || el.checkVisibility({ checkOpacity: true, checkVisibilityCSS: true });
   const hasBox = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
+  const pointer = (el) => !!el && getComputedStyle(el).cursor === 'pointer';
+  // Script-driven controls (an <a> without href, a clickable <div>) are found by their pointer cursor; a
+  // child that only inherits the cursor from a clickable parent is not a second target.
+  const scriptClickable = (el) => pointer(el) && !pointer(el.parentElement);
   const isInteractive = (el) => {
     const tag = el.tagName;
-    if (tag === 'A') return el.hasAttribute('href');
+    // A visible link with a real box is meant to be clicked even without href: SPAs attach handlers in
+    // script with no attribute or pointer cursor to show for it (empty named anchors have no box).
+    if (tag === 'A') return true;
     if (tag === 'INPUT') return el.type !== 'hidden';
     if (['BUTTON', 'SELECT', 'TEXTAREA', 'SUMMARY'].includes(tag)) return true;
     if (el.isContentEditable && !el.parentElement?.isContentEditable) return true;
@@ -25,7 +31,8 @@
     if (role && INTERACTIVE_ROLES.has(role)) return true;
     if (el.hasAttribute('onclick')) return true;
     const ti = el.getAttribute('tabindex');
-    return ti !== null && ti !== '-1' && getComputedStyle(el).cursor === 'pointer';
+    if (ti !== null && ti !== '-1' && pointer(el)) return true;
+    return ['DIV', 'SPAN', 'IMG', 'LI', 'I'].includes(tag) && scriptClickable(el);
   };
   const accessibleName = (el) => {
     const by = (el.getAttribute('aria-labelledby') || '').split(/\s+/)
@@ -33,12 +40,16 @@
     const labels = el.labels ? [...el.labels].map((l) => l.innerText).join(' ') : '';
     const inputBtn = el.tagName === 'INPUT' && ['button', 'submit', 'reset'].includes(el.type) ? el.value : '';
     const inner = el.tagName === 'INPUT' || el.tagName === 'SELECT' ? '' : el.innerText;
-    return clean(
+    // Icon-only controls often carry their meaning only in a test hook or id ("shopping-cart-link").
+    const hook = clean((el.getAttribute('data-test') || el.getAttribute('data-testid') || el.id || '').replace(/[-_]+/g, ' '), 40);
+    const name = clean(
       el.getAttribute('aria-label') || by || labels || inputBtn || inner ||
       el.getAttribute('title') || el.getAttribute('placeholder') || el.getAttribute('alt') ||
       el.querySelector?.('img[alt]')?.getAttribute('alt') ||
       (el.tagName === 'SELECT' ? el.getAttribute('name') || '' : ''),
     );
+    // A badge such as "2" alone says nothing about the control; prefix the hook when the text is that short.
+    return name.length >= 3 ? name : clean(`${hook} ${name}`) || name;
   };
   const describe = (el, id) => {
     const tag = el.tagName.toLowerCase();
@@ -50,10 +61,12 @@
       const v = el.getAttribute(a);
       if (v) attrs.push(`${a}="${clean(v, 40)}"`);
     }
-    if (tag === 'a') {
+    if (tag === 'a' && el.hasAttribute('href')) {
       const href = el.getAttribute('href') || '';
       attrs.push(`href="${clean(href.startsWith('javascript:') ? 'javascript' : href, 90)}"`);
     }
+    // Never the secret itself, but whether it is filled, so nobody retypes it blindly.
+    if (el.type === 'password') attrs.push(el.value ? 'filled' : 'empty');
     if (['input', 'textarea'].includes(tag) && el.type !== 'password' && !['checkbox', 'radio'].includes(el.type)) {
       attrs.push(`value="${clean(el.value, 60)}"`);
     }
@@ -87,6 +100,7 @@
         .includes(el.type)));
     const f = { role, editable };
     if (el.type !== 'password' && (tag === 'INPUT' || tag === 'TEXTAREA') && editable) f.value = clean(el.value, 80);
+    if (el.type === 'password') f.value = el.value ? '(filled, hidden)' : '';
     if (el.isContentEditable) f.value = clean(el.innerText, 80);
     if (['checkbox', 'radio'].includes(el.type)) f.checked = el.checked;
     for (const a of ['aria-checked', 'aria-selected', 'aria-expanded']) {
