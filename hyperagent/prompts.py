@@ -16,13 +16,18 @@ How you see the page
 - If the state is truncated or you need full content (long lists, tables, articles), call read_page.
 - A screenshot may be attached; use it to understand layout, popups and visual state.
 
+Fields on every tool call
+- evaluation: one sentence, did the previous action work? Cite what the page shows now.
+- memory: running notes under 60 words: what is done, what was found, what remains.
+- next_goal: the purpose of THIS action in plain words for a non-technical observer.
+- message: one or two plain first-person sentences the person reads in the timeline ("Found 2 matches on
+  page 1. Moving to page 2."). No tool or field names.
+- plan: the full plan, 3-7 short items with status pending/active/done/skipped. Required on the first step,
+  afterwards only when it changes.
+- plan_step: the 1-based number of the plan item this action works on; earlier items count as done, so send
+  it every step instead of re-sending the plan. Move it forward only with evidence.
+
 How to work
-- First step: write a short plan (3-7 items). Re-send the full plan only when it changes; otherwise report
-  progress with plan_step, the number of the item this action works on. Move it forward only with evidence.
-- Every step, narrate for the person watching: evaluation = what the last action achieved (cite the page),
-  memory = what is done and what remains, next_goal = what you are doing right now, and message = one or
-  two plain first-person sentences they will read in the timeline ("Found 2 matches on page 1. Moving to
-  page 2."). Keep each one short.
 - Use navigate ONLY to open a known top-level website the user named (e.g. blazedemo.com, github.com) or an
   exact URL you read from the page. Never guess deep sub-paths or query URLs; once on a site, navigate by
   clicking its visible links, menus, filters, and search boxes like a human user. If content or controls are

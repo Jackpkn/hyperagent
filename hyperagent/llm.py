@@ -65,6 +65,7 @@ class Decision:
     output_tokens: int
     cost_usd: float
     thinking: str = ""
+    cached_tokens: int = 0  # part of input_tokens served from the prompt cache (billed at a tenth)
 
 
 class LLMClient:
@@ -83,13 +84,13 @@ class LLMClient:
             raise LLMError("No model API key is configured on the server (set ANTHROPIC_API_KEY or LLM_API_KEY).")
         if self.anthropic:
             try:
-                name, args, tokens_in, tokens_out, spent = await self.anthropic.decide(
+                name, args, tokens_in, tokens_out, spent, cached = await self.anthropic.decide(
                     model, messages, tools, force=force, on_retry=on_retry, on_delta=on_delta)
             except AnthropicError as exc:
                 raise LLMError(str(exc)) from None
             native_thinking = str(args.pop("_thinking", "") or "").strip()
             return Decision(name=name, args=args, input_tokens=tokens_in, output_tokens=tokens_out,
-                            cost_usd=spent, thinking=native_thinking)
+                            cost_usd=spent, thinking=native_thinking, cached_tokens=cached)
         if model in self.text_only:
             messages = strip_images(messages)
         body = {

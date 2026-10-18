@@ -173,6 +173,11 @@ export function ResultReport({
             {usage.input_tokens + usage.output_tokens > 0
               ? ` · ${(usage.input_tokens + usage.output_tokens).toLocaleString()} tok`
               : ""}
+            {usage.cached_input_tokens ? (
+              <span title="Read from the prompt cache: the unchanging instructions and tool list, billed at a tenth of the normal rate">
+                {` (${usage.cached_input_tokens.toLocaleString()} cached)`}
+              </span>
+            ) : null}
             {usage.cost_usd > 0 ? ` · ${formatCost(usage.cost_usd)}` : ""}
             {usage.extract_calls
               ? ` (incl. ${usage.extract_calls} page ${usage.extract_calls === 1 ? "extraction" : "extractions"})`

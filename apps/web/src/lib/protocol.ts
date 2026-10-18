@@ -122,6 +122,8 @@ export interface Usage {
   fast_calls?: number;
   fast_ms_total?: number;
   text_calls?: number;
+  /** Part of input_tokens served from the prompt cache (the unchanging system prompt and tools). */
+  cached_input_tokens?: number;
   /** Page-to-rows calls made by the extract tool (their tokens and cost are included in the totals). */
   extract_calls?: number;
 }

@@ -253,6 +253,7 @@ function handleServer(state: AgentState, message: ServerMessage): AgentState {
         usage: {
           llm_calls: message.llm_calls,
           input_tokens: message.input_tokens,
+          cached_input_tokens: message.cached_input_tokens,
           output_tokens: message.output_tokens,
           cost_usd: message.cost_usd,
           elapsed_s: message.elapsed_s,

@@ -64,7 +64,7 @@ class Agent(FastLoopMixin, ExtractMixin):
         self.state = "idle"
         self.n = 0
         self.actions_taken = 0
-        self.usage = {"llm_calls": 0, "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0,
+        self.usage = {"llm_calls": 0, "input_tokens": 0, "cached_input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0,
                       "fast_calls": 0, "fast_ms_total": 0, "text_calls": 0, "extract_calls": 0}
         self.started = time.time()
         self.result: dict[str, Any] | None = None
@@ -292,6 +292,7 @@ class Agent(FastLoopMixin, ExtractMixin):
     def _count(self, d: Decision) -> None:
         self.usage["llm_calls"] += 1
         self.usage["input_tokens"] += d.input_tokens
+        self.usage["cached_input_tokens"] += d.cached_tokens
         self.usage["output_tokens"] += d.output_tokens
         self.usage["cost_usd"] += d.cost_usd
 

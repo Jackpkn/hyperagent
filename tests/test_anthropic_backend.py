@@ -60,7 +60,7 @@ async def test_decide_uses_auto_tool_choice_and_retries_without_tool_call():
     b, calls = backend([reply(block(type="text", text="thinking aloud"), stop="end_turn"),
                         reply(block(type="thinking", thinking="Need to open x.test first."),
                               block(type="tool_use", name="navigate", input={"url": "https://x.test"}))])
-    name, args, tokens_in, _, spent = await b.decide("claude-haiku-5-5", [{"role": "user", "content": "go"}], TOOLS)
+    name, args, tokens_in, _, spent, _ = await b.decide("claude-haiku-5-5", [{"role": "user", "content": "go"}], TOOLS)
     assert (name, args, tokens_in) == (
         "navigate",
         {"url": "https://x.test", "_thinking": "Need to open x.test first."},
@@ -114,10 +114,10 @@ async def test_static_system_prompt_and_tools_are_cached_and_cache_tokens_are_bi
                             cache_read_input_tokens=10000)
     tool = block(type="tool_use", name="wait", input={"seconds": 1})
     b, calls = backend([SimpleNamespace(content=[tool], stop_reason="tool_use", usage=usage)])
-    _, _, tokens_in, _, spent = await b.decide(
+    _, _, tokens_in, _, spent, cached = await b.decide(
         "claude-haiku-5-5", [{"role": "system", "content": "rules"}, {"role": "user", "content": "page"}], TOOLS)
     assert calls.calls[0]["system"] == [{"type": "text", "text": "rules", "cache_control": {"type": "ephemeral"}}]
-    assert tokens_in == 13000
+    assert tokens_in == 13000 and cached == 10000
     expected = (1000 * 0.10 + 2000 * 0.10 * 1.25 + 10000 * 0.10 * 0.1 + 100 * 0.50) / 1_000_000
     assert spent == pytest.approx(expected)
 

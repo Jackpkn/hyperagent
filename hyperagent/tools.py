@@ -52,11 +52,25 @@ RISK_FIELDS = {
 }
 
 
+def _bare(schema: dict[str, Any]) -> dict[str, Any]:
+    """The schema without descriptions: shared fields are explained once in the system prompt."""
+    out = {k: v for k, v in schema.items() if k != "description"}
+    if isinstance(out.get("items"), dict):
+        out["items"] = _bare(out["items"])
+    if isinstance(out.get("properties"), dict):
+        out["properties"] = {k: _bare(v) for k, v in out["properties"].items()}
+    return out
+
+
+# The tool list is resent on every planner call, so the shared reasoning fields carry no descriptions here.
+_SHARED = {k: _bare(v) for k, v in REASONING.items()}
+
+
 def _tool(name: str, description: str, params: dict[str, Any], required: list[str], risk: bool = False) -> dict:
     # Order matters to models that fill arguments in schema order: short reasoning, then the action's own
     # parameters, then the long plan last, so a verbose plan can never crowd out the required arguments.
-    reasoning = {k: v for k, v in REASONING.items() if k != "plan"}
-    properties = {**reasoning, **params, **(RISK_FIELDS if risk else {}), "plan": REASONING["plan"]}
+    reasoning = {k: v for k, v in _SHARED.items() if k != "plan"}
+    properties = {**reasoning, **params, **(RISK_FIELDS if risk else {}), "plan": _SHARED["plan"]}
     return {
         "type": "function",
         "function": {

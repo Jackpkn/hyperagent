@@ -150,7 +150,8 @@ class AnthropicBackend:
     async def decide(
         self, model: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]], *,
         force: str | None = None, on_retry: Any = None, on_delta: Any = None,
-    ) -> tuple[str, dict[str, Any], int, int, float]:
+    ) -> tuple[str, dict[str, Any], int, int, float, int]:
+        """(tool name, arguments, input tokens incl. cache, output tokens, cost, of which read from cache)."""
         system, converted = convert_messages(messages)
         if force:
             # Forced tool_choice is rejected on current models; instruct instead and verify the result.
@@ -238,7 +239,7 @@ class AnthropicBackend:
                     inputs = _recover_xml_params(dict(call.input))
                     if native_thinking:
                         inputs["_thinking"] = native_thinking
-                    return call.name, inputs, tokens_in, usage.output_tokens, spent
+                    return call.name, inputs, tokens_in, usage.output_tokens, spent, cache_read
                 last = "the reply did not choose an action"
                 converted = [*converted,
                              {"role": "assistant", "content": [b.model_dump(exclude_none=True)

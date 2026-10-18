@@ -150,3 +150,14 @@ def test_grounded_field_verification_checks_page_corpus():
     assert not _verify_field("Completely Hallucinated Product", corpus)
 
 
+
+
+def test_tool_schemas_stay_compact():
+    # The tool list is resent on every planner call; shared reasoning fields are described once in the
+    # system prompt, not copied into every tool.
+    import json
+
+    from hyperagent.tools import TOOLS_WITH_FAST
+    assert len(json.dumps(TOOLS_WITH_FAST)) < 18000
+    click = next(t for t in TOOLS_WITH_FAST if t["function"]["name"] == "click")
+    assert "description" not in click["function"]["parameters"]["properties"]["memory"]
