@@ -19,6 +19,7 @@ export type ConnectionState = "connecting" | "open" | "reconnecting" | "closed";
 export type FeedItem =
   | { kind: "step"; key: string; stepId: string }
   | { kind: "notice"; key: string; level: NoticeLevel; message: string }
+  | { kind: "question"; key: string; stepId: string; question: string; answer?: string }
   | { kind: "guidance"; key: string; text: string };
 
 export interface AgentState {
@@ -202,14 +203,17 @@ function handleServer(state: AgentState, message: ServerMessage): AgentState {
           },
         },
       };
-    case "question":
-      return {
+    case "question": {
+      const next = {
         ...state,
         questions: {
           ...state.questions,
           [message.step_id]: { step_id: message.step_id, question: message.question },
         },
       };
+      if (state.feed.some((item) => item.kind === "question" && item.stepId === message.step_id)) return next;
+      return appendFeed(next, (key) => ({ kind: "question", key, stepId: message.step_id, question: message.question }));
+    }
     case "notice": {
       const prev = state.feed[state.feed.length - 1];
       const base = message.message.replace(/\.$/, "");
@@ -304,13 +308,22 @@ export function agentReducer(state: AgentState, action: AgentAction): AgentState
         usage: null,
         result: null,
       };
-    case "guidance_sent":
-      // Answering a question clears it; the server confirms via notices.
+    case "guidance_sent": {
+      const question = Object.values(state.questions)[0];
+      if (question) {
+        return {
+          ...state,
+          questions: omitKey(state.questions, question.step_id),
+          feed: state.feed.map((item) => item.kind === "question" && item.stepId === question.step_id
+            ? { ...item, answer: action.text } : item),
+        };
+      }
       return appendFeed({ ...state, questions: {} }, (key) => ({
         kind: "guidance",
         key,
         text: action.text,
       }));
+    }
     case "local_notice":
       return appendFeed(state, (key) => ({
         kind: "notice",

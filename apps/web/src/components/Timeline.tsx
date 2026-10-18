@@ -13,12 +13,13 @@ import {
   ListChecks,
   MessageSquare,
 } from "lucide-react";
-import type { Approval, Finding, Frame, PlanItem, RunResult, StepRecord, Usage } from "@/lib/protocol";
+import type { Approval, Finding, Frame, PlanItem, Question, RunResult, StepRecord, Usage } from "@/lib/protocol";
 import type { FeedItem } from "@/lib/agent-state";
 import { ApprovalCard } from "./ApprovalCard";
 import { FindingCard } from "./ResultsPanel";
 import { ResultReport } from "./ResultReport";
 import { StepCard } from "./StepCard";
+import { InlineQuestion } from "./InlineQuestion";
 
 const NEAR_BOTTOM_PX = 100;
 
@@ -33,6 +34,8 @@ interface TimelineProps {
   steps: StepRecord[];
   feed: FeedItem[];
   approvals: Record<string, Approval>;
+  questions?: Record<string, Question>;
+  onAnswer?: (text: string) => boolean;
   findings?: Finding[];
   result?: RunResult | null;
   previousResult?: RunResult | null;
@@ -66,6 +69,8 @@ export function Timeline({
   steps,
   feed,
   approvals,
+  questions = {},
+  onAnswer,
   findings = [],
   result = null,
   previousResult = null,
@@ -84,9 +89,9 @@ export function Timeline({
   const scrollRef = useRef<HTMLDivElement>(null);
   const resultAnchorRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
-  const [planOpen, setPlanOpen] = useState(false);
+  const [planOpen, setPlanOpen] = useState(true);
   const [findingsOpen, setFindingsOpen] = useState(true);
-  const [expandAllFeed, setExpandAllFeed] = useState(false);
+  const [expandAllFeed, setExpandAllFeed] = useState(true);
 
   const stepById = useMemo(() => new Map(steps.map((step) => [step.id, step])), [steps]);
   const doneCount = useMemo(
@@ -129,6 +134,10 @@ export function Timeline({
   };
 
   const renderFeedItem = (item: FeedItem) => {
+    if (item.kind === "question") {
+      return <InlineQuestion key={item.key} question={item.question} answer={item.answer}
+        pending={!finished && Boolean(questions[item.stepId])} onAnswer={onAnswer} />;
+    }
     if (item.kind === "notice") {
       return (
         <div key={item.key} className="feed-row feed-notice">
@@ -168,6 +177,7 @@ export function Timeline({
       <div key={item.key} className="feed-row" data-status={step.status}>
         <StepCard
           step={step}
+          hideResult={feed.some((entry) => entry.kind === "question" && entry.stepId === step.id && entry.answer)}
           now={now}
           selected={selected}
           hasSnapshot={hasSnapshot}
@@ -190,7 +200,7 @@ export function Timeline({
     );
   };
 
-  const canRollup = feed.length > 10;
+  const canRollup = feed.length > 10 && Object.keys(questions).length === 0;
   const hiddenCount = canRollup ? feed.length - 8 : 0;
 
   return (
@@ -291,7 +301,7 @@ export function Timeline({
               </div>
             ) : null}
 
-            {!finished &&
+            {!finished && runState !== "awaiting_user" &&
             !steps.some((s) => s.status === "thinking" || s.status === "running" || s.status === "awaiting_approval") ? (
               <div className="stream-live-loader" role="status" aria-live="polite">
                 <span className="stream-bullet is-hollow is-pulsing" aria-hidden="true">

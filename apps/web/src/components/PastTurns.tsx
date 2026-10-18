@@ -6,6 +6,9 @@ import type { ChatTurn } from "@/lib/chat-model";
 import { frameKey, parseFrameKey } from "@/lib/chat-model";
 import { ResultReport } from "./ResultReport";
 import { StepCard } from "./StepCard";
+import { InlineQuestion } from "./InlineQuestion";
+import { totalTokens } from "@/lib/usage";
+import { formatCost } from "@/lib/format";
 
 interface PastTurnsProps {
   turns: ChatTurn[];
@@ -68,6 +71,10 @@ function PastTurn({
         </div>
       </div>
 
+      {turn.usage ? <p className="past-turn-usage">
+        This task · {totalTokens(turn.usage).toLocaleString()} tokens · {formatCost(turn.usage.cost_usd)}
+      </p> : null}
+
       {turn.steps.length > 0 ? (
         <button
           type="button"
@@ -88,11 +95,14 @@ function PastTurn({
             <div key={step.id} className="feed-row" data-status={step.status}>
               <StepCard
                 step={step}
+                hideResult={turn.feed.some((item) => item.kind === "question" && item.stepId === step.id && item.answer)}
                 now={now}
                 selected={selectedStepId === step.id}
                 hasSnapshot={turn.frameSteps.includes(step.id)}
                 onSelect={() => inspect(selectedStepId === step.id ? null : step.id)}
               />
+              {turn.feed.filter((item) => item.kind === "question" && item.stepId === step.id).map((item) =>
+                item.kind === "question" ? <InlineQuestion key={item.key} question={item.question} answer={item.answer} /> : null)}
             </div>
           ))}
         </div>

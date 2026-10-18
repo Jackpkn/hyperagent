@@ -62,7 +62,6 @@ export function ResultReport({
   const canDiff = Boolean(hasTable && previousResult && previousResult.rows.length > 0);
   const fastCalls = usage?.fast_calls ?? 0;
   const avgFastMs = fastCalls > 0 ? Math.round((usage?.fast_ms_total ?? 0) / fastCalls) : 0;
-  const estTokensSaved = fastCalls * 4000;
   const unverifiedValues = new Set<string>();
   for (const f of findings ?? []) {
     for (const k of f.unverified ?? []) {
@@ -189,11 +188,10 @@ export function ResultReport({
             <span className="efficiency-item efficiency-highlight">
               <Zap size={12} aria-hidden="true" />
               <strong>Fast (System 1):</strong> {fastCalls}{" "}
-              {fastCalls === 1 ? "action" : "actions"} ({avgFastMs}ms avg) ·{" "}
-              <strong>~{estTokensSaved.toLocaleString()} tokens saved</strong> (no screenshots)
+              {fastCalls === 1 ? "decision" : "decisions"} ({avgFastMs}ms avg; includes failed/skipped actions)
             </span>
           ) : fastModel ? (
-            <span className="efficiency-item" title="The planner only delegates multi-step on-page UI work to Jev">
+            <span className="efficiency-item" title="No Jev decisions were recorded for this task">
               <Zap size={12} aria-hidden="true" />
               <strong>Jev (System 1):</strong> not used. The planner did every action itself.
             </span>

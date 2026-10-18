@@ -13,7 +13,8 @@ from pathlib import Path
 from typing import Annotated, Any, Literal
 
 import uvicorn
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
@@ -465,6 +466,17 @@ async def agent_socket(ws: WebSocket) -> None:
 
 
 web_dist = Path(os.environ.get("WEB_DIST", "apps/web/out"))
+
+
+@app.api_route("/c/{chat_id}", methods=["GET", "HEAD"], include_in_schema=False)
+async def chat_console(chat_id: str) -> FileResponse:
+    """Chat records stay browser-local; deep links load the same application shell."""
+    index = web_dist / "index.html"
+    if not index.is_file():
+        raise HTTPException(status_code=404, detail="Build the frontend before opening the console.")
+    return FileResponse(index)
+
+
 if web_dist.is_dir():
     app.mount("/", StaticFiles(directory=web_dist, html=True), name="console")
 

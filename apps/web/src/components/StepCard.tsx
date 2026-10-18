@@ -53,10 +53,14 @@ interface StepCardProps {
   selected?: boolean;
   hasSnapshot?: boolean;
   onSelect?: () => void;
+  hideResult?: boolean;
 }
 
-export function StepCard({ step, now, selected, hasSnapshot, onSelect }: StepCardProps) {
-  const status = STATUS[step.status];
+export function StepCard({ step, now, selected, hasSnapshot, onSelect, hideResult = false }: StepCardProps) {
+  const uncertain = step.status === "ok" && step.verification?.status === "unverified";
+  const status: StatusInfo = uncertain ? { label: "Unverified", tone: "wait" } :
+    step.status === "ok" && step.verification?.status === "verified" ? { label: "Verified", tone: "ok" } :
+    STATUS[step.status];
   const end = step.ended_at ?? now;
   const duration = end > step.started_at ? formatDuration(end - step.started_at) : null;
   const actionLabel = step.action?.label ?? "";
@@ -77,7 +81,7 @@ export function StepCard({ step, now, selected, hasSnapshot, onSelect }: StepCar
     Boolean(nextGoal) &&
     nextGoal.toLowerCase() !== actionLabel.toLowerCase() &&
     nextGoal.toLowerCase() !== evaluation.toLowerCase();
-  const resultText = cleanStepResult(step);
+  const resultText = hideResult ? null : cleanStepResult(step) ?? step.verification?.detail;
 
   const rawThoughtSource = nativeThinking || (showEvaluation ? evaluation : "") || (showNextGoal ? nextGoal : "");
   const thoughtPreview = rawThoughtSource ? singleLinePreview(rawThoughtSource, 130) : "";
@@ -160,9 +164,11 @@ export function StepCard({ step, now, selected, hasSnapshot, onSelect }: StepCar
           }}
         >
           <span className="stream-bullet is-solid" data-tone={status.tone} aria-hidden="true">
-            {step.status === "running" || step.status === "awaiting_approval" ? "○" : "●"}
+            {uncertain ? "?" : step.status === "ok" ? "✓" : step.status === "error" ? "×" :
+              step.status === "skipped" || step.status === "rejected" ? "–" : "○"}
           </span>
           <div className="stream-action-main">
+            <span className="sr-only">{status.label}: </span>
             {isFast ? <span className="stream-fast-tag">⚡ Fast</span> : null}
             <span className="stream-action-title">{actionLabel || status.label}</span>
             {inlineDetail ? (

@@ -56,6 +56,6 @@ export function useStoredFrames(chats: ChatsApi, selectedKey: string | null, wan
   return {
     pastStep,
     pastFrame: loaded && loaded.key === selectedKey ? loaded.frame : null,
-    restoredFrame: wantRestored && restored?.turnId === lastTurnId ? restored.frame : null,
+    restoredFrame: wantRestored && restored && restored.turnId === lastTurnId ? restored.frame : null,
   };
 }

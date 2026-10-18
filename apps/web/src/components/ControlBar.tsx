@@ -10,8 +10,7 @@ import {
   Clock,
   Coins,
   HelpCircle,
-  Brain,
-  MessagesSquare,
+  MoreHorizontal,
   Pause,
   Play,
   Plus,
@@ -20,12 +19,12 @@ import {
   ShieldCheck,
   Sparkles,
   Square,
-  UserCheck,
   Zap,
 } from "lucide-react";
 import type { ApprovalMode, Question, RunState, Usage } from "@/lib/protocol";
 import type { ConnectionState } from "@/lib/agent-state";
 import { formatCost, formatDuration } from "@/lib/format";
+import { totalTokens } from "@/lib/usage";
 
 interface ControlBarProps {
   goal: string;
@@ -36,21 +35,17 @@ interface ControlBarProps {
   maxSteps: number;
   elapsedS: number;
   usage: Usage | null;
+  chatUsage: Usage;
+  allChatsUsage: Usage;
   mode: ApprovalMode;
   finished: boolean;
   connection: ConnectionState;
   reconnectAttempt: number;
-  hasProfileData?: boolean;
-  historyCount?: number;
-  memoryCount?: number;
   onPause: () => void;
   onResume: () => void;
   onStop: () => void;
   onModeChange: (mode: ApprovalMode) => void;
   onNewTask: () => void;
-  onOpenProfile?: () => void;
-  onOpenHistory?: () => void;
-  onOpenMemory?: () => void;
 }
 
 const STATE_TEXT: Record<RunState, string> = {
@@ -104,21 +99,17 @@ export function ControlBar(props: ControlBarProps) {
     maxSteps,
     elapsedS,
     usage,
+    chatUsage,
+    allChatsUsage,
     mode,
     finished,
     connection,
     reconnectAttempt,
-    hasProfileData,
-    historyCount = 0,
-    memoryCount = 0,
     onPause,
     onResume,
     onStop,
     onModeChange,
     onNewTask,
-    onOpenProfile,
-    onOpenHistory,
-    onOpenMemory,
   } = props;
   const [confirmStop, setConfirmStop] = useState(false);
   const [goalExpanded, setGoalExpanded] = useState(false);
@@ -127,9 +118,7 @@ export function ControlBar(props: ControlBarProps) {
   const canControl = !finished && run !== "idle";
   const tone = toneFor(run, hasResult);
   const statusLabel = run === "failed" && hasResult ? "Partial result" : STATE_TEXT[run];
-  const connected = connection === "open";
   const singleLineGoal = goal.replace(/\s+/g, " ").trim();
-  const isLongGoal = goal.includes("\n") || singleLineGoal.length > 70;
 
   return (
     <Collapsible.Root
@@ -159,31 +148,16 @@ export function ControlBar(props: ControlBarProps) {
               <span className="run-status-text" role="status" aria-live="polite">
                 {statusLabel}
               </span>
-              {detail ? (
-                <span className="run-status-detail" title={detail}>
-                  · {detail}
-                </span>
-              ) : null}
             </div>
-
             {goal ? (
               <div className="goal-pill-wrap">
-                {isLongGoal ? (
-                  <Collapsible.Trigger asChild>
-                    <button
-                      type="button"
-                      className="goal-pill goal-pill-interactive"
-                      title="Click to view full goal"
-                    >
-                      <span className="goal-pill-text">{singleLineGoal}</span>
-                      {goalExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                    </button>
-                  </Collapsible.Trigger>
-                ) : (
-                  <div className="goal-pill" title={singleLineGoal}>
+                <Collapsible.Trigger asChild>
+                  <button type="button" className="goal-pill goal-pill-interactive"
+                    aria-label={goalExpanded ? "Hide full task" : "Show full task"}>
                     <span className="goal-pill-text">{singleLineGoal}</span>
-                  </div>
-                )}
+                    {goalExpanded ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                  </button>
+                </Collapsible.Trigger>
               </div>
             ) : null}
           </div>
@@ -194,7 +168,7 @@ export function ControlBar(props: ControlBarProps) {
                 <Activity size={13} aria-hidden="true" />
                 <strong>
                   {stepNumber}
-                  <span className="telemetry-muted">/{maxSteps || "–"}</span>
+                  <span className="telemetry-muted">/{maxSteps || "–"} steps</span>
                 </strong>
               </span>
               <span className="telemetry-chip" title="Elapsed time">
@@ -205,18 +179,11 @@ export function ControlBar(props: ControlBarProps) {
                 <Coins size={13} aria-hidden="true" />
                 <strong>{usage ? formatCost(usage.cost_usd) : "–"}</strong>
               </span>
-              {usage?.fast_calls ? (
-                <span
-                  className="telemetry-chip telemetry-fast"
-                  title={`Fast Executor (System 1) ran ${usage.fast_calls} calibrated UI actions without frontier LLM turns (~${(usage.fast_calls * 4000).toLocaleString()} tokens saved)`}
-                >
-                  <Zap size={13} aria-hidden="true" />
-                  <strong>
-                    {usage.fast_calls} Fast · ~{Math.round(usage.fast_calls * 4)}k tok saved ·{" "}
-                    {Math.round((usage.fast_ms_total ?? 0) / usage.fast_calls)}ms
-                  </strong>
-                </span>
-              ) : null}
+              <span className="telemetry-chip" title="Tokens used by this task (input + output)">
+                <strong>{usage ? totalTokens(usage).toLocaleString() : "–"}</strong>
+                <span className="telemetry-muted">tok</span>
+              </span>
+
             </div>
 
             <div className="mode-select-wrap">
@@ -244,48 +211,11 @@ export function ControlBar(props: ControlBarProps) {
               </select>
             </div>
 
-            {onOpenProfile ? (
-              <button
-                type="button"
-                className="btn btn-sm"
-                onClick={onOpenProfile}
-                title="Autofill & operator context profile"
-              >
-                <UserCheck size={13} aria-hidden="true" />
-                <span>Profile</span>
-                {hasProfileData ? <span className="dot dot-open" aria-hidden="true" /> : null}
-              </button>
-            ) : null}
-
-            {onOpenMemory ? (
-              <button
-                type="button"
-                className="btn btn-sm"
-                onClick={onOpenMemory}
-                title="What the agent remembers about you across chats"
-              >
-                <Brain size={13} aria-hidden="true" />
-                <span>{memoryCount > 0 ? `Memory (${memoryCount})` : "Memory"}</span>
-              </button>
-            ) : null}
-
-            {onOpenHistory ? (
-              <button
-                type="button"
-                className="btn btn-sm"
-                onClick={onOpenHistory}
-                title="Your saved chats in this browser"
-              >
-                <MessagesSquare size={13} aria-hidden="true" />
-                <span>{historyCount > 0 ? `Chats (${historyCount})` : "Chats"}</span>
-              </button>
-            ) : null}
-
             <div className="control-actions">
               {finished ? (
                 <button type="button" className="btn btn-primary btn-sm" onClick={onNewTask}>
                   <Plus size={14} aria-hidden="true" />
-                  New chat
+                  New task
                 </button>
               ) : (
                 <>
@@ -335,24 +265,8 @@ export function ControlBar(props: ControlBarProps) {
                 </>
               )}
             </div>
-
-            <div
-              className="conn-indicator"
-              role="status"
-              aria-live="polite"
-              title={
-                connected
-                  ? "Connected to agent server"
-                  : connection === "reconnecting"
-                    ? `Reconnecting (attempt ${reconnectAttempt})`
-                    : "Offline"
-              }
-            >
-              <span
-                className={`dot ${connected ? "dot-open" : connection === "reconnecting" ? "dot-wait" : ""}`}
-                aria-hidden="true"
-              />
-            </div>
+            <RunDetails usage={usage} chatUsage={chatUsage} allChatsUsage={allChatsUsage}
+              detail={detail} connection={connection} reconnectAttempt={reconnectAttempt} />
           </div>
         </div>
 
@@ -364,6 +278,76 @@ export function ControlBar(props: ControlBarProps) {
         </Collapsible.Content>
       </header>
     </Collapsible.Root>
+  );
+}
+
+function RunDetails({ usage, chatUsage, allChatsUsage, detail, connection, reconnectAttempt }: {
+  usage: Usage | null;
+  chatUsage: Usage;
+  allChatsUsage: Usage;
+  detail: string;
+  connection: ConnectionState;
+  reconnectAttempt: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const root = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const dismiss = (event: PointerEvent) => {
+      if (event.target instanceof Node && !root.current?.contains(event.target)) setOpen(false);
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopPropagation();
+      setOpen(false);
+      trigger.current?.focus();
+    };
+    document.addEventListener("pointerdown", dismiss);
+    document.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("pointerdown", dismiss);
+      document.removeEventListener("keydown", onKey, true);
+    };
+  }, [open]);
+  const fastCalls = usage?.fast_calls ?? 0;
+  return (
+    <div className="run-details" ref={root}>
+      <button ref={trigger} type="button" className="btn btn-sm" aria-label="Run details"
+        title="Run details" aria-expanded={open} aria-controls="run-details-panel"
+        onClick={() => setOpen((value) => !value)}>
+        <MoreHorizontal size={16} aria-hidden="true" />
+        {connection !== "open" ? <span className="dot dot-wait" aria-label="Connection interrupted" /> : null}
+      </button>
+      {open ? (
+        <section id="run-details-panel" className="run-details-panel" aria-label="Run details">
+          <h2>Run details</h2>
+          <table className="usage-totals" aria-label="Token and cost totals">
+            <thead><tr><th scope="col">Usage</th><th scope="col">Tokens</th><th scope="col">Cost</th></tr></thead>
+            <tbody>
+              {[["This task", usage], ["This chat", chatUsage], ["All saved chats", allChatsUsage]].map(([label, value]) => {
+                const total = value as Usage | null;
+                return <tr key={String(label)}><th scope="row">{String(label)}</th>
+                  <td>{total ? totalTokens(total).toLocaleString() : "–"}</td>
+                  <td>{total ? formatCost(total.cost_usd) : "–"}</td></tr>;
+              })}
+            </tbody>
+          </table>
+          <p>Recorded input + output tokens. All saved chats covers this browser; deleted chats and usage that was not recorded are excluded.</p>
+          {detail ? <p>{detail}</p> : null}
+          <dl>
+            <div><dt>Connection</dt><dd>{connection === "open" ? "Connected" : connection === "reconnecting" ? `Reconnecting (attempt ${reconnectAttempt})` : "Offline"}</dd></div>
+            <div><dt>Model calls</dt><dd>{usage?.llm_calls ?? "–"}</dd></div>
+            <div><dt>Input tokens</dt><dd>{usage?.input_tokens.toLocaleString() ?? "–"}</dd></div>
+            <div><dt>Output tokens</dt><dd>{usage?.output_tokens.toLocaleString() ?? "–"}</dd></div>
+            <div><dt>Jev decisions</dt><dd>{fastCalls}</dd></div>
+            <div><dt>Average Jev decision</dt><dd>{fastCalls ? `${Math.round((usage?.fast_ms_total ?? 0) / fastCalls)}ms` : "–"}</dd></div>
+          </dl>
+          <p>Jev decisions include actions that failed or were skipped. Token savings are not measured.</p>
+        </section>
+      ) : null}
+    </div>
   );
 }
 

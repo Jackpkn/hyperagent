@@ -73,6 +73,8 @@ export interface StepRecord {
   risk?: StepRisk;
   result?: string;
   error?: string;
+  /** Browser-side evidence about this action, not a claim that the whole task is complete. */
+  verification?: { status: "verified" | "unverified" | "failed"; detail: string };
   url?: string;
   started_at: number;
   ended_at?: number;
@@ -114,11 +116,13 @@ export interface Question {
 }
 
 export interface Usage {
+  /** Cumulative for one task. Replace snapshots; sum distinct tasks for chat totals. */
   llm_calls: number;
   input_tokens: number;
   output_tokens: number;
   cost_usd: number;
   elapsed_s: number;
+  /** Validated Jev decisions, including failed/skipped actions and terminal decisions. */
   fast_calls?: number;
   fast_ms_total?: number;
   text_calls?: number;

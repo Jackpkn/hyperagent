@@ -25,9 +25,10 @@ import {
   putFrame,
   setSetting,
 } from "./chat-db";
-import type { ConversationTurn, Frame } from "./protocol";
+import { chatIdFromPath } from "./chat-path";
+import type { ConversationTurn, Frame, Usage } from "./protocol";
+import { sumUsage } from "./usage";
 
-const ACTIVE_KEY = "activeChatId";
 const MEMORY_KEY = "memories";
 const MIGRATED_KEY = "migratedRunHistory";
 const LEGACY_HISTORY_KEY = "hyperagent.history.v1";
@@ -38,27 +39,33 @@ export interface ChatSummary {
   title: string;
   updatedAt: number;
   turns: number;
+  usage: Usage;
 }
 
 export interface ChatsApi {
   ready: boolean;
+  error: string | null;
+  flush: () => Promise<void>;
   persistent: boolean;
   activeChat: Chat | null;
   /** Turns of the open chat other than the one running live right now. */
   pastTurns: ChatTurn[];
   chats: ChatSummary[];
+  chatUsage: Usage;
+  allChatsUsage: Usage;
   memories: string[];
   conversation: () => ConversationTurn[];
   newChat: () => void;
-  openChat: (id: string) => void;
-  removeChat: (id: string) => void;
+  openChat: (id: string, signal?: AbortSignal) => Promise<boolean>;
+  removeChat: (id: string) => Promise<boolean>;
   loadFrame: (key: string) => Promise<Frame | null>;
   setMemories: (next: string[]) => void;
   rememberFromResult: (items: string[]) => string[];
 }
 
 function summarize(chats: Chat[]): ChatSummary[] {
-  return chats.map((c) => ({ id: c.id, title: c.title, updatedAt: c.updatedAt, turns: c.turns.length }));
+  return chats.map((c) => ({ id: c.id, title: c.title, updatedAt: c.updatedAt, turns: c.turns.length,
+    usage: sumUsage(c.turns.map((turn) => turn.usage)) }));
 }
 
 /** One-time import of the old summary-only run history, as single-turn chats without screenshots. */
@@ -93,6 +100,9 @@ async function migrateLegacyHistory(): Promise<void> {
 }
 
 export function useChats(state: AgentState): ChatsApi {
+  const [error, setError] = useState<string | null>(null);
+  const pendingSaveRef = useRef<Chat | null>(null);
+  const savePromiseRef = useRef<Promise<void>>(Promise.resolve());
   const [ready, setReady] = useState(false);
   const [persistent, setPersistent] = useState(true);
   const [chats, setChats] = useState<ChatSummary[]>([]);
@@ -110,20 +120,29 @@ export function useChats(state: AgentState): ChatsApi {
     setActiveChat(chat);
     if (!chat) return;
     setChats((prev) => summarize([chat]).concat(prev.filter((c) => c.id !== chat.id)));
-    putChat(chat).catch(() => setPersistent(false));
+    savePromiseRef.current = putChat(chat).catch(() => setPersistent(false));
   }, []);
 
-  // Load the open chat, the chat list and long-term memory once.
+  const flush = useCallback(async () => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    const pending = pendingSaveRef.current;
+    pendingSaveRef.current = null;
+    if (pending) commit(pending);
+    await savePromiseRef.current;
+  }, [commit]);
+
+  // The URL, rather than the last-opened chat setting, determines what opens.
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setPersistent(await isPersistent());
       await migrateLegacyHistory();
       const all = await listChats();
-      const activeId = await getSetting<string | null>(ACTIVE_KEY);
+      const activeId = chatIdFromPath(window.location.pathname);
       const saved = (await getSetting<string[]>(MEMORY_KEY)) ?? [];
       if (cancelled) return;
       const open = all.find((c) => c.id === activeId) ?? null;
+      if (activeId && !open) setError("This chat is not available in this browser. It may have been deleted or saved on another device.");
       const settled = open ? { ...open, turns: open.turns.map(settleTurn) } : null;
       activeRef.current = settled;
       memoriesRef.current = saved;
@@ -144,7 +163,7 @@ export function useChats(state: AgentState): ChatsApi {
 
   // A new run is a new turn; the first turn creates the chat.
   useEffect(() => {
-    if (!state.runStartedAt || !state.goal) return;
+    if (!ready || !state.runStartedAt || !state.goal) return;
     const turnId = `t-${Math.round(state.runStartedAt * 1000)}`;
     if (turnId === liveTurnId) return;
     setLiveTurnId(turnId);
@@ -152,15 +171,14 @@ export function useChats(state: AgentState): ChatsApi {
     if (!activeRef.current) {
       const now = Date.now();
       const chat: Chat = { id: newId("c"), title: chatTitle(state.goal), createdAt: now, updatedAt: now, turns: [] };
-      commit(chat);
-      setSetting(ACTIVE_KEY, chat.id).catch(() => undefined);
+      commit(upsertTurn(chat, snapshotTurn(state, turnId, [])));
     }
-  }, [state.runStartedAt, state.goal, liveTurnId, commit]);
+  }, [state, ready, liveTurnId, commit]);
 
   // Save the live turn (debounced) and every new step screenshot exactly once.
   useEffect(() => {
     const chat = activeRef.current;
-    if (!liveTurnId || !chat || !state.goal) return;
+    if (!liveTurnId || !chat || !state.goal || liveTurnId !== `t-${Math.round((state.runStartedAt ?? 0) * 1000)}`) return;
     for (const [stepId, frame] of Object.entries(state.stepFrames)) {
       if (savedFramesRef.current.has(stepId)) continue;
       savedFramesRef.current.add(stepId);
@@ -169,22 +187,27 @@ export function useChats(state: AgentState): ChatsApi {
     // The final page view, kept once the run ends (live frames arrive about once a second).
     if (state.frame && isRunFinished(state.run) && !savedFramesRef.current.has(LAST_FRAME)) {
       savedFramesRef.current.add(LAST_FRAME);
-      putFrame(chat.id, frameKey(liveTurnId, LAST_FRAME), state.frame).catch(() => undefined);
+      putFrame(chat.id, frameKey(liveTurnId, LAST_FRAME), state.frame).catch(() => setPersistent(false));
     }
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      const current = activeRef.current;
-      if (!current) return;
-      commit(upsertTurn(current, snapshotTurn(state, liveTurnId, [...savedFramesRef.current])));
-    }, SAVE_DELAY_MS);
-  }, [state, liveTurnId, commit]);
+    // Capture the owner now: a delayed save must never write into a newly selected chat.
+    const next = upsertTurn(chat, snapshotTurn(state, liveTurnId, [...savedFramesRef.current]));
+    pendingSaveRef.current = next;
+    if (isRunFinished(state.run)) {
+      void flush();
+    } else {
+      saveTimerRef.current = setTimeout(() => void flush(), SAVE_DELAY_MS);
+    }
+  }, [state, liveTurnId, flush]);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    const save = () => { void flush(); };
+    window.addEventListener("pagehide", save);
+    return () => {
+      window.removeEventListener("pagehide", save);
       if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    },
-    [],
-  );
+    };
+  }, [flush]);
 
   const pastTurns = (activeChat?.turns ?? []).filter((t) => t.id !== liveTurnId);
 
@@ -197,35 +220,60 @@ export function useChats(state: AgentState): ChatsApi {
     setLiveTurnId(null);
     activeRef.current = null;
     setActiveChat(null);
-    setSetting(ACTIVE_KEY, null).catch(() => undefined);
+    setError(null);
   }, []);
 
-  const openChat = useCallback(
-    (id: string) => {
-      listChats()
-        .then((all) => {
-          const chat = all.find((c) => c.id === id);
-          if (!chat) return;
-          setLiveTurnId(null);
-          const settled = { ...chat, turns: chat.turns.map(settleTurn) };
-          activeRef.current = settled;
-          setActiveChat(settled);
-          setSetting(ACTIVE_KEY, id).catch(() => undefined);
-        })
-        .catch(() => setPersistent(false));
-    },
-    [],
-  );
-
-  const removeChat = useCallback((id: string) => {
-    setChats((prev) => prev.filter((c) => c.id !== id));
-    if (activeRef.current?.id === id) {
-      activeRef.current = null;
-      setActiveChat(null);
+  const openChat = useCallback(async (id: string, signal?: AbortSignal): Promise<boolean> => {
+    try {
+      // Another tab may have edited or deleted this record since the sidebar loaded.
+      const all = await listChats();
+      if (signal?.aborted) return false;
+      const chat = all.find((item) => item.id === id);
+      setChats(summarize(all));
       setLiveTurnId(null);
-      setSetting(ACTIVE_KEY, null).catch(() => undefined);
+      if (!chat) {
+        activeRef.current = null;
+        setActiveChat(null);
+        setError("This chat is not available in this browser. It may have been deleted or saved on another device.");
+        return false;
+      }
+      const settled = { ...chat, turns: chat.turns.map(settleTurn) };
+      activeRef.current = settled;
+      setActiveChat(settled);
+      setError(null);
+      return true;
+    } catch {
+      if (!signal?.aborted) {
+        activeRef.current = null;
+        setActiveChat(null);
+        setLiveTurnId(null);
+        setPersistent(false);
+        setError("Could not open this saved chat. Reload the page and try again.");
+      }
+      return false;
     }
-    deleteChat(id).catch(() => setPersistent(false));
+  }, []);
+
+  const removeChat = useCallback(async (id: string): Promise<boolean> => {
+    if (pendingSaveRef.current?.id === id) {
+      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+      pendingSaveRef.current = null;
+    }
+    try {
+      // Do not finish navigation (or remove the row) before the storage transaction commits.
+      await deleteChat(id);
+      setChats((prev) => prev.filter((c) => c.id !== id));
+      if (activeRef.current?.id === id) {
+        activeRef.current = null;
+        setActiveChat(null);
+        setLiveTurnId(null);
+      }
+      return true;
+    } catch {
+      setPersistent(false);
+      setError("Could not delete the saved chat from this browser. Reload and try again.");
+      return false;
+    }
   }, []);
 
   const loadFrame = useCallback((key: string) => {
@@ -249,12 +297,28 @@ export function useChats(state: AgentState): ChatsApi {
     [setMemories],
   );
 
+  // Replace the saved snapshot of the live turn instead of counting it twice.
+  const currentTurnId = state.active && state.runStartedAt
+    ? `t-${Math.round(state.runStartedAt * 1000)}` : null;
+  const chatUsage = sumUsage([
+    ...(activeChat?.turns ?? []).filter((turn) => turn.id !== currentTurnId).map((turn) => turn.usage),
+    currentTurnId ? state.usage : null,
+  ]);
+  const allChatsUsage = sumUsage([
+    ...chats.filter((chat) => chat.id !== activeChat?.id).map((chat) => chat.usage),
+    chatUsage,
+  ]);
+
   return {
     ready,
+    error,
+    flush,
     persistent,
     activeChat,
     pastTurns,
     chats,
+    chatUsage,
+    allChatsUsage,
     memories,
     conversation,
     newChat,

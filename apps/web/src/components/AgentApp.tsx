@@ -13,6 +13,8 @@ import {
   WifiOff,
 } from "lucide-react";
 import { useAgent, type StartOptions } from "@/lib/use-agent";
+import { useChatRoute } from "@/lib/use-chat-route";
+import { ChatSidebar } from "./ChatSidebar";
 import { useChats } from "@/lib/use-chats";
 import { useStoredFrames } from "@/lib/use-stored-frames";
 import { frameKey, parseFrameKey } from "@/lib/chat-model";
@@ -34,7 +36,7 @@ import { BrowserView, type BrowserTarget } from "./BrowserView";
 import { ControlBar, GuidanceComposer } from "./ControlBar";
 import { Launcher } from "./Launcher";
 import { ProfileModal } from "./OperatorModals";
-import { ChatsModal, MemoryModal } from "./ChatModals";
+import { MemoryModal } from "./ChatModals";
 import { PastTurns } from "./PastTurns";
 import { ResultsPanel } from "./ResultsPanel";
 import { Timeline } from "./Timeline";
@@ -73,7 +75,10 @@ export function AgentApp() {
   const { state, send } = agent;
   const connected = state.connection === "open";
   const chats = useChats(state);
-  const showRun = state.active || state.run !== "idle" || chats.pastTurns.length > 0;
+  const route = useChatRoute(agent, chats);
+  const [navigationOpen, setNavigationOpen] = useState(true);
+  const [launcherKey, setLauncherKey] = useState(0);
+  const showRun = state.active || state.run !== "idle" || Boolean(chats.activeChat);
   // A chat reopened (or restored after a reload) has no live run: treat it like a finished one.
   const idleChat = showRun && state.run === "idle";
   const finished = isRunFinished(state.run) || idleChat;
@@ -91,8 +96,11 @@ export function AgentApp() {
   const [profile, setProfile] = useState<OperatorProfile>(defaultOperatorProfile);
   const [persistSession, setPersistSession] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [showChatsModal, setShowChatsModal] = useState(false);
   const [showMemoryModal, setShowMemoryModal] = useState(false);
+
+  useEffect(() => {
+    setNavigationOpen(!showRun && window.innerWidth > 760);
+  }, [showRun]);
 
   const lastApprovalStepRef = useRef<string | null>(null);
   const rememberedRunRef = useRef<number | null>(null);
@@ -271,6 +279,7 @@ export function AgentApp() {
 
   // Every run carries the open chat's earlier turns and long-term memory.
   const start = (options: StartOptions): boolean => {
+    if (!chats.ready || route.switching) return false;
     setActiveTab("steps");
     setSelectedStepId(null);
     return agent.startRun({
@@ -283,16 +292,23 @@ export function AgentApp() {
   };
 
   const openNewChat = () => {
-    if (!finished) agent.send({ type: "stop" });
-    agent.reset();
-    chats.newChat();
+    setLauncherKey((value) => value + 1);
+    setSelectedStepId(null);
+    route.navigate(null);
   };
 
   const openChat = (id: string) => {
-    if (!finished) agent.send({ type: "stop" });
-    agent.reset();
     setSelectedStepId(null);
-    chats.openChat(id);
+    route.navigate(id);
+  };
+
+  const removeChat = async (id: string) => {
+    if (id === chats.activeChat?.id) {
+      route.navigate(null, "replace", id);
+    } else {
+      await chats.flush();
+      await chats.removeChat(id);
+    }
   };
 
   const statusText = (() => {
@@ -341,6 +357,17 @@ export function AgentApp() {
         </div>
       ) : null}
 
+      {route.switching ? <div className="navigation-notice" role="status">
+        {route.stopping ? "Stopping the current run and saving this chat…" : "Opening chat…"}
+      </div> : null}
+      {chats.error ? <div className="navigation-notice" role="alert">{chats.error}</div> : null}
+      <div className={`workspace-shell${navigationOpen ? " is-nav-open" : ""}`}>
+        <ChatSidebar open={navigationOpen} onToggle={() => setNavigationOpen((value) => !value)}
+          chats={chats.chats} activeId={chats.activeChat?.id ?? null} ready={chats.ready}
+          busy={route.switching || (showRun && !finished)} persistent={chats.persistent}
+          hasProfileData={hasProfile} memoryCount={chats.memories.length}
+          onNew={openNewChat} onOpen={openChat} onDelete={(id) => void removeChat(id)}
+          onOpenProfile={() => setShowProfileModal(true)} onOpenMemory={() => setShowMemoryModal(true)} />
       {showRun ? (
         <main className="run-shell">
           <ControlBar
@@ -352,21 +379,17 @@ export function AgentApp() {
             maxSteps={state.session?.max_steps ?? 0}
             elapsedS={restored ? restored.usage?.elapsed_s ?? 0 : elapsedS}
             usage={shown.usage}
+            chatUsage={chats.chatUsage}
+            allChatsUsage={chats.allChatsUsage}
             mode={state.mode}
             finished={finished}
             connection={state.connection}
             reconnectAttempt={state.reconnectAttempt}
-            hasProfileData={hasProfile}
-            historyCount={chats.chats.length}
-            memoryCount={chats.memories.length}
             onPause={() => agent.send({ type: "pause" })}
             onResume={() => agent.send({ type: "resume" })}
             onStop={() => agent.send({ type: "stop" })}
             onModeChange={(mode) => agent.changeMode(mode)}
             onNewTask={openNewChat}
-            onOpenProfile={() => setShowProfileModal(true)}
-            onOpenHistory={() => setShowChatsModal(true)}
-            onOpenMemory={() => setShowMemoryModal(true)}
           />
 
           <div
@@ -445,6 +468,8 @@ export function AgentApp() {
                   steps={state.steps}
                   feed={state.feed}
                   approvals={state.approvals}
+                  questions={state.questions}
+                  onAnswer={agent.guide}
                   findings={state.findings}
                   result={state.result}
                   previousResult={previousResult}
@@ -493,7 +518,11 @@ export function AgentApp() {
                 />
               </Tabs.Content>
 
-              <GuidanceComposer
+              {question && !finished ? activeTab !== "steps" ? (
+                <button type="button" className="btn btn-quiet" onClick={() => setActiveTab("steps")}>
+                  Answer the agent’s question in Live Stream
+                </button>
+              ) : null : <GuidanceComposer
                 question={question}
                 finished={finished}
                 hasLiveBrowser={Boolean(state.frame)}
@@ -516,7 +545,7 @@ export function AgentApp() {
                 onStartNewTask={(newGoal) =>
                   start({ goal: newGoal, startUrl: "", mode: state.mode, model: state.session?.model ?? "" })
                 }
-              />
+              />}
             </Tabs.Root>
 
             <div
@@ -591,24 +620,21 @@ export function AgentApp() {
       ) : (
         <main className="launch-main">
           <Launcher
-            connected={connected}
+            key={launcherKey}
+            connected={connected && chats.ready && !route.switching}
             models={state.session?.models ?? []}
             defaultModel={state.session?.model ?? ""}
             fastModel={state.session?.fast_model}
             persistSession={persistSession}
             hasSavedSession={state.session?.has_saved_session}
-            hasProfileData={hasProfile}
-            historyCount={chats.chats.length}
-            memoryCount={chats.memories.length}
             onTogglePersistSession={togglePersistSession}
             onClearSavedSession={() => agent.send({ type: "clear_session" })}
-            onOpenProfile={() => setShowProfileModal(true)}
-            onOpenHistory={() => setShowChatsModal(true)}
-            onOpenMemory={() => setShowMemoryModal(true)}
             onStart={start}
           />
         </main>
       )}
+
+      </div>
 
       {showProfileModal ? (
         <ProfileModal
@@ -618,18 +644,6 @@ export function AgentApp() {
             saveOperatorProfile(next);
           }}
           onClose={() => setShowProfileModal(false)}
-        />
-      ) : null}
-
-      {showChatsModal ? (
-        <ChatsModal
-          chats={chats.chats}
-          activeId={chats.activeChat?.id ?? null}
-          persistent={chats.persistent}
-          onOpen={openChat}
-          onNew={openNewChat}
-          onDelete={chats.removeChat}
-          onClose={() => setShowChatsModal(false)}
         />
       ) : null}
 

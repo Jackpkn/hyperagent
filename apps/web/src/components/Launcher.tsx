@@ -3,19 +3,10 @@
 import { useState } from "react";
 import {
   ArrowRight,
-  ArrowUpRight,
-  BookmarkCheck,
   Bot,
   Compass,
-  Globe,
-  Brain,
-  MessagesSquare,
-  ShieldAlert,
-  ShieldCheck,
-  Sparkles,
-  UserCheck,
-  Zap,
 } from "lucide-react";
+import { BrowserSettings } from "./BrowserSettings";
 import type { ApprovalMode } from "@/lib/protocol";
 import type { StartOptions } from "@/lib/use-agent";
 
@@ -26,67 +17,37 @@ interface LauncherProps {
   fastModel?: string | null;
   persistSession: boolean;
   hasSavedSession?: boolean;
-  hasProfileData: boolean;
-  historyCount: number;
-  memoryCount: number;
   onTogglePersistSession: () => void;
   onClearSavedSession: () => void;
-  onOpenProfile: () => void;
-  onOpenHistory: () => void;
-  onOpenMemory: () => void;
   onStart: (options: StartOptions) => boolean;
 }
 
-interface PresetTask {
+interface TaskExample {
   readonly title: string;
   readonly badge: string;
-  readonly startUrl: string;
   readonly summary: string;
-  readonly goal: string;
 }
 
-const PRESET_TASKS: readonly PresetTask[] = [
+const TASK_EXAMPLES: readonly TaskExample[] = [
   {
-    title: "Product Specs & Price Matrix",
+    title: "Compare tools for my team",
     badge: "Research",
-    startUrl: "https://www.rtings.com/headphones",
-    summary: "Extract ANC score, battery life, comfort rating, and price into a verified matrix.",
-    goal: "Navigate to RTINGS or Wirecutter, research the top 3 wireless noise-cancelling headphones currently recommended, extract their active noise isolation score, tested battery life, and price into a comparison matrix with source citations.",
+    summary: "Compare Linear, Asana, and ClickUp for a 10-person product team using their official sites. Create a brief with USD pricing, billing terms, key features, and limitations. Recommend the best fit and link your sources.",
   },
   {
-    title: "Catalog Filter & Extraction",
+    title: "Build a startup shortlist",
+    badge: "Data",
+    summary: "Find 10 developer-tool startups in Y Combinator’s company directory. Open each profile and build a clean table with company, batch, location, product summary, and website. Link each profile and mark missing details as unknown.",
+  },
+  {
+    title: "Triage a GitHub backlog",
     badge: "Workflow",
-    startUrl: "https://books.toscrape.com",
-    summary: "Filter Fiction books with 4+ stars under £20, extracting titles, star ratings, and stock counts.",
-    goal: "Navigate to Books to Scrape, filter for Fiction books that have a 4 or 5-star rating priced under £20. Extract title, star rating, price, and in-stock count for each, normalizing the data into a clean table.",
+    summary: "Review the 10 newest open bug reports in vercel/next.js on GitHub. Read each report and its comments, flag possible duplicates, and suggest a priority with a reason. Prepare a linked triage table and draft replies for reports missing reproduction steps.",
   },
   {
-    title: "AI Sentiment & Consensus Brief",
-    badge: "Synthesis",
-    startUrl: "https://news.ycombinator.com",
-    summary: "Scan top trending AI discussions, extract key technical arguments, and synthesize an executive brief.",
-    goal: "Scan today's top stories on Hacker News for the highest-voted AI or LLM discussions. Read the discussion threads, summarize the dominant community consensus and criticisms, and compile a structured executive brief with links.",
-  },
-];
-
-const MODES: { value: ApprovalMode; label: string; short: string; detail: string }[] = [
-  {
-    value: "risky",
-    label: "Ask before risky actions",
-    short: "Risky actions",
-    detail: "Pauses before submitting, buying, sending, or deleting.",
-  },
-  {
-    value: "always",
-    label: "Ask before every action",
-    short: "Every action",
-    detail: "You approve each click, typed value, and navigation.",
-  },
-  {
-    value: "never",
-    label: "Fully autonomous",
-    short: "Autonomous",
-    detail: "Runs to completion without asking for approval.",
+    title: "Turn complaints into product ideas",
+    badge: "Explore",
+    summary: "Find 5 Ask HN discussions about frustrating everyday software tasks. Read the comments, group recurring problems, and propose 3 small product ideas. For each, describe the user, a first version, and existing alternatives, with links to supporting comments.",
   },
 ];
 
@@ -96,19 +57,12 @@ export function Launcher({
   defaultModel,
   persistSession,
   hasSavedSession,
-  hasProfileData,
-  historyCount,
-  memoryCount,
   onTogglePersistSession,
   onClearSavedSession,
-  onOpenProfile,
-  onOpenHistory,
-  onOpenMemory,
   onStart,
 }: LauncherProps) {
   const [goal, setGoal] = useState("");
   const [startUrl, setStartUrl] = useState("");
-  const [showUrlInput, setShowUrlInput] = useState(false);
   const [mode, setMode] = useState<ApprovalMode>("risky");
   const [model, setModel] = useState(defaultModel);
 
@@ -123,12 +77,6 @@ export function Launcher({
   return (
     <section className="launch" aria-labelledby="launch-title">
       <div className="launch-hero">
-        <div className="launch-badge">
-          <Sparkles size={13} aria-hidden="true" />
-          <span>Autonomous Browser Operator</span>
-          <span className="launch-badge-dot" aria-hidden="true" />
-          <span className="launch-badge-sub">Live Multimodal Execution</span>
-        </div>
         <h1 id="launch-title" className="launch-title">
           What should the agent <em>get done</em> in the browser?
         </h1>
@@ -155,30 +103,14 @@ export function Launcher({
             value={goal}
             onChange={(event) => setGoal(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) submit();
+              if (event.key === "Enter" && (event.metaKey || event.ctrlKey)) {
+                event.preventDefault();
+                event.currentTarget.form?.requestSubmit();
+              }
             }}
             placeholder="Describe what you want done in the browser, in plain English…"
             rows={4}
           />
-
-          {showUrlInput || startUrl ? (
-            <div className="composer-url-row">
-              <Globe size={14} className="composer-url-icon" aria-hidden="true" />
-              <label htmlFor="start-url" className="sr-only">
-                Start at a URL (optional)
-              </label>
-              <input
-                id="start-url"
-                className="composer-url-input mono"
-                type="url"
-                inputMode="url"
-                value={startUrl}
-                onChange={(event) => setStartUrl(event.target.value)}
-                placeholder="https:// (optional starting URL)"
-                autoComplete="off"
-              />
-            </div>
-          ) : null}
 
           <div className="goal-foot">
             <div className="composer-controls">
@@ -204,80 +136,22 @@ export function Launcher({
                   ))}
                 </select>
               </div>
-
-              <button
-                type="button"
-                className={`composer-pill composer-btn-pill${showUrlInput || startUrl ? " is-active" : ""}`}
-                onClick={() => setShowUrlInput((prev) => !prev)}
-                title="Set an optional starting URL"
-              >
-                <Globe size={13} aria-hidden="true" />
-                <span>{startUrl ? "Start URL set" : "Start URL"}</span>
-              </button>
-
-              <button
-                type="button"
-                className={`composer-pill composer-btn-pill${persistSession ? " is-active" : ""}`}
-                onClick={onTogglePersistSession}
-                title="Persist browser login cookies and storage across runs"
-              >
-                <BookmarkCheck size={13} aria-hidden="true" />
-                <span>{persistSession ? "Logins saved" : "Keep logins"}</span>
-                {hasSavedSession ? <span className="dot dot-open" aria-hidden="true" /> : null}
-              </button>
-
-              {hasSavedSession ? (
-                <button
-                  type="button"
-                  className="composer-pill composer-btn-pill"
-                  onClick={onClearSavedSession}
-                  title="Clear saved browser login cookies"
-                >
-                  <span>Clear cookies</span>
-                </button>
-              ) : null}
-
-              <button
-                type="button"
-                className={`composer-pill composer-btn-pill${hasProfileData ? " is-active" : ""}`}
-                onClick={onOpenProfile}
-                title="Set reusable autofill profile (name, email, address, preferences)"
-              >
-                <UserCheck size={13} aria-hidden="true" />
-                <span>{hasProfileData ? "Profile active" : "Autofill profile"}</span>
-              </button>
-
-              <button
-                type="button"
-                className={`composer-pill composer-btn-pill${memoryCount > 0 ? " is-active" : ""}`}
-                onClick={onOpenMemory}
-                title="What the agent remembers about you across chats"
-              >
-                <Brain size={13} aria-hidden="true" />
-                <span>{memoryCount > 0 ? `Memory (${memoryCount})` : "Memory"}</span>
-              </button>
-
-              {historyCount > 0 ? (
-                <button
-                  type="button"
-                  className="composer-pill composer-btn-pill"
-                  onClick={onOpenHistory}
-                  title="Your saved chats in this browser"
-                >
-                  <MessagesSquare size={13} aria-hidden="true" />
-                  <span>Chats ({historyCount})</span>
-                </button>
-              ) : null}
             </div>
 
             <div className="composer-submit-group">
-              <span className="hint composer-shortcut">⌘ + Enter</span>
               <button type="submit" className="btn btn-primary" disabled={!canStart}>
                 <span>Start agent</span>
                 <ArrowRight size={15} aria-hidden="true" />
               </button>
             </div>
           </div>
+        </div>
+
+        <div className="composer-settings-row">
+          <BrowserSettings mode={mode} onModeChange={setMode} startUrl={startUrl} onStartUrlChange={setStartUrl}
+            persistSession={persistSession} hasSavedSession={hasSavedSession}
+            onTogglePersistSession={onTogglePersistSession} onClearSavedSession={onClearSavedSession} />
+          <p className="hint composer-shortcut">⌘ + Enter</p>
         </div>
 
         {!connected ? (
@@ -287,72 +161,30 @@ export function Launcher({
         ) : null}
       </form>
 
-      <section className="starter-presets" aria-labelledby="starter-presets-heading">
-        <div className="starter-presets-header">
-          <Compass size={13} className="starter-presets-icon" aria-hidden="true" />
-          <span id="starter-presets-heading">One-Click Showcase Workflows</span>
-        </div>
+      <section className="starter-examples" aria-labelledby="starter-examples-heading">
+        <h2 id="starter-examples-heading" className="starter-examples-heading">
+          <Compass size={13} className="starter-examples-icon" aria-hidden="true" />
+          What can you delegate?
+        </h2>
         <div className="starter-grid">
-          {PRESET_TASKS.map((preset) => {
-            const isSelected = goal.trim() === preset.goal.trim();
-            let domain = "";
-            try {
-              domain = new URL(preset.startUrl).hostname.replace(/^www\./, "");
-            } catch {
-              domain = preset.startUrl;
-            }
-            return (
-              <button
-                key={preset.title}
-                type="button"
-                className={`starter-card${isSelected ? " is-selected" : ""}`}
-                onClick={() => {
-                  setGoal(preset.goal);
-                  setStartUrl(preset.startUrl);
-                  setShowUrlInput(true);
-                }}
-                title={`Load workflow: ${preset.title}`}
-              >
-                <div className="starter-card-top">
-                  <span className="starter-tag">{preset.badge}</span>
-                  <div className="starter-meta">
-                    <span className="starter-domain">{domain}</span>
-                    <ArrowUpRight size={12} className="starter-arrow" aria-hidden="true" />
-                  </div>
-                </div>
-                <h3 className="starter-card-title">{preset.title}</h3>
-                <p className="starter-card-desc">{preset.summary}</p>
-              </button>
-            );
-          })}
+          {TASK_EXAMPLES.map((example) => (
+            <button
+              key={example.title}
+              type="button"
+              className={`starter-card${goal.trim() === example.summary ? " is-selected" : ""}`}
+              onClick={() => {
+                setGoal(example.summary);
+                document.getElementById("goal")?.focus();
+              }}
+              aria-label={`Use example: ${example.title}`}
+            >
+              <span className="starter-tag">{example.badge}</span>
+              <span className="starter-card-title">{example.title}</span>
+              <span className="starter-card-desc">{example.summary}</span>
+            </button>
+          ))}
         </div>
       </section>
-
-      <fieldset className="mode-group" aria-label="Approval policy">
-        <legend className="sr-only">How much should the agent check with you?</legend>
-        {MODES.map((option) => (
-          <label key={option.value} className="mode-option">
-            <input
-              type="radio"
-              name="approval-mode"
-              value={option.value}
-              checked={mode === option.value}
-              onChange={() => setMode(option.value)}
-            />
-            <div className="mode-option-head">
-              {option.value === "risky" ? (
-                <ShieldCheck size={15} className="mode-card-icon" aria-hidden="true" />
-              ) : option.value === "always" ? (
-                <ShieldAlert size={15} className="mode-card-icon" aria-hidden="true" />
-              ) : (
-                <Zap size={15} className="mode-card-icon" aria-hidden="true" />
-              )}
-              <strong>{option.label}</strong>
-            </div>
-            <span>{option.detail}</span>
-          </label>
-        ))}
-      </fieldset>
     </section>
   );
 }

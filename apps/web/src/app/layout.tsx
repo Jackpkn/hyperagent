@@ -3,6 +3,9 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "HyperAgent · Browser operator",
+  icons: {
+    icon: [{ url: "/hyperagent-icon.svg", type: "image/svg+xml" }],
+  },
   description:
     "Give the agent a goal in plain English. Watch every step in a live browser, approve risky actions, and get a checked result.",
 };
