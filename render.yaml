@@ -36,13 +36,8 @@ services:
       - key: PLANNER_EFFORT
         value: "high"
 
-      # Alternative OpenRouter / OpenAI-compatible Planner
-      - key: LLM_API_KEY
-        sync: false
-      - key: LLM_BASE_URL
-        value: "https://openrouter.ai/api/v1"
-      - key: LLM_MODELS
-        value: "anthropic/claude-haiku-5.5,inception/mercury-2.5,anthropic/claude-sonnet-5.5,google/gemini-3.7-flash"
+      # Planner models default per provider (Claude API ids for "anthropic"). Only set LLM_MODELS with ids
+      # that match LLM_PROVIDER: OpenRouter-style "anthropic/..." ids are rejected by the Claude API.
       - key: AGENT_VISION
         value: "1"
 
@@ -54,15 +49,7 @@ services:
       - key: FAST_MIN_CONFIDENCE
         value: "0.45"
 
-      # Text Helper (for TypeSafe TYPE_TEXT actions)
-      - key: TEXT_MODEL_API_KEY
-        sync: false
-      - key: TEXT_MODEL_BASE_URL
-        value: "https://openrouter.ai/api/v1"
-      - key: TEXT_MODEL
-        value: "inception/mercury-2.5"
-      - key: TEXT_MODEL_PROVIDER
-        value: "openrouter"
+      # Text helper for Jev's TYPE_TEXT actions: uses Claude Haiku via ANTHROPIC_API_KEY by default.
 
       # --- Browser Engine ---
       - key: HEADLESS
@@ -81,7 +68,7 @@ services:
       - key: MAX_RUN_SECONDS
         value: "900"
       - key: MAX_SESSIONS
-        value: "3"
+        value: "2" # each session runs its own Chromium; 2 leaves headroom on a 1 GB instance
       - key: MAX_RUN_COST_USD
         value: "3.0"
       - key: MAX_SOCKETS_PER_IP

@@ -12,7 +12,8 @@ COPY pyproject.toml README.md LICENSE ./
 COPY hyperagent/ ./hyperagent/
 RUN pip install --no-cache-dir . && python -m playwright install --with-deps chromium
 COPY --from=web /web/out /app/web
-RUN useradd --create-home --uid 10001 hyperagent && chmod -R a+rX /opt/browsers
+RUN useradd --create-home --uid 10001 hyperagent && chmod -R a+rX /opt/browsers \
+    && mkdir -p /app/.hyperagent && chown hyperagent /app/.hyperagent
 USER hyperagent
 EXPOSE 8766
 CMD ["hyperagent-server"]
