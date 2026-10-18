@@ -5,6 +5,7 @@ import { ChevronDown, ChevronRight, MessageSquare } from "lucide-react";
 import type { ChatTurn } from "@/lib/chat-model";
 import { frameKey, parseFrameKey } from "@/lib/chat-model";
 import { ResultReport } from "./ResultReport";
+import { ResultsPanel } from "./ResultsPanel";
 import { StepCard } from "./StepCard";
 
 interface PastTurnsProps {
@@ -96,6 +97,20 @@ function PastTurn({
             </div>
           ))}
         </div>
+      ) : null}
+
+      {!turn.result && turn.findings.length > 0 ? (
+        <section className="stream-section-card" aria-label="Saved findings">
+          <ResultsPanel
+            mode="findings"
+            findings={turn.findings}
+            result={null}
+            finished
+            endedWithoutResult={null}
+            selectedStepId={selectedStepId}
+            onInspectStep={inspect}
+          />
+        </section>
       ) : null}
 
       {turn.result ? (

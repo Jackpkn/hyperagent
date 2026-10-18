@@ -66,7 +66,11 @@ export function chatTitle(goal: string): string {
 }
 
 /** The live run as a storable turn (immutable copy of the parts worth keeping). */
-export function snapshotTurn(state: AgentState, turnId: string, frameSteps: string[]): ChatTurn {
+export function snapshotTurn(
+  state: Pick<AgentState, "goal" | "runStartedAt" | "run" | "mode" | "plan" | "steps" | "feed" | "findings" | "usage" | "result">,
+  turnId: string,
+  frameSteps: string[],
+): ChatTurn {
   return {
     id: turnId,
     goal: state.goal,

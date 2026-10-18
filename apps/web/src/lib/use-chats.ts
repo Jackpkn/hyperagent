@@ -103,6 +103,7 @@ export function useChats(state: AgentState): ChatsApi {
   const activeRef = useRef<Chat | null>(null);
   const savedFramesRef = useRef<Set<string>>(new Set());
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingSaveRef = useRef<{ chatId: string; turn: ChatTurn } | null>(null);
   const memoriesRef = useRef<string[]>([]);
 
   const commit = useCallback((chat: Chat | null) => {
@@ -112,6 +113,15 @@ export function useChats(state: AgentState): ChatsApi {
     setChats((prev) => summarize([chat]).concat(prev.filter((c) => c.id !== chat.id)));
     putChat(chat).catch(() => setPersistent(false));
   }, []);
+
+  const flushSave = useCallback(() => {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = null;
+    const pending = pendingSaveRef.current;
+    pendingSaveRef.current = null;
+    const current = activeRef.current;
+    if (pending && current?.id === pending.chatId) commit(upsertTurn(current, pending.turn));
+  }, [commit]);
 
   // Load the open chat, the chat list and long-term memory once.
   useEffect(() => {
@@ -157,7 +167,7 @@ export function useChats(state: AgentState): ChatsApi {
     }
   }, [state.runStartedAt, state.goal, liveTurnId, commit]);
 
-  // Save the live turn (debounced) and every new step screenshot exactly once.
+  // Screenshots have their own store; live frame arrivals must not postpone chat saves.
   useEffect(() => {
     const chat = activeRef.current;
     if (!liveTurnId || !chat || !state.goal) return;
@@ -171,20 +181,39 @@ export function useChats(state: AgentState): ChatsApi {
       savedFramesRef.current.add(LAST_FRAME);
       putFrame(chat.id, frameKey(liveTurnId, LAST_FRAME), state.frame).catch(() => undefined);
     }
-    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    saveTimerRef.current = setTimeout(() => {
-      const current = activeRef.current;
-      if (!current) return;
-      commit(upsertTurn(current, snapshotTurn(state, liveTurnId, [...savedFramesRef.current])));
-    }, SAVE_DELAY_MS);
-  }, [state, liveTurnId, commit]);
+  }, [state.stepFrames, state.frame, state.run, state.goal, liveTurnId]);
 
-  useEffect(
-    () => () => {
-      if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    },
-    [],
-  );
+  const { goal, runStartedAt, run, mode, plan, steps, feed, findings, usage, result, stepFrames } = state;
+  useEffect(() => {
+    const chat = activeRef.current;
+    if (!liveTurnId || !chat || !goal) return;
+    pendingSaveRef.current = {
+      chatId: chat.id,
+      turn: snapshotTurn({ goal, runStartedAt, run, mode, plan, steps, feed, findings, usage, result },
+        liveTurnId, [...savedFramesRef.current]),
+    };
+    // Save completed reports immediately. While running, bound the wait even during streaming text.
+    if (result || isRunFinished(run)) flushSave();
+    else if (!saveTimerRef.current) saveTimerRef.current = setTimeout(flushSave, SAVE_DELAY_MS);
+  }, [goal, runStartedAt, run, mode, plan, steps, feed, findings, usage, result, stepFrames, liveTurnId, flushSave]);
+
+  // Do not rely on an asynchronous IndexedDB write during page unload for important data.
+  useEffect(() => {
+    flushSave();
+  }, [findings, plan, run, result, liveTurnId, flushSave]);
+
+  useEffect(() => {
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") flushSave();
+    };
+    window.addEventListener("pagehide", flushSave);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    return () => {
+      window.removeEventListener("pagehide", flushSave);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      flushSave();
+    };
+  }, [flushSave]);
 
   const pastTurns = (activeChat?.turns ?? []).filter((t) => t.id !== liveTurnId);
 
@@ -194,14 +223,16 @@ export function useChats(state: AgentState): ChatsApi {
   );
 
   const newChat = useCallback(() => {
+    flushSave();
     setLiveTurnId(null);
     activeRef.current = null;
     setActiveChat(null);
     setSetting(ACTIVE_KEY, null).catch(() => undefined);
-  }, []);
+  }, [flushSave]);
 
   const openChat = useCallback(
     (id: string) => {
+      flushSave();
       listChats()
         .then((all) => {
           const chat = all.find((c) => c.id === id);
@@ -214,7 +245,7 @@ export function useChats(state: AgentState): ChatsApi {
         })
         .catch(() => setPersistent(false));
     },
-    [],
+    [flushSave],
   );
 
   const removeChat = useCallback((id: string) => {
