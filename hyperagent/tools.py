@@ -18,6 +18,11 @@ REASONING = {
         "type": "string",
         "description": "The immediate goal of THIS action in plain language for a non-technical observer.",
     },
+    "message": {
+        "type": "string",
+        "description": "One or two short first-person sentences for the person watching, like a colleague "
+                       "narrating: what you just learned and what you will do next. Plain words, no tool names.",
+    },
     "plan_step": {
         "type": "integer",
         "description": "1-based number of the plan item THIS action works on. Earlier items count as done, so "
@@ -37,7 +42,7 @@ REASONING = {
         },
     },
 }
-REASONING_REQUIRED = ["evaluation", "memory", "next_goal"]
+REASONING_REQUIRED = ["evaluation", "memory", "next_goal", "message"]
 RISK_FIELDS = {
     "irreversible": {
         "type": "boolean",
@@ -94,6 +99,17 @@ TOOLS = [
           {"urls": {"type": "array", "maxItems": 4, "items": {"type": "string"},
                     "description": "2 to 4 http(s) URLs to read concurrently."}},
           ["urls"]),
+    _tool("extract", "Pull structured rows from the current page, or from 1-4 http(s) URLs read in parallel, and "
+          "save them as findings in one step. A fast extraction model reads the page text, not you: you get a "
+          "one-line summary and the rows appear in findings_saved. Prefer this over read_page + record_findings "
+          "for lists, tables, search results and product details.",
+          {"fields": {"type": "array", "maxItems": 12, "items": {"type": "string"},
+                      "description": "Column names to fill for every item, e.g. [\"title\", \"price\"]."},
+           "instruction": {"type": "string", "description": "Which items to keep, e.g. 'only books rated 4-5 "
+                           "stars under £20'. Leave empty to keep every item."},
+           "urls": {"type": "array", "maxItems": 4, "items": {"type": "string"},
+                    "description": "Optional http(s) URLs read from the page; empty means the current page."}},
+          ["fields"]),
     _tool("record_findings", "Save structured facts you have verified on the current page. Use flat objects with "
           "consistent keys across items. Saved findings persist for the rest of the task and feed the final result.",
           {"items": {"type": "array", "items": ROW},
@@ -206,6 +222,12 @@ def label(name: str, args: dict[str, Any], target_label: str = "") -> str:
         case "read_urls_parallel":
             urls = args.get("urls") if isinstance(args.get("urls"), list) else []
             return f"Read {len(urls)} page{'s' if len(urls) != 1 else ''} in parallel"
+        case "extract":
+            fields = [str(f) for f in (args.get("fields") or [])][:4]
+            shown = ", ".join(fields) + ("…" if len(args.get("fields") or []) > 4 else "")
+            pages = len(args.get("urls") or [])
+            where = f"{pages} page{'s' if pages != 1 else ''}" if pages else "this page"
+            return f"Extract {shown} from {where}"
         case "record_findings":
             n = len(args.get("items") or [])
             return f"Save {n} finding{'s' if n != 1 else ''}"

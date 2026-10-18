@@ -14,6 +14,7 @@ from typing import Any
 import httpx
 
 from .anthropic_backend import AnthropicBackend, AnthropicError, _recover_xml_params
+from .anthropic_backend import cost as anthropic_cost
 
 ANTHROPIC_MODELS = "claude-sonnet-5-5,claude-haiku-5-5,claude-opus-5-5"
 DEFAULT_MODELS = "anthropic/claude-sonnet-5.5,anthropic/claude-haiku-5.5,inception/mercury-2.5,google/gemini-3.7-flash"
@@ -29,6 +30,7 @@ class LLMConfig:
     api_key: str
     models: tuple[str, ...]
     provider: str = "openrouter"
+    extract_model: str = ""  # small, fast model that turns page text into rows for the extract tool
 
     @property
     def default_model(self) -> str:
@@ -50,6 +52,8 @@ class LLMConfig:
             api_key=key,
             models=models or tuple(defaults.split(",")),
             provider=provider,
+            extract_model=os.environ.get("EXTRACT_MODEL")
+            or ("claude-haiku-5-5" if provider == "anthropic" else "anthropic/claude-haiku-5.5"),
         )
 
 
@@ -134,6 +138,39 @@ class LLMClient:
                     await on_retry(f"Model call failed ({last}); retrying ({attempt + 1}/3)…")
                 await asyncio.sleep(1.5 * 2**attempt)
         raise LLMError(f"The model did not respond after 4 attempts: {last}")
+
+    async def complete_json(self, system: str, user: str, *, max_tokens: int = 4000) -> tuple[dict[str, Any], int,
+                                                                                         int, float]:
+        """One JSON answer from the extraction model: (object, input tokens, output tokens, cost in USD)."""
+        model = self.config.extract_model
+        if not self.config.api_key or not model:
+            raise LLMError("No extraction model is configured on the server.")
+        if self.anthropic:
+            try:
+                output, tokens_in, tokens_out = await self.anthropic.complete_json(model, system, user,
+                                                                                   max_tokens=max_tokens)
+            except AnthropicError as exc:
+                raise LLMError(str(exc)) from None
+            return output, tokens_in, tokens_out, anthropic_cost(model, tokens_in, tokens_out)
+        body = {"model": model, "max_tokens": max_tokens, "temperature": 0, "usage": {"include": True},
+                "response_format": {"type": "json_object"},
+                "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
+        headers = {"Authorization": f"Bearer {self.config.api_key}", "X-Title": "HyperAgent"}
+        try:
+            response = await self.http.post(f"{self.config.base_url}/chat/completions", json=body, headers=headers)
+        except httpx.HTTPError as exc:
+            raise LLMError(f"Could not reach the extraction model ({type(exc).__name__}).") from None
+        if response.status_code >= 400:
+            raise LLMError(f"The extraction model failed (HTTP {response.status_code}).")
+        try:
+            payload = response.json()
+            raw = payload["choices"][0]["message"]["content"]
+            output = json.loads(raw[raw.find("{"): raw.rfind("}") + 1])
+        except (KeyError, IndexError, TypeError, ValueError):
+            raise LLMError("The extraction model did not return JSON.") from None
+        usage = payload.get("usage") or {}
+        return (output, int(usage.get("prompt_tokens") or 0), int(usage.get("completion_tokens") or 0),
+                float(usage.get("cost") or 0.0))
 
     async def close(self) -> None:
         await self.http.aclose()

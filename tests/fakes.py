@@ -52,6 +52,13 @@ class FakeBrowser:
         self.calls.append(("read_page",))
         return {"text": "full text", "truncated": False, "length": 9}
 
+    async def read_urls_parallel(self, urls: list[str]) -> dict[str, Any]:
+        self.calls.append(("read_urls_parallel", *urls))
+        pages = [{"url": u, "title": u, "text": f"text of {u}", "length": 0 if "broken" in u else 20,
+                  "truncated": False} for u in urls]
+        return {"text": "\n".join(p["text"] for p in pages), "length": 20 * len(urls), "truncated": False,
+                "pages": pages}
+
 
 def decision(name: str, **args: Any) -> Decision:
     reasoning = {"evaluation": "ok", "memory": "m", "next_goal": f"do {name}"}
@@ -67,8 +74,18 @@ class ScriptedLLM:
 
     def __init__(self, script: list[Any], key: str = "test-key"):
         self.script = list(script)
-        self.config = LLMConfig(base_url="http://llm.test", api_key=key, models=("test-model",))
+        self.config = LLMConfig(base_url="http://llm.test", api_key=key, models=("test-model",),
+                                extract_model="test-extractor")
         self.requests: list[dict[str, Any]] = []
+        self.json_replies: list[Any] = []  # queued extract answers; an Exception is raised instead
+        self.json_requests: list[str] = []
+
+    async def complete_json(self, system: str, user: str, *, max_tokens: int = 4000) -> tuple[dict, int, int, float]:
+        self.json_requests.append(user)
+        item = self.json_replies.pop(0) if self.json_replies else {"rows": []}
+        if isinstance(item, Exception):
+            raise item
+        return item, 100, 20, 0.0001
 
     async def decide(self, model: str, messages: list, tools: list, *, force: str | None = None,
                      on_retry: Any = None, on_delta: Any = None) -> Decision:

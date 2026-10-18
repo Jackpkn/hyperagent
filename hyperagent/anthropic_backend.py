@@ -21,12 +21,12 @@ _XML_PARAM_RE = re.compile(
     r'<parameter\s+name=["\']([^"\']+)["\']\s*>([\s\S]*?)(?:</parameter>|(?=<parameter\b)|$)',
     re.I,
 )
-_XML_TAG_SPLIT_RE = re.compile(r"</(?:evaluation|memory|next_goal|plan)>|<parameter\b", re.I)
+_XML_TAG_SPLIT_RE = re.compile(r"</(?:evaluation|memory|next_goal|message|plan)>|<parameter\b", re.I)
 _INT_FIELDS = {"element_id", "tab_index", "plan_step"}
 _NUM_FIELDS = {"pages", "seconds"}
 _BOOL_FIELDS = {"press_enter", "irreversible", "success"}
 _JSON_FIELDS = {"plan", "items", "rows", "columns", "sources", "issues", "urls", "checklist", "assumptions",
-                "follow_ups"}
+                "follow_ups", "fields"}
 
 
 def _recover_xml_params(inputs: dict[str, Any]) -> dict[str, Any]:
@@ -35,7 +35,7 @@ def _recover_xml_params(inputs: dict[str, Any]) -> dict[str, Any]:
     for key, val in list(out.items()):
         if not isinstance(val, str):
             continue
-        if "<parameter" in val or "</evaluation>" in val or "</memory>" in val or "</next_goal>" in val:
+        if "<parameter" in val or any(f"</{t}>" in val for t in ("evaluation", "memory", "next_goal", "message")):
             for match in _XML_PARAM_RE.finditer(val):
                 pname = match.group(1).strip()
                 raw_pval = re.sub(r"</[a-zA-Z0-9_]+>\s*$", "", match.group(2).strip()).strip()
@@ -71,7 +71,7 @@ def _recover_xml_params(inputs: dict[str, Any]) -> dict[str, Any]:
 def extract_partial_thought(partial_json: str) -> dict[str, str]:
     """Extract in-flight evaluation / next_goal strings from a streaming partial JSON buffer."""
     out: dict[str, str] = {}
-    for field in ("evaluation", "next_goal", "memory"):
+    for field in ("evaluation", "next_goal", "memory", "message"):
         m = re.search(rf'"{field}"\s*:\s*"((?:[^"\\]|\\.)*)', partial_json)
         if m:
             raw = m.group(1).replace('\\"', '"').replace("\\n", " ").replace("\\\\", "\\")
@@ -255,11 +255,12 @@ class AnthropicBackend:
                 await asyncio.sleep(delay)
         raise AnthropicError(f"Claude did not respond after 5 attempts: {last}")
 
-    async def complete_json(self, model: str, system: str, user: str) -> tuple[dict[str, Any], int, int]:
-        """One small JSON answer (used by the text helper)."""
+    async def complete_json(self, model: str, system: str, user: str, *,
+                            max_tokens: int = 400) -> tuple[dict[str, Any], int, int]:
+        """One JSON answer (the text helper and the extract tool)."""
         try:
             response = await self.client.messages.create(
-                model=model, max_tokens=400, system=system, messages=[{"role": "user", "content": user}],
+                model=model, max_tokens=max_tokens, system=system, messages=[{"role": "user", "content": user}],
                 **speed_settings(model, for_planner=False),
             )
         except anthropic.APIError as exc:

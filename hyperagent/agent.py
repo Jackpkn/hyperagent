@@ -17,6 +17,7 @@ from playwright.async_api import Error as PlaywrightError
 
 from .anthropic_backend import _recover_xml_params
 from .browser import ActionError, BrowserSession, Observation
+from .extract import ExtractMixin, resolve_urls
 from .fast import FastPolicy
 from .llm import Decision, LLMClient, LLMError
 from .prompts import SYSTEM, SYSTEM_FAST, step_context
@@ -32,7 +33,7 @@ class Stopped(Exception):
     """The operator stopped the run."""
 
 
-class Agent(FastLoopMixin):
+class Agent(FastLoopMixin, ExtractMixin):
     def __init__(
         self, *, browser: BrowserSession, llm: LLMClient, emit: Emit, goal: str, model: str,
         approval_mode: str = "risky", max_steps: int = 40, vision: bool = True, search_url: str = SEARCH_URL,
@@ -64,7 +65,7 @@ class Agent(FastLoopMixin):
         self.n = 0
         self.actions_taken = 0
         self.usage = {"llm_calls": 0, "input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0,
-                      "fast_calls": 0, "fast_ms_total": 0, "text_calls": 0}
+                      "fast_calls": 0, "fast_ms_total": 0, "text_calls": 0, "extract_calls": 0}
         self.started = time.time()
         self.result: dict[str, Any] | None = None
         self._last_page_sig: str | None = None
@@ -440,10 +441,18 @@ class Agent(FastLoopMixin):
                 return f"Read {self.read_output['length']:,} characters of page text."
             case "read_urls_parallel":
                 raw_urls = args.get("urls") if isinstance(args.get("urls"), list) else []
-                clean_urls = [str(u) for u in raw_urls[:4] if str(u).strip()]
-                self.read_output = await b.read_urls_parallel(clean_urls)
+                clean_urls = resolve_urls(b.page.url, raw_urls)
+                fresh, skipped = self._split_already_read(clean_urls)
+                note = (f" Skipped {len(skipped)} already saved in findings (re-reading them only repeats what "
+                        "findings_saved holds)." if skipped else "")
+                if not fresh:
+                    return "Nothing read: every page's facts are already saved in findings." + note
+                self.read_output = await b.read_urls_parallel(fresh)
                 self._remember_text(str(self.read_output.get("text", "")))
-                return f"Read {len(clean_urls)} pages in parallel ({self.read_output['length']:,} characters)."
+                return (f"Read {len(fresh)} page{'s' if len(fresh) != 1 else ''} in parallel "
+                        f"({self.read_output['length']:,} characters).{note}")
+            case "extract":
+                return await self._extract(args, step)
             case "record_findings":
                 return await self._record(args, step)
             case "wait":
@@ -699,7 +708,7 @@ def _browser_error(exc: Exception) -> str:
 
 
 def _thought(args: dict[str, Any], native_thinking: str = "") -> dict[str, str]:
-    out = {k: _text(args.get(k, "")) for k in ("evaluation", "memory", "next_goal")}
+    out = {k: _text(args.get(k, "")) for k in ("evaluation", "memory", "next_goal", "message")}
     if native_thinking:
         out["thinking"] = _text(native_thinking)
     return out
@@ -716,7 +725,7 @@ def _strings(raw: Any, limit: int, max_len: int) -> list[str]:
 
 
 def _public_args(args: dict[str, Any]) -> dict[str, Any]:
-    hidden = {"evaluation", "memory", "next_goal", "plan", "plan_step", "irreversible", "_thinking"}
+    hidden = {"evaluation", "memory", "next_goal", "message", "plan", "plan_step", "irreversible", "_thinking"}
     return {k: v for k, v in args.items() if k not in hidden}
 
 

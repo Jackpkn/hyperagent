@@ -42,7 +42,9 @@ A complete step record; sent when created and whenever it changes (same `id`, re
   type: "step",
   id: "s3", n: 3,
   status: "thinking" | "planned" | "awaiting_approval" | "running" | "ok" | "error" | "rejected" | "skipped",
-  thought?: { evaluation: string, memory: string, next_goal: string, thinking?: string },
+  thought?: { evaluation: string, memory: string, next_goal: string,
+              message?: string,   /* plain narration for the timeline */
+              thinking?: string },
   action?: { name: string, args: object, label: string /* human sentence, e.g. 'Click "Search"' */ },
   target?: { label: string, rect: {x,y,w,h} } /* frame pixel space, if the action targets an element */,
   risk?: { risky: boolean, reason: string },
@@ -74,8 +76,9 @@ A complete step record; sent when created and whenever it changes (same `id`, re
 `{ type, level: "info" | "warn" | "error", message }`: recoveries, retries, loop detection, LLM errors, guidance acknowledged.
 
 ### `usage`
-`{ type, llm_calls, input_tokens, output_tokens, cost_usd, elapsed_s, fast_calls, fast_ms_total, text_calls }`
-(`cost_usd` is the planner's provider-reported cost; TypeSafe responses carry token counts but no price.)
+`{ type, llm_calls, input_tokens, output_tokens, cost_usd, elapsed_s, fast_calls, fast_ms_total, text_calls, extract_calls }`
+(`cost_usd` covers the planner and the extract model; TypeSafe responses carry token counts but no price.
+`extract_calls` counts page-to-rows calls by the `extract` tool.)
 
 ### `result`
 ```

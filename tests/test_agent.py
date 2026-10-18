@@ -266,3 +266,79 @@ async def test_richer_finding_replaces_its_partial_copy_from_the_same_page():
     await agent.run()
     assert [f["data"] for f in rec.of("findings")[-1]["items"]] == [
         {"title": "Widget", "price": "£5"}, {"title": "Gadget", "price": "£7"}]
+
+
+async def test_extract_saves_rows_as_findings_without_page_text_reaching_the_planner():
+    browser = FakeBrowser()
+    browser.read_page = None  # replaced below so the page holds the values being extracted
+
+    async def read_page():
+        browser.calls.append(("read_page",))
+        return {"text": "Widget £5 In stock. Gadget £7 Sold out.", "truncated": False, "length": 40}
+
+    browser.read_page = read_page
+    agent, _, rec = make([decision("extract", fields=["name", "price"], instruction="in stock only"), DONE],
+                         browser=browser)
+    agent.llm.json_replies = [{"rows": [{"name": "Widget", "price": "£5", "extra": "ignored"}, "junk"]}]
+    await agent.run()
+    assert rec.last_step("s1")["result"].startswith("Extracted 1 row from page")
+    assert [f["data"] for f in agent.findings] == [{"name": "Widget", "price": "£5"}]
+    assert agent.findings[0]["source_url"] == "https://shop.test/" and agent.findings[0]["step_id"] == "s1"
+    assert "in stock only" in agent.llm.json_requests[0]
+    next_context = agent.llm.requests[1]["messages"][1]["content"][0]["text"]
+    assert "read_page_output" not in next_context and "Gadget £7" not in next_context
+    assert rec.of("usage")[-1]["extract_calls"] == 1
+
+
+async def test_extract_over_urls_records_each_source_and_reports_unreadable_pages():
+    agent, browser, _ = make([decision("extract", fields=["title"], urls=["https://a.test/1", "https://a.test/broken"]),
+                              DONE])
+    agent.llm.json_replies = [{"rows": [{"title": "text of https://a.test/1"}]}]
+    await agent.run()
+    assert browser.calls[0] == ("read_urls_parallel", "https://a.test/1", "https://a.test/broken")
+    assert [f["source_url"] for f in agent.findings] == ["https://a.test/1"]
+    result = [h for h in agent.history if h["n"] == 1][0]["result"]
+    assert "Could not extract from: https://a.test/broken" in result
+
+
+async def test_extract_model_failure_is_a_visible_step_error():
+    agent, _, rec = make([decision("extract", fields=["title"]), DONE])
+    agent.llm.json_replies = [LLMError("The extraction model failed (HTTP 500).")]
+    await agent.run()
+    step = rec.last_step("s1")
+    assert step["status"] == "error" and "Extraction failed" in step["error"] and agent.findings == []
+
+
+async def test_extract_without_fields_does_nothing():
+    agent, browser, rec = make([decision("extract", fields=[]), DONE])
+    await agent.run()
+    assert rec.last_step("s1")["status"] == "error" and browser.calls == []
+
+
+async def test_parallel_read_skips_pages_whose_facts_are_already_saved():
+    saved = decision("record_findings", items=[{"t": "x"}], source_url="https://a.test/1/")
+    reread = decision("read_urls_parallel", urls=["https://a.test/1#top", "https://a.test/2"])
+    again = decision("read_urls_parallel", urls=["https://a.test/1"])
+    agent, browser, rec = make([saved, reread, again, DONE])
+    await agent.run()
+    assert browser.calls == [("read_urls_parallel", "https://a.test/2")]
+    assert "Skipped 1 already saved" in rec.last_step("s2")["result"]
+    assert rec.last_step("s3")["result"].startswith("Nothing read")
+
+
+async def test_narration_message_streams_into_the_step_thought_not_the_action_args():
+    agent, _, rec = make([decision("navigate", url="https://shop.test/a", message="Opening the shop now."), DONE])
+    await agent.run()
+    step = rec.last_step("s1")
+    assert step["thought"]["message"] == "Opening the shop now."
+    assert "message" not in step["action"]["args"]
+
+
+async def test_relative_links_copied_from_the_page_resolve_against_it():
+    browser = FakeBrowser()
+    browser.page.url = "https://shop.test/catalogue/category/index.html"
+    agent, _, _ = make([decision("extract", fields=["stock"], urls=["../../thirst_946/index.html", "javascript:x()"]),
+                        decision("read_urls_parallel", urls=["page-2.html"]), DONE], browser=browser)
+    await agent.run()
+    assert browser.calls[0] == ("read_urls_parallel", "https://shop.test/thirst_946/index.html", "javascript:x()")
+    assert browser.calls[1] == ("read_urls_parallel", "https://shop.test/catalogue/category/page-2.html")

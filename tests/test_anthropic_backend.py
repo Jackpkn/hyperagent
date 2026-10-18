@@ -120,3 +120,8 @@ async def test_static_system_prompt_and_tools_are_cached_and_cache_tokens_are_bi
     assert tokens_in == 13000
     expected = (1000 * 0.10 + 2000 * 0.10 * 1.25 + 10000 * 0.10 * 0.1 + 100 * 0.50) / 1_000_000
     assert spent == pytest.approx(expected)
+
+
+def test_partial_stream_surfaces_the_narration_message():
+    partial = '{"evaluation": "Page loaded", "memory": "m", "next_goal": "Open Fiction", "message": "Found the Fic'
+    assert extract_partial_thought(partial)["message"] == "Found the Fic"
