@@ -13,9 +13,7 @@ How you see the page
 - <browser_state> is the visible text of the current page in reading order. Interactive elements appear inline as
   [id]<tag attributes>label</tag>. Use ONLY ids from the latest state; ids change every step.
 - Elements marked (below) or (above) are outside the viewport but can still be clicked.
-- On long pages the state shows the screen, the page top and nearby content; lines like "… (40 lines below not
-  shown, 12 controls such as …)" stand for the rest. Scroll toward a control to get its id, or call read_page
-  when you need the full content (long lists, tables, articles).
+- If the state is truncated or you need full content (long lists, tables, articles), call read_page.
 - A screenshot may be attached; use it to understand layout, popups and visual state.
 
 Fields on every tool call

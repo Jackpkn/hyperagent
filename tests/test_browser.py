@@ -216,20 +216,3 @@ async def test_read_page_drops_page_chrome_and_compacts_links(browser):
     assert text.count("https://shop.example/item/7?keywords=widget") == 1
     assert "\n-\n" not in text and not text.endswith("-")
     assert "$9.99\n\n" in text  # each list item is its own block
-
-
-async def test_long_page_snapshot_keeps_the_screen_and_header_and_summarizes_the_rest(browser):
-    rows = "".join(f"<p>Row {i} {'filler text ' * 12}<button>Pick {i}</button></p>" for i in range(400))
-    page = f"<header><a href='https://shop.example/cart'>Cart</a></header>{rows}<a href='https://x.example'>Footer</a>"
-    await browser.navigate("data:text/html," + page, trusted=True)
-    await browser.scroll("down", 30)
-    obs = await browser.observe()
-
-    labels = {e["label"] for e in obs.elements.values()}
-    on_screen = [e for e in obs.elements.values() if not e.get("offscreen")]
-    assert "Cart" in labels
-    assert on_screen and all(f"[{e['id']}]" in obs.text for e in on_screen)
-    assert "Pick 0" in labels and "Pick 100" not in labels and "Footer" not in labels
-    assert "lines above not shown" in obs.text and "lines below not shown" in obs.text
-    assert "scroll down to get their ids" in obs.text and '"Footer"' not in obs.text.split("above not shown")[0]
-    assert obs.truncated and len(obs.text) < 16000

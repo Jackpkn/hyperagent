@@ -1,8 +1,5 @@
 // Serialize the current page for the model: visible text in reading order with interactive
 // elements inlined as [id]<tag ...>label</tag>. Element ids are valid for this observation only.
-// On a page longer than the budget, lines are kept viewport-first: what is on screen, then the top of the
-// page (header, search, cart), then the nearest content above and below. Each run of left-out lines becomes
-// one summary line naming a few of its controls, so the models know what a scroll would reveal.
 (budget) => {
   const state = (window.__ha = { nodes: new Map(), next: 1 });
   const INTERACTIVE_ROLES = new Set([
@@ -118,31 +115,21 @@
     return f;
   };
 
-  // Each output line remembers where it sits (viewport y) and which element ids it holds.
-  const lines = [];
-  const HARD_CAP = budget * 8;  // stop walking pathological pages; the cut is reported like any other
-  let length = 0, cut = false, line = '', lineY = null, lineIds = [], lastY = 0;
-  const at = (y) => { if (lineY === null) lineY = y; };
+  const out = [];
+  let length = 0, truncated = false, line = '';
   const flush = () => {
     const t = line.trim();
-    if (t) {
-      lastY = lineY ?? lastY;
-      lines.push({ t, y: lastY, ids: lineIds });
-      length += t.length + 1;
-    }
-    line = ''; lineY = null; lineIds = [];
-    if (length > HARD_CAP) cut = true;
+    if (t) { out.push(t); length += t.length + 1; }
+    line = '';
+    if (length > budget) truncated = true;
   };
   const elements = [];
 
   const walk = (node) => {
-    if (cut) return;
+    if (truncated) return;
     if (node.nodeType === Node.TEXT_NODE) {
       const t = node.textContent.replace(/\s+/g, ' ');
-      if (t.trim()) {
-        if (lineY === null && node.parentElement) at(node.parentElement.getBoundingClientRect().top);
-        line += t;
-      }
+      if (t.trim()) line += t;
       return;
     }
     if (node.nodeType !== Node.ELEMENT_NODE) return;
@@ -164,7 +151,6 @@
           id, tag: 'label', label: clean(lbl.innerText), type: el.type, ...facts(el), editable: false,
           rect: { x: r.x, y: r.y, w: r.width, h: r.height },
         });
-        at(r.top); lineIds.push(id);
         line += ` [${id}]<label ${el.type} ${status}>${clean(lbl.innerText)}</label> `;
       }
       return;
@@ -188,7 +174,6 @@
         type: el.type || null, ...facts(el), rect: { x: r.x, y: r.y, w: r.width, h: r.height },
         offscreen: r.bottom < 0 || r.top > vh,
       });
-      at(r.top); lineIds.push(id);
       line += ' ' + describe(el, id) + ' ';
       if (block) flush();
       return;
@@ -200,7 +185,7 @@
       const alt = clean(el.getAttribute('alt'), 60);
       if (alt) line += ` [img: ${alt}] `;
     }
-    if (el.tagName === 'IFRAME') { flush(); line = '[iframe content not shown]'; at(el.getBoundingClientRect().top); flush(); return; }
+    if (el.tagName === 'IFRAME') { flush(); out.push('[iframe content not shown]'); return; }
     for (const child of el.shadowRoot ? el.shadowRoot.childNodes : []) walk(child);
     for (const child of el.childNodes) walk(child);
     if (block) flush();
@@ -208,75 +193,13 @@
   walk(document.body || document.documentElement);
   flush();
 
-  const keep = pickLines(lines, budget, vh);
-  const byId = new Map(elements.map((e) => [e.id, e]));
-  const out = [];
-  const shown = new Set();
-  for (let i = 0; i < lines.length;) {
-    if (keep.has(i)) {
-      out.push(lines[i].t);
-      lines[i].ids.forEach((id) => shown.add(id));
-      i++;
-      continue;
-    }
-    let j = i;
-    while (j < lines.length && !keep.has(j)) j++;
-    out.push(omitted(lines.slice(i, j), byId));
-    i = j;
-  }
-  if (cut) out.push('… (the rest of this very long page was not read; scroll or call read_page)');
-
   const height = document.documentElement.scrollHeight;
   return {
     url: location.href,
     title: document.title,
     text: out.join('\n'),
-    truncated: cut || keep.size < lines.length,
-    elements: elements.filter((e) => shown.has(e.id)),
+    truncated,
+    elements,
     scroll: { y: Math.round(scrollY), viewport: vh, height, width: vw },
   };
-
-  // Indexes of the lines to show: everything when it fits, else viewport first, then page top, then nearest.
-  function pickLines(all, limit, viewport) {
-    const keep = new Set();
-    const total = all.reduce((n, l) => n + l.t.length + 1, 0);
-    if (total <= limit) return new Set(all.keys());
-    let used = 0;
-    const add = (i) => {
-      if (keep.has(i)) return true;
-      const cost = all[i].t.length + 1;
-      if (used + cost > limit) return false;
-      keep.add(i);
-      used += cost;
-      return true;
-    };
-    const band = [];
-    all.forEach((l, i) => { if (l.y >= -viewport * 0.25 && l.y <= viewport * 1.25 && add(i)) band.push(i); });
-    let top = 0;
-    for (let i = 0; i < all.length && top < limit * 0.12; i++) { top += all[i].t.length + 1; add(i); }
-    // Grow one unbroken run out from the screen, two lines below for each line above (what comes next is
-    // usually below), stopping a direction at the first line that does not fit so no holes appear.
-    const anchor = Math.max(0, all.findIndex((l) => l.y >= viewport / 2));
-    let lo = band.length ? band[0] : anchor, hi = band.length ? band[band.length - 1] : anchor - 1;
-    let up = true, down = true;
-    for (let turn = 0; up || down; turn++) {
-      if (down && (!up || turn % 3 !== 2)) {
-        hi++;
-        if (hi >= all.length || !add(hi)) down = false;
-      } else {
-        lo--;
-        if (lo < 0 || !add(lo)) up = false;
-      }
-    }
-    return keep;
-  }
-
-  function omitted(run, byId) {
-    const where = run[0].y < 0 ? 'above' : 'below';
-    const ids = run.flatMap((l) => l.ids);
-    const names = [...new Set(ids.map((id) => clean(byId.get(id)?.label, 30)).filter(Boolean))].slice(0, 5);
-    const examples = names.length ? ` such as ${names.map((n) => `"${n}"`).join(', ')}` : '';
-    const controls = ids.length ? `, ${ids.length} control${ids.length === 1 ? '' : 's'}${examples}` : '';
-    return `… (${run.length} line${run.length === 1 ? '' : 's'} ${where} not shown${controls}; scroll ${where === 'above' ? 'up' : 'down'} to get their ids)`;
-  }
 }
