@@ -8,7 +8,7 @@ All messages are JSON objects with a `type` field. The server never sends secret
 | type | fields | meaning |
 | --- | --- | --- |
 | `start` | `goal: string`, `start_url?: string`, `approval_mode?: "risky" \| "always" \| "never"`, `model?: string`, `timezone?: string`, `continue_session?: boolean`, `persist_session?: boolean`, `operator_context?: string`, `conversation?: { goal, answer, columns?, rows? }[]` (≤12 earlier turns of this chat), `user_memory?: string[]` (≤20 remembered facts, ≤200 chars each) | Begin a run (or continue on the currently open browser page when `continue_session` is true). Default approval mode `risky`. `conversation` lets follow-ups refer to earlier turns; `user_memory` carries what the operator asked to be remembered. Both are summarised and stored by the console (in the browser), never on the server. |
-| `pause` | – | Finish the in-flight action, then hold before the next decision. |
+| `pause` | – | Finish an action already executing, discard any decision not yet executed, then hold. Resuming does not revive a discarded decision. |
 | `resume` | – | Continue a paused run. |
 | `stop` | – | End the run; the agent produces a partial result from what it has. |
 | `guide` | `text: string`, `pin_x?: number`, `pin_y?: number` | Operator guidance. Applied to the very next decision (resolving the pinned viewport coordinates if provided). Also answers an `ask_user` question. |
@@ -50,6 +50,7 @@ A complete step record; sent when created and whenever it changes (same `id`, re
   risk?: { risky: boolean, reason: string },
   result?: string,  /* short human-readable outcome */
   error?: string,
+  verification?: { status: "verified" | "unverified" | "failed", detail: string },
   url?: string,
   started_at: number, ended_at?: number,  /* epoch seconds */
   system?: "planner" | "fast",   /* System 2 LLM, or System 1 TypeSafe Jev */
@@ -59,6 +60,30 @@ A complete step record; sent when created and whenever it changes (same `id`, re
   latency_ms?: number            /* fast steps: Jev (+ text helper) latency */
 }
 ```
+
+With Jev configured, routine planner `click`, `type_text` and `select_option` calls become
+a parent `delegate` step with a fast child step. Explicit delegations may have multiple
+children. Password entry stays with the planner and requires approval; one planner recovery
+action is allowed after a failed/uncertain delegation, with a visible `notice`.
+Jev `ACTIVATE`/`DEACTIVATE` decisions appear as `action.name: "click"` with boolean
+`action.args.desired_state`; `TYPE_TEXT_ENTER` appears as `type_text` with `press_enter: true`.
+Actions already satisfied by observed/fresh control state emit `status: "skipped"` with
+the reason in `result`. Approval applies to the actual child action, retaining any risk
+flag from the original planner call. No new event types are required.
+Two failures of the same action on the same named control and page pause the run with
+an error `notice`, even across observation ID changes, scrolls and delegation handoffs.
+An explicit `resume` resets that failure budget. A successful action on the control also
+clears its failures; a delegation handback alone does not count as recovery.
+
+Targeted clicks, text entry and selections receive browser-side readiness checks after
+approval. A changed/stale target or new operator guidance discards the action before
+mutation. Post-action `verification` is optional for backward compatibility:
+`verified` confirms a specific control value/state or link destination, not the whole task;
+`failed` means the known expected state did not hold within the bounded check and emits
+an error step; `unverified` means the outcome needs confirmation from a fresh page observation.
+An unverified executed command retains `status: "ok"`, but the UI shows `?` rather than
+a success checkmark. Verification only reads browser state; it makes no model calls.
+Password values are compared in the browser and never included in verification details.
 
 ### `plan`
 `{ type, items: { text: string, status: "pending" | "active" | "done" | "skipped" }[] }`: the agent's own evolving plan.
@@ -71,6 +96,8 @@ A complete step record; sent when created and whenever it changes (same `id`, re
 
 ### `question`
 `{ type, step_id, question }`: the agent asked the operator. The operator answers with `guide`.
+The console keeps the question and answer together in the turn's saved feed, linked by `step_id`.
+Answering does not start a new task or reset usage.
 
 ### `notice`
 `{ type, level: "info" | "warn" | "error", message }`: recoveries, retries, loop detection, LLM errors, guidance acknowledged.
@@ -80,6 +107,12 @@ A complete step record; sent when created and whenever it changes (same `id`, re
 (`cost_usd` covers the planner and the extract model; TypeSafe responses carry token counts but no price.
 `extract_calls` counts page-to-rows calls by the `extract` tool; `cached_input_tokens` is the part of
 `input_tokens` read from the prompt cache, billed at a tenth of the input rate.)
+These counters are cumulative snapshots for the current task, not deltas. Replace the task's
+previous snapshot on each event. The console adds the latest snapshot of each distinct task
+for chat totals, and each saved chat for the browser-local total. Cached input tokens are
+already included in input tokens. `fast_calls` counts validated Jev decisions, including
+failed/skipped actions and terminal decisions; it is not a count of successful browser actions.
+The console does not infer token savings from this count.
 
 ### `result`
 ```
