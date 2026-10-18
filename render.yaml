@@ -4,7 +4,7 @@ services:
   - type: web
     name: hyperagent
     runtime: docker
-    region: oregon
+    region: oregon # or ohio, frankfurt, singapore
     # 'starter' plan (1 CPU / 1GB RAM) is recommended to ensure Chromium runs smoothly
     # without running out of memory. If using 'free', ensure single-tab browsing.
     plan: starter
@@ -13,20 +13,88 @@ services:
     dockerContext: .
     healthCheckPath: /api/health
     envVars:
+      # --- Networking & Server ---
       - key: PORT
         value: "10000"
+      - key: HOST
+        value: "0.0.0.0"
       - key: PYTHONUNBUFFERED
         value: "1"
-      - key: HEADLESS
-        value: "1"
-      # Model credentials - managed securely via Render Dashboard
-      - key: ANTHROPIC_API_KEY
-        sync: false
-      - key: LLM_API_KEY
-        sync: false
-      - key: OPENAI_API_KEY
-        sync: false
-      - key: TEXT_MODEL_BASE_URL
-        sync: false
       - key: ALLOWED_ORIGINS
         value: "*"
+      - key: WEB_DIST
+        value: "/app/web"
+
+      # --- Model Credentials & Providers ---
+      # Primary planner (System 2): Direct Claude API (recommended)
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      - key: LLM_PROVIDER
+        value: "anthropic"
+      - key: PLANNER_THINKING
+        value: "1"
+      - key: PLANNER_EFFORT
+        value: "high"
+
+      # Alternative OpenRouter / OpenAI-compatible Planner
+      - key: LLM_API_KEY
+        sync: false
+      - key: LLM_BASE_URL
+        value: "https://openrouter.ai/api/v1"
+      - key: LLM_MODELS
+        value: "anthropic/claude-haiku-5.5,inception/mercury-2.5,anthropic/claude-sonnet-5.5,google/gemini-3.7-flash"
+      - key: AGENT_VISION
+        value: "1"
+
+      # System 1: TypeSafe Jev (Sub-second calibrated actions)
+      - key: TYPESAFE_API_KEY
+        sync: false
+      - key: TYPESAFE_MODEL
+        value: "jev-latest"
+      - key: FAST_MIN_CONFIDENCE
+        value: "0.45"
+
+      # Text Helper (for TypeSafe TYPE_TEXT actions)
+      - key: TEXT_MODEL_API_KEY
+        sync: false
+      - key: TEXT_MODEL_BASE_URL
+        value: "https://openrouter.ai/api/v1"
+      - key: TEXT_MODEL
+        value: "inception/mercury-2.5"
+      - key: TEXT_MODEL_PROVIDER
+        value: "openrouter"
+
+      # --- Browser Engine ---
+      - key: HEADLESS
+        value: "1"
+      - key: START_PAGE_URL
+        value: "https://www.bing.com/"
+      - key: SEARCH_URL
+        value: "https://www.bing.com/search?q={}"
+      # Optional remote CDP endpoint (e.g. Browserbase, Steel, Browserless)
+      - key: BROWSER_WS_URL
+        sync: false
+
+      # --- Safety, Budgets & Limits ---
+      - key: MAX_STEPS
+        value: "60"
+      - key: MAX_RUN_SECONDS
+        value: "900"
+      - key: MAX_SESSIONS
+        value: "3"
+      - key: MAX_RUN_COST_USD
+        value: "3.0"
+      - key: MAX_SOCKETS_PER_IP
+        value: "4"
+      - key: IDLE_CLOSE_SECONDS
+        value: "300"
+      - key: ALLOW_PRIVATE_NETWORK
+        value: "0"
+
+      # --- Persistence Paths ---
+      - key: STORAGE_STATE_PATH
+        value: ".hyperagent/storage_state.json"
+      - key: DOMAIN_MEMORY_PATH
+        value: ".hyperagent/domain_memory.json"
+      - key: RUNS_DIR
+        value: ".hyperagent/runs"
