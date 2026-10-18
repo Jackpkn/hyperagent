@@ -72,6 +72,7 @@
   display: flex;
   flex-direction: column;
   min-height: 0;
+  min-width: 0;
   background: var(--surface);
   overflow: hidden;
 }
@@ -93,6 +94,8 @@
   align-items: stretch;
   gap: 2px;
   height: 42px;
+  min-width: 0;
+  overflow-x: auto;
 }
 
 .sidebar-tab {
@@ -1407,7 +1410,7 @@
 
 @media (max-width: 960px) {
   .run-workspace {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
     overflow: visible;
   }
   .run-resizer {

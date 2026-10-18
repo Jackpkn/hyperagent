@@ -10,8 +10,6 @@ import {
   Clock,
   Coins,
   HelpCircle,
-  Brain,
-  MessagesSquare,
   Pause,
   Play,
   Plus,
@@ -20,7 +18,6 @@ import {
   ShieldCheck,
   Sparkles,
   Square,
-  UserCheck,
   Zap,
 } from "lucide-react";
 import type { ApprovalMode, Question, RunState, Usage } from "@/lib/protocol";
@@ -40,17 +37,11 @@ interface ControlBarProps {
   finished: boolean;
   connection: ConnectionState;
   reconnectAttempt: number;
-  hasProfileData?: boolean;
-  historyCount?: number;
-  memoryCount?: number;
   onPause: () => void;
   onResume: () => void;
   onStop: () => void;
   onModeChange: (mode: ApprovalMode) => void;
   onNewTask: () => void;
-  onOpenProfile?: () => void;
-  onOpenHistory?: () => void;
-  onOpenMemory?: () => void;
 }
 
 const STATE_TEXT: Record<RunState, string> = {
@@ -108,17 +99,11 @@ export function ControlBar(props: ControlBarProps) {
     finished,
     connection,
     reconnectAttempt,
-    hasProfileData,
-    historyCount = 0,
-    memoryCount = 0,
     onPause,
     onResume,
     onStop,
     onModeChange,
     onNewTask,
-    onOpenProfile,
-    onOpenHistory,
-    onOpenMemory,
   } = props;
   const [confirmStop, setConfirmStop] = useState(false);
   const [goalExpanded, setGoalExpanded] = useState(false);
@@ -208,12 +193,11 @@ export function ControlBar(props: ControlBarProps) {
               {usage?.fast_calls ? (
                 <span
                   className="telemetry-chip telemetry-fast"
-                  title={`Fast Executor (System 1) ran ${usage.fast_calls} calibrated UI actions without frontier LLM turns (~${(usage.fast_calls * 4000).toLocaleString()} tokens saved)`}
+                  title={`Fast Executor (System 1) ran ${usage.fast_calls} calibrated UI actions without frontier LLM turns (~${(usage.fast_calls * 4000).toLocaleString()} tokens saved; ${Math.round((usage.fast_ms_total ?? 0) / usage.fast_calls)}ms average)`}
                 >
                   <Zap size={13} aria-hidden="true" />
                   <strong>
-                    {usage.fast_calls} Fast · ~{Math.round(usage.fast_calls * 4)}k tok saved ·{" "}
-                    {Math.round((usage.fast_ms_total ?? 0) / usage.fast_calls)}ms
+                    {usage.fast_calls} Fast
                   </strong>
                 </span>
               ) : null}
@@ -243,43 +227,6 @@ export function ControlBar(props: ControlBarProps) {
                 <option value="never">Autonomous</option>
               </select>
             </div>
-
-            {onOpenProfile ? (
-              <button
-                type="button"
-                className="btn btn-sm"
-                onClick={onOpenProfile}
-                title="Autofill & operator context profile"
-              >
-                <UserCheck size={13} aria-hidden="true" />
-                <span>Profile</span>
-                {hasProfileData ? <span className="dot dot-open" aria-hidden="true" /> : null}
-              </button>
-            ) : null}
-
-            {onOpenMemory ? (
-              <button
-                type="button"
-                className="btn btn-sm"
-                onClick={onOpenMemory}
-                title="What the agent remembers about you across chats"
-              >
-                <Brain size={13} aria-hidden="true" />
-                <span>{memoryCount > 0 ? `Memory (${memoryCount})` : "Memory"}</span>
-              </button>
-            ) : null}
-
-            {onOpenHistory ? (
-              <button
-                type="button"
-                className="btn btn-sm"
-                onClick={onOpenHistory}
-                title="Your saved chats in this browser"
-              >
-                <MessagesSquare size={13} aria-hidden="true" />
-                <span>{historyCount > 0 ? `Chats (${historyCount})` : "Chats"}</span>
-              </button>
-            ) : null}
 
             <div className="control-actions">
               {finished ? (

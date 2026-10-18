@@ -15,15 +15,16 @@
   gap: 12px;
   padding: 6px 14px;
   min-height: 48px;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  overflow-x: auto;
 }
 
 .top-bar-left {
   display: flex;
   align-items: center;
   gap: 10px;
-  min-width: 0;
-  flex: 1 1 280px;
+  min-width: 360px;
+  flex: 1 0 360px;
 }
 
 .brand-btn {
@@ -138,6 +139,10 @@
   white-space: nowrap;
 }
 
+.goal-pill svg {
+  flex: none;
+}
+
 .goal-drawer {
   border-top: 1px solid var(--hairline);
   background: var(--surface-sunk);
@@ -163,8 +168,20 @@
 .top-bar-right {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
+  gap: 8px;
+  flex: none;
+  flex-wrap: nowrap;
+}
+
+.top-bar-right .telemetry-bar {
+  padding: 0;
+  gap: 8px;
+  border: 0;
+  background: transparent;
+}
+
+.top-bar-right .telemetry-chip {
+  padding: 3px 0;
 }
 
 .telemetry-bar {
@@ -1127,7 +1144,6 @@
 
 .issues li {
   padding: 7px 10px;
-  border-left: 3px solid var(--wait);
   background: var(--wait-soft);
   border-radius: 0 var(--radius-xs) var(--radius-xs) 0;
 }

@@ -34,7 +34,8 @@ import { BrowserView, type BrowserTarget } from "./BrowserView";
 import { ControlBar, GuidanceComposer } from "./ControlBar";
 import { Launcher } from "./Launcher";
 import { ProfileModal } from "./OperatorModals";
-import { ChatsModal, MemoryModal } from "./ChatModals";
+import { MemoryModal } from "./ChatModals";
+import { ChatSidebar } from "./ChatSidebar";
 import { PastTurns } from "./PastTurns";
 import { ResultsPanel } from "./ResultsPanel";
 import { Timeline } from "./Timeline";
@@ -91,7 +92,7 @@ export function AgentApp() {
   const [profile, setProfile] = useState<OperatorProfile>(defaultOperatorProfile);
   const [persistSession, setPersistSession] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
-  const [showChatsModal, setShowChatsModal] = useState(false);
+  const [navigationOpen, setNavigationOpen] = useState(true);
   const [showMemoryModal, setShowMemoryModal] = useState(false);
 
   const lastApprovalStepRef = useRef<string | null>(null);
@@ -100,6 +101,7 @@ export function AgentApp() {
   useEffect(() => {
     setProfile(loadOperatorProfile());
     setPersistSession(loadPersistSession());
+    setNavigationOpen(window.innerWidth > 760);
     try {
       const savedWidth = Number(window.localStorage.getItem("hyperagent.sidebarWidth.v1"));
       if (Number.isFinite(savedWidth) && savedWidth >= 380 && savedWidth <= 1100) {
@@ -114,9 +116,10 @@ export function AgentApp() {
     event.preventDefault();
     setResultExpanded(false);
     setIsResizing(true);
+    const workspace = event.currentTarget.parentElement?.getBoundingClientRect();
     const onMove = (moveEvent: PointerEvent) => {
-      const maxW = Math.max(460, Math.round(window.innerWidth * 0.72));
-      const next = Math.min(maxW, Math.max(380, Math.round(moveEvent.clientX)));
+      const maxW = Math.max(460, Math.round((workspace?.width ?? window.innerWidth) * 0.72));
+      const next = Math.min(maxW, Math.max(380, Math.round(moveEvent.clientX - (workspace?.left ?? 0))));
       setSidebarWidth(next);
       try {
         window.localStorage.setItem("hyperagent.sidebarWidth.v1", String(next));
@@ -341,6 +344,15 @@ export function AgentApp() {
         </div>
       ) : null}
 
+      <div className={`workspace-shell${navigationOpen ? " is-nav-open" : ""}`}>
+        <ChatSidebar
+          open={navigationOpen} onToggle={() => setNavigationOpen((value) => !value)}
+          chats={chats.chats} activeId={chats.activeChat?.id ?? null} ready={chats.ready}
+          busy={showRun && !finished} persistent={chats.persistent}
+          hasProfileData={hasProfile} memoryCount={chats.memories.length}
+          onNew={openNewChat} onOpen={openChat} onDelete={chats.removeChat}
+          onOpenProfile={() => setShowProfileModal(true)} onOpenMemory={() => setShowMemoryModal(true)}
+        />
       {showRun ? (
         <main className="run-shell">
           <ControlBar
@@ -356,17 +368,11 @@ export function AgentApp() {
             finished={finished}
             connection={state.connection}
             reconnectAttempt={state.reconnectAttempt}
-            hasProfileData={hasProfile}
-            historyCount={chats.chats.length}
-            memoryCount={chats.memories.length}
             onPause={() => agent.send({ type: "pause" })}
             onResume={() => agent.send({ type: "resume" })}
             onStop={() => agent.send({ type: "stop" })}
             onModeChange={(mode) => agent.changeMode(mode)}
             onNewTask={openNewChat}
-            onOpenProfile={() => setShowProfileModal(true)}
-            onOpenHistory={() => setShowChatsModal(true)}
-            onOpenMemory={() => setShowMemoryModal(true)}
           />
 
           <div
@@ -597,18 +603,14 @@ export function AgentApp() {
             fastModel={state.session?.fast_model}
             persistSession={persistSession}
             hasSavedSession={state.session?.has_saved_session}
-            hasProfileData={hasProfile}
-            historyCount={chats.chats.length}
-            memoryCount={chats.memories.length}
             onTogglePersistSession={togglePersistSession}
             onClearSavedSession={() => agent.send({ type: "clear_session" })}
-            onOpenProfile={() => setShowProfileModal(true)}
-            onOpenHistory={() => setShowChatsModal(true)}
-            onOpenMemory={() => setShowMemoryModal(true)}
             onStart={start}
           />
         </main>
       )}
+
+      </div>
 
       {showProfileModal ? (
         <ProfileModal
@@ -618,18 +620,6 @@ export function AgentApp() {
             saveOperatorProfile(next);
           }}
           onClose={() => setShowProfileModal(false)}
-        />
-      ) : null}
-
-      {showChatsModal ? (
-        <ChatsModal
-          chats={chats.chats}
-          activeId={chats.activeChat?.id ?? null}
-          persistent={chats.persistent}
-          onOpen={openChat}
-          onNew={openNewChat}
-          onDelete={chats.removeChat}
-          onClose={() => setShowChatsModal(false)}
         />
       ) : null}
 
