@@ -32,7 +32,6 @@ const MEMORY_KEY = "memories";
 const MIGRATED_KEY = "migratedRunHistory";
 const LEGACY_HISTORY_KEY = "hyperagent.history.v1";
 const SAVE_DELAY_MS = 500;
-const NO_FRAMES: Record<string, Frame> = {};
 
 export interface ChatSummary {
   id: string;
@@ -47,8 +46,6 @@ export interface ChatsApi {
   activeChat: Chat | null;
   /** Turns of the open chat other than the one running live right now. */
   pastTurns: ChatTurn[];
-  /** Screenshots already saved for the live turn: after a reload the replay only carries the latest one. */
-  liveSavedFrames: Record<string, Frame>;
   chats: ChatSummary[];
   memories: string[];
   conversation: () => ConversationTurn[];
@@ -102,7 +99,6 @@ export function useChats(state: AgentState): ChatsApi {
   const [activeChat, setActiveChat] = useState<Chat | null>(null);
   const [memories, setMemoriesState] = useState<string[]>([]);
   const [liveTurnId, setLiveTurnId] = useState<string | null>(null);
-  const [liveSaved, setLiveSaved] = useState<{ turnId: string; frames: Record<string, Frame> } | null>(null);
 
   const activeRef = useRef<Chat | null>(null);
   const savedFramesRef = useRef<Set<string>>(new Set());
@@ -146,34 +142,20 @@ export function useChats(state: AgentState): ChatsApi {
     };
   }, []);
 
-  // A new run is a new turn; the first turn creates the chat. Wait for the saved chats to load, so a run
-  // re-attached after a reload lands in its own chat and turn instead of starting a new chat.
+  // A new run is a new turn; the first turn creates the chat.
   useEffect(() => {
-    if (!ready || !state.runStartedAt || !state.goal) return;
+    if (!state.runStartedAt || !state.goal) return;
     const turnId = `t-${Math.round(state.runStartedAt * 1000)}`;
     if (turnId === liveTurnId) return;
     setLiveTurnId(turnId);
-    // A re-attached run continues its saved turn: keep that turn's screenshots instead of starting over.
-    const existing = activeRef.current?.turns.find((t) => t.id === turnId);
-    const savedSteps = (existing?.frameSteps ?? []).filter((s) => s !== LAST_FRAME);
-    savedFramesRef.current = new Set(savedSteps);
-    setLiveSaved(null);
-    const chatId = activeRef.current?.id;
-    if (chatId && savedSteps.length) {
-      Promise.all(savedSteps.map(async (stepId) => [stepId, await getFrame(chatId, frameKey(turnId, stepId))] as const))
-        .then((pairs) => {
-          const frames = Object.fromEntries(pairs.filter((pair): pair is readonly [string, Frame] => Boolean(pair[1])));
-          setLiveSaved({ turnId, frames });
-        })
-        .catch(() => undefined);
-    }
+    savedFramesRef.current = new Set();
     if (!activeRef.current) {
       const now = Date.now();
       const chat: Chat = { id: newId("c"), title: chatTitle(state.goal), createdAt: now, updatedAt: now, turns: [] };
       commit(chat);
       setSetting(ACTIVE_KEY, chat.id).catch(() => undefined);
     }
-  }, [ready, state.runStartedAt, state.goal, liveTurnId, commit]);
+  }, [state.runStartedAt, state.goal, liveTurnId, commit]);
 
   // Save the live turn (debounced) and every new step screenshot exactly once.
   useEffect(() => {
@@ -205,7 +187,6 @@ export function useChats(state: AgentState): ChatsApi {
   );
 
   const pastTurns = (activeChat?.turns ?? []).filter((t) => t.id !== liveTurnId);
-  const liveSavedFrames = liveSaved && liveSaved.turnId === liveTurnId ? liveSaved.frames : NO_FRAMES;
 
   const conversation = useCallback(
     () => summarizeConversation((activeRef.current?.turns ?? []).filter((t) => t.id !== liveTurnId)),
@@ -273,7 +254,6 @@ export function useChats(state: AgentState): ChatsApi {
     persistent,
     activeChat,
     pastTurns,
-    liveSavedFrames,
     chats,
     memories,
     conversation,

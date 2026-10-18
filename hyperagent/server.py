@@ -7,7 +7,6 @@ import contextlib
 import json
 import logging
 import os
-import secrets
 from collections import Counter
 from collections.abc import AsyncIterator
 from pathlib import Path
@@ -43,7 +42,7 @@ class Command(BaseModel):
     model_config = ConfigDict(extra="ignore", str_strip_whitespace=True)
     type: Literal["start", "pause", "resume", "stop", "guide", "approve", "reject", "set_mode",
                   "takeover_click", "takeover_type", "takeover_scroll", "takeover_tab",
-                  "save_session", "clear_session", "attach"]
+                  "save_session", "clear_session"]
     goal: str | None = Field(default=None, max_length=4000)
     start_url: str | None = Field(default=None, max_length=2000)
     approval_mode: Mode | None = None
@@ -64,7 +63,6 @@ class Command(BaseModel):
     dy: float | None = None
     tab_index: int | None = None
     press_enter: bool = False
-    token: str | None = Field(default=None, max_length=64)
 
 
 def settings() -> dict[str, Any]:
@@ -75,8 +73,6 @@ def settings() -> dict[str, Any]:
         "start_url": os.environ.get("START_PAGE_URL", "https://www.bing.com/"),
         "search_url": os.environ.get("SEARCH_URL", SEARCH_URL),
         "vision": os.environ.get("AGENT_VISION", "0") != "0",
-        # A run whose page was reloaded or lost its connection keeps going this long, waiting to be re-attached.
-        "detach_grace_seconds": int(os.environ.get("DETACH_GRACE_SECONDS", "300")),
         "max_cost_usd": float(os.environ.get("MAX_RUN_COST_USD", "3.0")),
         "idle_close_seconds": int(os.environ.get("IDLE_CLOSE_SECONDS", "300")),
         "max_sockets_per_ip": int(os.environ.get("MAX_SOCKETS_PER_IP", "4")),
@@ -113,11 +109,6 @@ class Session:
         self.ws, self.llm, self.slots, self.fast = ws, llm, slots, fast
         self.cfg = settings()
         self.session_id = hex(id(self))[2:]
-        # Secret that lets a reloaded page re-attach to this session's run; never derived from anything public.
-        self.resume_token = secrets.token_urlsafe(24)
-        self.backlog: list[dict[str, Any]] = []  # the current run's messages, replayed on re-attach
-        self.last_frame: dict[str, Any] | None = None
-        self.detach_timer: asyncio.TimerHandle | None = None
         self.browser: BrowserSession | None = None
         self.agent: Agent | None = None
         self.task: asyncio.Task | None = None
@@ -137,23 +128,8 @@ class Session:
             with journal.open("a", encoding="utf-8") as fh:
                 fh.write(json.dumps(message, ensure_ascii=False) + "\n")
 
-    def _remember(self, message: dict[str, Any]) -> None:
-        if message.get("type") == "frame":
-            self.last_frame = message
-            return
-        if message.get("type") in ("hello", "attached"):
-            return
-        last = self.backlog[-1] if self.backlog else None
-        # Streaming updates of one step replace each other; anything in between keeps the order intact.
-        if (last and message.get("type") == "step" and last.get("type") == "step"
-                and last.get("id") == message.get("id")):
-            self.backlog[-1] = message
-        elif len(self.backlog) < MAX_BACKLOG:
-            self.backlog.append(message)
-
     async def send(self, message: dict[str, Any]) -> None:
         self._append_journal(message)
-        self._remember(message)
         if self.closed:
             return
         async with self.lock:
@@ -167,8 +143,7 @@ class Session:
 
     async def _emit_hello(self) -> None:
         state_path: Path = self.cfg["storage_state_path"]
-        await self.send({"type": "hello", "session_id": self.session_id, "resume_token": self.resume_token,
-                         "model": self.llm.config.default_model,
+        await self.send({"type": "hello", "session_id": self.session_id, "model": self.llm.config.default_model,
                          "models": list(self.llm.config.models), "max_steps": self.cfg["max_steps"],
                          "configured": bool(self.llm.config.api_key),
                          "fast_model": self.fast.config.model if self.fast else None,
@@ -311,7 +286,6 @@ class Session:
             await self.slots.acquire()
             self.holding_slot = True
         self.persist_session = bool(cmd.persist_session)
-        self.backlog, self.last_frame = [], None
         reuse_browser = bool(
             cmd.continue_session
             and self.browser is not None
@@ -410,49 +384,8 @@ class Session:
             await self.browser.close()
             self.browser = None
 
-    def detach(self) -> bool:
-        """The page went away mid-run: keep the run going for a while so a reload can re-attach to it."""
-        if not self.running:
-            return False
-        self.closed = True
-        if self.agent:
-            self.agent.detached = True
-        DETACHED[self.resume_token] = self
-        self.detach_timer = asyncio.get_running_loop().call_later(
-            self.cfg["detach_grace_seconds"], lambda: asyncio.ensure_future(self._expire_detached()))
-        return True
-
-    async def _expire_detached(self) -> None:
-        if DETACHED.get(self.resume_token) is self:
-            del DETACHED[self.resume_token]
-            await self.close()
-
-    async def attach(self, ws: WebSocket) -> None:
-        """Take over a new socket and replay the run so far, then keep streaming live."""
-        if self.detach_timer:
-            self.detach_timer.cancel()
-            self.detach_timer = None
-        DETACHED.pop(self.resume_token, None)
-        self.ws, self.closed = ws, False
-        if self.agent:
-            self.agent.detached = False
-        await self._emit_hello()
-        agent = self.agent
-        await self.send({"type": "attached", "goal": agent.goal if agent else "",
-                         "running": self.running, "approval_mode": agent.approval_mode if agent else "risky"})
-        # Holding the lock for the whole replay keeps live updates queued behind the older messages.
-        async with self.lock:
-            for message in [*self.backlog, *([self.last_frame] if self.last_frame else [])]:
-                try:
-                    await asyncio.wait_for(self.ws.send_json(message), timeout=10)
-                except (RuntimeError, WebSocketDisconnect, TimeoutError):
-                    self.closed = True
-                    return
-
     async def close(self) -> None:
         self.closed = True
-        if self.detach_timer:
-            self.detach_timer.cancel()
         if self.idle_timer:
             self.idle_timer.cancel()
         if self.agent:
@@ -474,8 +407,6 @@ FAST_CONFIG = FastConfig.from_env()
 FAST = FastPolicy(FAST_CONFIG) if FAST_CONFIG.enabled else None
 SLOTS = asyncio.Semaphore(settings()["max_sessions"])
 SOCKETS_PER_IP: Counter[str] = Counter()
-DETACHED: dict[str, Session] = {}  # resume token → session whose page went away mid-run
-MAX_BACKLOG = 4000
 
 
 @contextlib.asynccontextmanager
@@ -525,28 +456,12 @@ async def agent_socket(ws: WebSocket) -> None:
             except ValueError:
                 await session.error("Send JSON commands.")
                 continue
-            if isinstance(raw, dict) and raw.get("type") == "attach":
-                session = await reattach(session, ws, raw.get("token"))
-                continue
             await session.handle(raw)
     except WebSocketDisconnect:
         pass
     finally:
         SOCKETS_PER_IP[ip] -= 1
-        if not session.detach():
-            await session.close()
-
-
-async def reattach(fresh: Session, ws: WebSocket, token: Any) -> Session:
-    """Swap a just-opened session for the detached one the token names; report a token that names none."""
-    previous = DETACHED.get(token) if isinstance(token, str) else None
-    if previous is None or fresh.running:
-        await fresh.send({"type": "attach_failed",
-                          "message": "That run is no longer running on the server, so it could not be resumed."})
-        return fresh
-    await fresh.close()
-    await previous.attach(ws)
-    return previous
+        await session.close()
 
 
 web_dist = Path(os.environ.get("WEB_DIST", "apps/web/out"))

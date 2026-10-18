@@ -21,18 +21,11 @@ All messages are JSON objects with a `type` field. The server never sends secret
 | `takeover_tab` | `tab_index: number` | Switch the active browser tab. |
 | `save_session` | – | Save current browser cookies and localStorage to the server's persistent session profile. |
 | `clear_session` | – | Clear the saved browser session profile on the server. |
-| `attach` | `token: string` | Re-attach this socket to the run started under that `resume_token` (after a reload or dropped connection). Answered with `attached` and a replay, or `attach_failed`. |
 
 ## Server → client
 
 ### `hello`
-`{ type, session_id, resume_token, model, models: string[], max_steps, configured: boolean, fast_model: string | null, has_saved_session?: boolean }`: sent on connect, on re-attach and when saved session state changes. `resume_token` is a secret for re-attaching to this session's run; the console keeps it in session storage (this tab only).
-
-### `attached`
-`{ type, goal, running: boolean, approval_mode }`: the socket took over a run whose page went away. It is followed by a replay of that run's messages so far (consecutive updates of one step collapsed to the latest, then the latest `frame`), then live messages. A run with no socket keeps going for `DETACH_GRACE_SECONDS` (default 300) and is stopped if nobody re-attaches; a pending approval or question waits for the operator.
-
-### `attach_failed`
-`{ type, message }`: the token names no detached run (it finished long ago, expired, or never existed). The console shows the message and keeps the saved turn as interrupted.
+`{ type, session_id, model, models: string[], max_steps, configured: boolean, fast_model: string | null, has_saved_session?: boolean }`: sent on connect and when saved session state changes.
 
 ### `status`
 `{ type, state, step, detail? }`

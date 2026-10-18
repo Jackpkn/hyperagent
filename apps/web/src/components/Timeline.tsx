@@ -10,7 +10,6 @@ import {
   Database,
   FileCheck2,
   Info,
-  CircleCheck,
   ListChecks,
   MessageSquare,
 } from "lucide-react";
@@ -85,8 +84,7 @@ export function Timeline({
   const scrollRef = useRef<HTMLDivElement>(null);
   const resultAnchorRef = useRef<HTMLDivElement>(null);
   const stickToBottom = useRef(true);
-  // Open by default so the plan visibly ticks off as the agent works; the operator can fold it away.
-  const [planOpen, setPlanOpen] = useState(true);
+  const [planOpen, setPlanOpen] = useState(false);
   const [findingsOpen, setFindingsOpen] = useState(true);
   const [expandAllFeed, setExpandAllFeed] = useState(false);
 
@@ -145,19 +143,6 @@ export function Timeline({
               <Info size={14} className="notice-icon" aria-hidden="true" />
             )}
             <span>{item.message}</span>
-          </div>
-        </div>
-      );
-    }
-    if (item.kind === "milestone") {
-      return (
-        <div key={item.key} className="feed-row feed-milestone">
-          <div className="milestone" role="status">
-            <CircleCheck size={14} className="milestone-icon" aria-hidden="true" />
-            <span className="milestone-count">
-              Plan {item.index}/{item.total} done
-            </span>
-            <span className="milestone-text">{item.text}</span>
           </div>
         </div>
       );

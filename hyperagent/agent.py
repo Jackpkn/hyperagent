@@ -451,12 +451,9 @@ class Agent(FastLoopMixin, ExtractMixin):
                 if not fresh:
                     return "Nothing read: every page's facts are already saved in findings." + note
                 self.read_output = await b.read_urls_parallel(fresh)
-                shown = str(self.read_output.get("text", ""))
-                self._remember_text(shown)
-                # Report what the model will see, not the pages' full length before the reading budget.
-                cut = f" of {self.read_output['length']:,}" if self.read_output.get("truncated") else ""
+                self._remember_text(str(self.read_output.get("text", "")))
                 return (f"Read {len(fresh)} page{'s' if len(fresh) != 1 else ''} in parallel "
-                        f"({len(shown):,}{cut} characters shown).{note}")
+                        f"({self.read_output['length']:,} characters).{note}")
             case "extract":
                 return await self._extract(args, step)
             case "record_findings":
