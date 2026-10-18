@@ -8,12 +8,23 @@ type Block =
   | { kind: "paragraph"; text: string }
   | { kind: "list"; ordered: boolean; items: string[] }
   | { kind: "code"; text: string }
-  | { kind: "quote"; text: string };
+  | { kind: "quote"; text: string }
+  | { kind: "table"; header: string[]; rows: string[][] };
 
 const HEADING = /^(#{1,4})\s+(.*)$/;
 const UNORDERED = /^\s*[-*]\s+(.*)$/;
 const ORDERED = /^\s*\d+[.)]\s+(.*)$/;
 const FENCE = /^```/;
+const TABLE_RULE = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
+
+function isTableStart(lines: string[], i: number): boolean {
+  return lines[i].trim().startsWith("|") && i + 1 < lines.length && TABLE_RULE.test(lines[i + 1]);
+}
+
+function tableCells(line: string): string[] {
+  const inner = line.trim().replace(/^\|/, "").replace(/\|$/, "");
+  return inner.split(/(?<!\\)\|/).map((cell) => cell.replace(/\\\|/g, "|").trim());
+}
 
 export function parseBlocks(source: string): Block[] {
   const lines = source.replace(/\r\n?/g, "\n").split("\n");
@@ -49,6 +60,18 @@ export function parseBlocks(source: string): Block[] {
       continue;
     }
 
+    if (isTableStart(lines, i)) {
+      const header = tableCells(line);
+      const rows: string[][] = [];
+      i += 2; // header and rule
+      while (i < lines.length && lines[i].trim().startsWith("|")) {
+        rows.push(tableCells(lines[i]));
+        i += 1;
+      }
+      blocks.push({ kind: "table", header, rows });
+      continue;
+    }
+
     if (line.trim().startsWith(">")) {
       const body: string[] = [];
       while (i < lines.length && lines[i].trim().startsWith(">")) {
@@ -81,6 +104,7 @@ export function parseBlocks(source: string): Block[] {
       lines[i].trim() !== "" &&
       !FENCE.test(lines[i].trim()) &&
       !HEADING.test(lines[i]) &&
+      !isTableStart(lines, i) &&
       !UNORDERED.test(lines[i]) &&
       !ORDERED.test(lines[i])
     ) {
@@ -150,6 +174,29 @@ export function Markdown({ source }: { source: string }) {
               <pre key={key} className="md-pre">
                 <code>{block.text}</code>
               </pre>
+            );
+          case "table":
+            return (
+              <div key={key} className="md-table-wrap">
+                <table className="md-table">
+                  <thead>
+                    <tr>
+                      {block.header.map((cell, c) => (
+                        <th key={c}>{renderInline(cell)}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {block.rows.map((row, r) => (
+                      <tr key={r}>
+                        {block.header.map((_, c) => (
+                          <td key={c}>{renderInline(row[c] ?? "")}</td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             );
           case "list": {
             const items = block.items.map((item, itemIndex) => (

@@ -68,6 +68,7 @@
 /* Left sidebar with Radix Tabs */
 
 .run-sidebar {
+  position: relative;
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -199,7 +200,10 @@
   overflow: hidden;
 }
 
+/* position: relative anchors absolutely positioned children (e.g. .sr-only labels) to the scroll area;
+   without it they resolve against the page and grow the document, scrolling the whole workspace away. */
 .panel-body {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow-y: auto;

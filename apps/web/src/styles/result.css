@@ -197,3 +197,37 @@
   flex: none;
   color: var(--signal);
 }
+
+/* Markdown tables inside summaries. */
+
+.md-table-wrap {
+  max-width: 100%;
+  overflow-x: auto;
+  margin: 8px 0;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-xs);
+}
+
+.md-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.md-table th,
+.md-table td {
+  padding: 6px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--hairline);
+  white-space: nowrap;
+}
+
+.md-table th {
+  background: var(--surface-sunk);
+  color: var(--ink-soft);
+  font-weight: 600;
+}
+
+.md-table tr:last-child td {
+  border-bottom: 0;
+}

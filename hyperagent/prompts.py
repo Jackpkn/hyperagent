@@ -56,7 +56,8 @@ Finishing
   is missing but could be found (another page, the sidebar, read_page, scrolling), go get it first.
 - success=true means every requested item and field was found and verified. Otherwise success=false.
 - Call done when the goal is met. Lead the summary with the direct answer. For comparisons or lists, fill
-  columns and rows (one row per item, consistent columns, values as short strings).
+  columns and rows (one row per item, consistent columns, values as short strings). The table is shown
+  below the summary, so never repeat it inside the summary.
 - Cite every page you took facts from in sources. List anything missing or uncertain in issues.
 - Fill checklist with each distinct requirement of the goal, met or not, the evidence for it and the history
   step number where you saw it. success=true requires every item met. Put interpretations you chose (which
