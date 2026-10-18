@@ -86,7 +86,17 @@ A complete step record; sent when created and whenever it changes (same `id`, re
   columns: string[],         /* table columns, may be empty */
   rows: object[],            /* each row keyed by column */
   sources: { title: string, url: string }[],
-  issues: string[]           /* unresolved items, caveats */
+  issues: string[],          /* unresolved items, caveats */
+  checklist: {               /* one item per requirement of the goal, as the agent judged it */
+    requirement: string,
+    met: boolean,
+    evidence: string,
+    step_id?: string,        /* the step where the evidence was seen; only steps that ran in this run */
+    step_n?: number
+  }[],
+  assumptions: string[],     /* interpretations chosen where the goal was ambiguous */
+  follow_ups: string[]       /* up to 3 suggested next goals; the UI only pre-fills them, never runs them */
 }
 ```
+`success` is forced to `false` (with an issue) when any checklist item is unmet.
 Followed by a `status` with `done`, `failed` or `stopped`.

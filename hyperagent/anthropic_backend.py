@@ -22,10 +22,11 @@ _XML_PARAM_RE = re.compile(
     re.I,
 )
 _XML_TAG_SPLIT_RE = re.compile(r"</(?:evaluation|memory|next_goal|plan)>|<parameter\b", re.I)
-_INT_FIELDS = {"element_id", "tab_index"}
+_INT_FIELDS = {"element_id", "tab_index", "plan_step"}
 _NUM_FIELDS = {"pages", "seconds"}
 _BOOL_FIELDS = {"press_enter", "irreversible", "success"}
-_JSON_FIELDS = {"plan", "items", "rows", "columns", "sources", "issues", "urls"}
+_JSON_FIELDS = {"plan", "items", "rows", "columns", "sources", "issues", "urls", "checklist", "assumptions",
+                "follow_ups"}
 
 
 def _recover_xml_params(inputs: dict[str, Any]) -> dict[str, Any]:
@@ -129,9 +130,16 @@ def speed_settings(model: str, *, for_planner: bool = True) -> dict[str, Any]:
     }
 
 
-def cost(model: str, input_tokens: int, output_tokens: int) -> float:
+def cost(model: str, input_tokens: int, output_tokens: int, cache_write: int = 0, cache_read: int = 0) -> float:
     price_in, price_out = PRICES.get(model, (0.0, 0.0))
-    return (input_tokens * price_in + output_tokens * price_out) / 1_000_000
+    # Prompt-cache writes cost 1.25x the input rate and reads 0.1x.
+    billed_in = input_tokens + cache_write * 1.25 + cache_read * 0.1
+    return (billed_in * price_in + output_tokens * price_out) / 1_000_000
+
+
+def _cached_system(system: str) -> list[dict[str, Any]] | str:
+    """The system prompt and tool list are identical every step, so they are cached; the page state is not."""
+    return [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}] if system else system
 
 
 class AnthropicBackend:
@@ -152,7 +160,8 @@ class AnthropicBackend:
         for attempt in range(5):
             try:
                 req_kwargs = dict(
-                    model=model, max_tokens=4096, system=system, messages=converted, tools=convert_tools(tools),
+                    model=model, max_tokens=4096, system=_cached_system(system), messages=converted,
+                    tools=convert_tools(tools),
                     tool_choice={"type": "auto", "disable_parallel_tool_use": True},
                     **speed_settings(model, for_planner=True),
                 )
@@ -207,7 +216,10 @@ class AnthropicBackend:
                 if response.stop_reason == "refusal":
                     raise AnthropicError("Claude declined this step for safety reasons.")
                 usage = response.usage
-                spent = cost(model, usage.input_tokens, usage.output_tokens)
+                cache_write = getattr(usage, "cache_creation_input_tokens", 0) or 0
+                cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
+                spent = cost(model, usage.input_tokens, usage.output_tokens, cache_write, cache_read)
+                tokens_in = usage.input_tokens + cache_write + cache_read
                 call = next((b for b in response.content if b.type == "tool_use"), None)
                 if call is not None and (not force or call.name == force):
                     thinking_parts = [
@@ -226,7 +238,7 @@ class AnthropicBackend:
                     inputs = _recover_xml_params(dict(call.input))
                     if native_thinking:
                         inputs["_thinking"] = native_thinking
-                    return call.name, inputs, usage.input_tokens, usage.output_tokens, spent
+                    return call.name, inputs, tokens_in, usage.output_tokens, spent
                 last = "the reply did not choose an action"
                 converted = [*converted,
                              {"role": "assistant", "content": [b.model_dump(exclude_none=True)

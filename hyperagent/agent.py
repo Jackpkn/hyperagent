@@ -311,6 +311,7 @@ class Agent(FastLoopMixin):
             self.plan = [{"text": str(p.get("text", ""))[:160], "status": p.get("status", "pending")}
                          for p in args["plan"] if isinstance(p, dict)][:10]
             await self.emit({"type": "plan", "items": self.plan})
+        await self._advance_plan(args.get("plan_step"))
         target_label = ""
         secret = False
         if "element_id" in args:
@@ -456,8 +457,35 @@ class Agent(FastLoopMixin):
                 return await self._ask(str(args.get("question", "")), step)
             case "done":
                 self.result = self._build_result(args)
+                if self.result.get("success"):
+                    await self._set_plan([p if p["status"] == "skipped" else {**p, "status": "done"}
+                                          for p in self.plan])
                 return "Delivered the result."
         raise ActionError(f"Unsupported action {name}")
+
+    async def _advance_plan(self, plan_step: Any) -> None:
+        """Earlier items become done, the named item active; the model sends one integer instead of the plan."""
+        if isinstance(plan_step, bool) or not isinstance(plan_step, int | float) or not self.plan:
+            return
+        active = int(plan_step) - 1
+        if not 0 <= active < len(self.plan):
+            return
+
+        def status(i: int, current: str) -> str:
+            if current == "skipped":
+                return current
+            if i < active:
+                return "done"
+            if i == active:
+                return "active"
+            return "pending" if current == "active" else current
+
+        await self._set_plan([{**p, "status": status(i, p["status"])} for i, p in enumerate(self.plan)])
+
+    async def _set_plan(self, plan: list[dict[str, str]]) -> None:
+        if plan != self.plan:
+            self.plan = plan
+            await self.emit({"type": "plan", "items": self.plan})
 
     async def _record(self, args: dict[str, Any], step: dict[str, Any] | None = None) -> str:
         items = args.get("items") if isinstance(args.get("items"), list) else []
@@ -479,9 +507,15 @@ class Agent(FastLoopMixin):
                 for k in unverified:
                     if k not in suspect_fields:
                         suspect_fields.append(k)
-            if not any(f["source_url"] == source and f["data"] == data for f in self.findings):
+            same_page = [i for i, f in enumerate(self.findings) if f["source_url"] == source]
+            if any(_contains(self.findings[i]["data"], data) for i in same_page):
+                continue  # already saved, possibly with more fields
+            partial = next((i for i in same_page if _contains(data, self.findings[i]["data"])), None)
+            if partial is None:
                 self.findings.append(entry)
-                added += 1
+            else:
+                self.findings[partial] = entry  # a richer copy of the same item replaces the partial one
+            added += 1
         await self.emit({"type": "findings", "items": self.findings})
         suffix = (f" (⚠ unverified in page text: {', '.join(suspect_fields[:3])})"
                   if suspect_fields else " (✓ verified against page text)")
@@ -552,11 +586,36 @@ class Agent(FastLoopMixin):
         issues = [_text(i) for i in (args.get("issues") or []) if _text(i)]
         if partial_reason:
             issues.insert(0, partial_reason)
+        checklist = self._checklist(args.get("checklist"))
+        unmet = [c["requirement"] for c in checklist if not c["met"]]
+        success = bool(args.get("success")) and not partial_reason
+        if success and unmet:
+            # The agent's own checklist outranks its success claim: never report a goal done with open items.
+            success = False
+            issues.insert(0, "Not every requirement was met: " + "; ".join(unmet[:4]))
         return {
-            "success": bool(args.get("success")) and not partial_reason,
+            "success": success,
             "summary": str(args.get("summary") or "").strip() or "No summary was produced.",
             "columns": columns, "rows": rows, "sources": sources[:30], "issues": issues,
+            "checklist": checklist, "assumptions": _strings(args.get("assumptions"), 6, 240),
+            "follow_ups": _strings(args.get("follow_ups"), 3, 160),
         }
+
+    def _checklist(self, raw: Any) -> list[dict[str, Any]]:
+        """The model's requirement checklist; evidence steps are kept only if they really ran in this run."""
+        ran = {h["n"] for h in self.history if isinstance(h.get("n"), int)}
+        out: list[dict[str, Any]] = []
+        for item in raw if isinstance(raw, list) else []:
+            if not isinstance(item, dict) or not _text(item.get("requirement")):
+                continue
+            entry: dict[str, Any] = {"requirement": _text(item["requirement"])[:160],
+                                     "met": item.get("met") is True,
+                                     "evidence": _text(item.get("evidence"))[:240]}
+            n = item.get("step")
+            if isinstance(n, int) and not isinstance(n, bool) and n in ran:
+                entry.update(step_id=f"s{n}", step_n=n)
+            out.append(entry)
+        return out[:8]
 
     async def _publish_result(self) -> None:
         await self.emit({"type": "result", **self.result})
@@ -646,8 +705,18 @@ def _thought(args: dict[str, Any], native_thinking: str = "") -> dict[str, str]:
     return out
 
 
+def _contains(big: dict[str, Any], small: dict[str, Any]) -> bool:
+    """True when every field of `small` is present in `big` with the same value."""
+    return all(big.get(k) == v for k, v in small.items())
+
+
+def _strings(raw: Any, limit: int, max_len: int) -> list[str]:
+    items = raw if isinstance(raw, list) else []
+    return [_text(v)[:max_len] for v in items if isinstance(v, str) and _text(v)][:limit]
+
+
 def _public_args(args: dict[str, Any]) -> dict[str, Any]:
-    hidden = {"evaluation", "memory", "next_goal", "plan", "irreversible", "_thinking"}
+    hidden = {"evaluation", "memory", "next_goal", "plan", "plan_step", "irreversible", "_thinking"}
     return {k: v for k, v in args.items() if k not in hidden}
 
 

@@ -107,3 +107,16 @@ def test_recover_xml_params_and_extract_partial_thought():
     assert thought["evaluation"] == "Scanning 14 books on page 1"
     assert thought["next_goal"] == "Click next"
 
+
+
+async def test_static_system_prompt_and_tools_are_cached_and_cache_tokens_are_billed():
+    usage = SimpleNamespace(input_tokens=1000, output_tokens=100, cache_creation_input_tokens=2000,
+                            cache_read_input_tokens=10000)
+    tool = block(type="tool_use", name="wait", input={"seconds": 1})
+    b, calls = backend([SimpleNamespace(content=[tool], stop_reason="tool_use", usage=usage)])
+    _, _, tokens_in, _, spent = await b.decide(
+        "claude-haiku-5-5", [{"role": "system", "content": "rules"}, {"role": "user", "content": "page"}], TOOLS)
+    assert calls.calls[0]["system"] == [{"type": "text", "text": "rules", "cache_control": {"type": "ephemeral"}}]
+    assert tokens_in == 13000
+    expected = (1000 * 0.10 + 2000 * 0.10 * 1.25 + 10000 * 0.10 * 0.1 + 100 * 0.50) / 1_000_000
+    assert spent == pytest.approx(expected)

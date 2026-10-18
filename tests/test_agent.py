@@ -196,3 +196,73 @@ async def test_cost_limit_wraps_up():
     agent.max_cost_usd = 0.0015
     result = await agent.run()
     assert "cost limit" in result["issues"][0]
+
+
+async def test_plan_step_advances_progress_without_resending_the_plan():
+    plan = [{"text": "Open site", "status": "active"}, {"text": "Pick category", "status": "pending"},
+            {"text": "Open item", "status": "pending"}]
+    agent, _, rec = make([decision("navigate", url="https://shop.test/a", plan=plan, plan_step=1),
+                          decision("scroll", direction="down", plan_step=3), DONE])
+    await agent.run()
+    progress = [[p["status"] for p in e["items"]] for e in rec.of("plan")]
+    assert progress[0] == ["active", "pending", "pending"]
+    assert progress[1] == ["done", "done", "active"]
+    assert progress[-1] == ["done", "done", "done"], "a successful done closes the plan"
+
+
+async def test_failed_done_leaves_unfinished_plan_items_open():
+    plan = [{"text": "Open site", "status": "done"}, {"text": "Find price", "status": "active"}]
+    failed = decision("done", success=False, summary="Not found", columns=[], rows=[], sources=[],
+                      issues=["no price"])
+    agent, _, rec = make([decision("scroll", direction="down", plan=plan), failed])
+    await agent.run()
+    assert [p["status"] for p in rec.of("plan")[-1]["items"]] == ["done", "active"]
+
+
+def _done(**extra):
+    base = dict(success=True, summary="All set", columns=["a"], rows=[{"a": "1"}],
+                sources=[{"title": "Shop", "url": "https://shop.test/"}], issues=[])
+    return decision("done", **{**base, **extra})
+
+
+async def test_checklist_links_evidence_to_real_steps_and_drops_bogus_ones():
+    checklist = [{"requirement": "Open the shop", "met": True, "evidence": "Shop home loaded", "step": 1},
+                 {"requirement": "Report the price", "met": True, "evidence": "£5 shown", "step": 99},
+                 {"requirement": "", "met": True}, "junk"]
+    agent, _, rec = make([decision("navigate", url="https://shop.test/a"),
+                          _done(checklist=checklist, assumptions=["Prices in GBP", ""],
+                                follow_ups=["Compare with other shops", 7, "a", "b", "c"])])
+    result = await agent.run()
+    assert result["success"]
+    assert result["checklist"] == [
+        {"requirement": "Open the shop", "met": True, "evidence": "Shop home loaded", "step_id": "s1", "step_n": 1},
+        {"requirement": "Report the price", "met": True, "evidence": "£5 shown"},
+    ]
+    assert result["assumptions"] == ["Prices in GBP"]
+    assert result["follow_ups"] == ["Compare with other shops", "a", "b"]
+    assert rec.of("result")[0]["checklist"][0]["step_id"] == "s1"
+
+
+async def test_unmet_checklist_item_downgrades_a_success_claim():
+    checklist = [{"requirement": "Find the price", "met": False, "evidence": "Price hidden behind login"}]
+    agent, _, _ = make([_done(checklist=checklist)])
+    result = await agent.run()
+    assert not result["success"]
+    assert any("Find the price" in issue for issue in result["issues"])
+
+
+async def test_result_fields_default_to_empty_lists():
+    agent, _, _ = make([DONE])
+    result = await agent.run()
+    assert result["checklist"] == [] and result["assumptions"] == [] and result["follow_ups"] == []
+
+
+async def test_richer_finding_replaces_its_partial_copy_from_the_same_page():
+    record = lambda items: decision("record_findings", items=items, source_url="https://shop.test/a")  # noqa: E731
+    agent, _, rec = make([record([{"title": "Widget"}]),
+                          record([{"title": "Widget", "price": "£5"}]),
+                          record([{"title": "Widget"}]),
+                          record([{"title": "Gadget", "price": "£7"}]), DONE])
+    await agent.run()
+    assert [f["data"] for f in rec.of("findings")[-1]["items"]] == [
+        {"title": "Widget", "price": "£5"}, {"title": "Gadget", "price": "£7"}]

@@ -18,6 +18,11 @@ REASONING = {
         "type": "string",
         "description": "The immediate goal of THIS action in plain language for a non-technical observer.",
     },
+    "plan_step": {
+        "type": "integer",
+        "description": "1-based number of the plan item THIS action works on. Earlier items count as done, so "
+                       "send it every step instead of re-sending the whole plan.",
+    },
     "plan": {
         "type": "array",
         "description": "The full updated plan (3-7 short items). Required on the first step; afterwards only when "
@@ -109,8 +114,19 @@ TOOLS = [
            "sources": {"type": "array", "items": {"type": "object", "properties": {
                "title": {"type": "string"}, "url": {"type": "string"}}, "required": ["title", "url"]}},
            "issues": {"type": "array", "items": {"type": "string"},
-                      "description": "Anything unverified, missing or uncertain."}},
-          ["success", "summary", "columns", "rows", "sources", "issues"]),
+                      "description": "Anything unverified, missing or uncertain."},
+           "checklist": {"type": "array", "description": "One item per distinct requirement in the user's goal, "
+                         "in the goal's own words (2-6 items).", "items": {"type": "object", "properties": {
+               "requirement": {"type": "string"},
+               "met": {"type": "boolean"},
+               "evidence": {"type": "string", "description": "What on the page proves it, in a few words."},
+               "step": {"type": "integer", "description": "History step number where that evidence was seen."}},
+               "required": ["requirement", "met", "evidence"]}},
+           "assumptions": {"type": "array", "items": {"type": "string"},
+                           "description": "Interpretations you chose where the goal was ambiguous."},
+           "follow_ups": {"type": "array", "maxItems": 3, "items": {"type": "string"},
+                          "description": "Up to 3 short next goals this user might plausibly want."}},
+          ["success", "summary", "columns", "rows", "sources", "issues", "checklist"]),
 ]
 DELEGATE = _tool(
     "delegate",
@@ -126,11 +142,13 @@ TOOLS_WITH_FAST = [*TOOLS[:-1], DELEGATE, TOOLS[-1]]
 TOOL_NAMES = {t["function"]["name"] for t in TOOLS_WITH_FAST}
 _REQUIRED = {t["function"]["name"]: t["function"]["parameters"]["required"] for t in TOOLS_WITH_FAST}
 _REASONING_KEYS = set(REASONING) | set(RISK_FIELDS)
+# Asked of the model, but a finished run is never thrown away for leaving it out.
+_LENIENT_KEYS = {"checklist"}
 
 
 def missing_args(name: str, args: dict[str, Any]) -> list[str]:
     """Required action parameters the model left out or left empty (reasoning fields are optional here)."""
-    required = [k for k in _REQUIRED.get(name, []) if k not in _REASONING_KEYS]
+    required = [k for k in _REQUIRED.get(name, []) if k not in _REASONING_KEYS | _LENIENT_KEYS]
     return [k for k in required if args.get(k) is None or args.get(k) == ""]
 
 # Actions that change page state; under approval mode "always" each needs operator approval.
