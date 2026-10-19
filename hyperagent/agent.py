@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import os
 import re
 import time
 from collections.abc import Awaitable, Callable
@@ -20,10 +21,18 @@ from .browser import ActionError, BrowserSession, Observation
 from .extract import ExtractMixin, normalize_url, resolve_urls
 from .fast import FastPolicy
 from .llm import Decision, LLMClient, LLMError
-from .prompts import SYSTEM, SYSTEM_FAST, step_context
+from .prompts import SYSTEM, build_system_prompt, step_context
 from .system1 import FastLoopMixin
 from .telemetry import RunLedger
-from .tools import TOOL_NAMES, TOOLS, TOOLS_WITH_FAST, label, missing_args, needs_approval
+from .tools import (
+    TOOL_NAMES,
+    TOOLS,
+    TOOLS_JEV_FIRST,
+    TOOLS_WITH_FAST,
+    label,
+    missing_args,
+    needs_approval,
+)
 
 Emit = Callable[[dict[str, Any]], Awaitable[None]]
 SEARCH_URL = "https://www.bing.com/search?q={}"
@@ -52,12 +61,13 @@ class Agent(FastLoopMixin, ExtractMixin):
         self.conversation = conversation or []  # earlier turns of this chat, summarised by the console
         self.user_memory = user_memory or []  # facts the operator asked to be remembered across chats
         self.fast = fast if fast and fast.config.enabled else None
-        self.tools = TOOLS_WITH_FAST if self.fast else TOOLS
-        self.system_prompt = SYSTEM + (SYSTEM_FAST if self.fast else "")
+        self.system_prompt = build_system_prompt(use_jev=bool(self.fast))
+        self._recovery_turns = 0  # planner turns that may use direct UI tools after Jev ended stuck or unsure
         self.detached = False  # the operator's socket closed; skip anything that only serves them
         self.plan: list[dict[str, str]] = []
         self.history: list[dict[str, Any]] = []
         self.findings: list[dict[str, Any]] = []
+        self._findings_at_start = 0
         self.checked: dict[str, str] = {}  # page → what was saved from it, including "nothing"
         self.extracted: set[tuple[str, frozenset[str]]] = set()  # (page, fields + filter) already run through extract
         self.guidance: list[str] = []
@@ -162,6 +172,8 @@ class Agent(FastLoopMixin, ExtractMixin):
     # ---------- main loop ----------
 
     async def run(self) -> dict[str, Any]:
+        # A continued chat starts with the previous turn's findings; only rows saved after this point are this turn's.
+        self._findings_at_start = len(self.findings)
         try:
             while not self.stopped and self.result is None:
                 if self.actions_taken >= self.max_steps:
@@ -199,6 +211,27 @@ class Agent(FastLoopMixin, ExtractMixin):
             return False
         last = self.history[-1]
         return self._consecutive_errors >= 2 or "did not visibly change" in str(last.get("result", ""))
+
+    def _planner_tools(self, page: Any) -> list[dict[str, Any]]:
+        """In Jev mode the planner gets no direct UI tools, so it cannot drift into clicking step by step. They
+        return for the recovery turns after Jev ends stuck or unsure, and on pages with a password field, which
+        Jev never types into."""
+        if not self.fast:
+            return TOOLS
+        elements = getattr(page, "elements", None) or {}
+        has_password = any(e.get("type") == "password" for e in elements.values())
+        return TOOLS_WITH_FAST if self._recovery_turns or has_password else TOOLS_JEV_FIRST
+
+    def _hard_turn(self) -> bool:
+        """Most steps are obvious, so native thinking is paid for only on the first plan, after a failure or an
+        unfinished Jev hand-off, and when saved findings are about to be compared on the plan's last item."""
+        if not self.history or self._consecutive_errors or self._recovery_turns:
+            return True
+        if "did not visibly change" in str(self.history[-1].get("result", "")):
+            return True
+        if len(self.findings) >= 4:
+            return True
+        return bool(self.findings and self.plan and self.plan[-1].get("status") == "active")
 
     def _remember_text(self, text: str) -> None:
         if not text:
@@ -245,13 +278,16 @@ class Agent(FastLoopMixin, ExtractMixin):
         events, self.browser.events = self.browser.events, []
         domain = (urlsplit(page.url).hostname or "").lower().removeprefix("www.")
         domain_notes = self.domain_memory.get(domain, []) if domain else []
+        tools = self._planner_tools(page)
+        # Without direct UI tools the planner never uses element ids, so it reads the shorter compact page view.
+        compact = tools is TOOLS_JEV_FIRST and os.environ.get("PLANNER_PAGE_VIEW", "compact") != "full"
         context = step_context(
             goal=self.goal, guidance=self.guidance, plan=self.plan, history=self.history, findings=self.findings,
             page=page, read_output=self.read_output, warnings=self._loop_warnings() + _page_warnings(page),
             step=self.actions_taken + 1,
             max_steps=self.max_steps, events=events, memory=self.memory, now=local_now(self.timezone),
             domain_notes=domain_notes, conversation=self.conversation, user_memory=self.user_memory,
-            checked=self.checked,
+            checked=self.checked, compact=compact,
         )
         self.read_output = None
         content: list[dict[str, Any]] = [{"type": "text", "text": context}]
@@ -273,7 +309,8 @@ class Agent(FastLoopMixin, ExtractMixin):
 
         with self.ledger.scope("planner", step.get("id") if step else None):
             call = asyncio.create_task(
-                self.llm.decide(self.model, messages, self.tools, on_retry=self._retry_notice, on_delta=_on_delta)
+                self.llm.decide(self.model, messages, tools, on_retry=self._retry_notice,
+                                on_delta=_on_delta, hard=self._hard_turn())
             )
         stop_watch = asyncio.create_task(self._until_stopped())
         try:
@@ -429,6 +466,8 @@ class Agent(FastLoopMixin, ExtractMixin):
                 pass
         self._consecutive_errors = 0
         self.actions_taken += 1
+        if name != "delegate":
+            self._recovery_turns = max(0, self._recovery_turns - 1)
         step.update(status="ok", result=result, ended_at=time.time())
         await self.send_step(step)
         if name == "done":
@@ -492,6 +531,12 @@ class Agent(FastLoopMixin, ExtractMixin):
             case "ask_user":
                 return await self._ask(str(args.get("question", "")), step)
             case "done":
+                rows = args.get("rows")
+                saved_this_turn = len(self.findings) > self._findings_at_start
+                if not saved_this_turn and isinstance(rows, list) and rows:
+                    # A table read straight off the page still needs saved findings to link each value to its
+                    # source; _record checks every value against the observed page text and flags misses.
+                    await self._record({"items": rows, "source_url": self.browser.page.url}, step)
                 self.result = self._build_result(args)
                 if self.result.get("success"):
                     await self._set_plan([p if p["status"] == "skipped" else {**p, "status": "done"}
@@ -759,9 +804,23 @@ def _browser_error(exc: Exception) -> str:
 
 
 def _thought(args: dict[str, Any], native_thinking: str = "") -> dict[str, str]:
-    out = {k: _text(args.get(k, "")) for k in ("evaluation", "memory", "next_goal", "message")}
-    if native_thinking:
-        out["thinking"] = _text(native_thinking)
+    evaluation = _text(args.get("evaluation", ""))
+    memory = _text(args.get("memory", ""))
+    message = _text(args.get("message", ""))
+    next_goal = _text(args.get("next_goal", "")) or message
+    think = _text(args.get("think", ""))
+    out = {
+        "evaluation": evaluation,
+        "memory": memory,
+        "next_goal": next_goal,
+        "message": message,
+    }
+    if think:
+        out["think"] = think
+    # The optional think field and native thinking are both reasoning the timeline shows under "thinking".
+    thinking = "\n\n".join(t for t in (_text(native_thinking), think) if t)
+    if thinking:
+        out["thinking"] = thinking
     return out
 
 
@@ -781,7 +840,8 @@ def _strings(raw: Any, limit: int, max_len: int) -> list[str]:
 
 
 def _public_args(args: dict[str, Any]) -> dict[str, Any]:
-    hidden = {"evaluation", "memory", "next_goal", "message", "plan", "plan_step", "irreversible", "_thinking"}
+    hidden = {"evaluation", "memory", "next_goal", "think", "message", "plan", "plan_step", "irreversible",
+              "_thinking"}
     return {k: v for k, v in args.items() if k not in hidden}
 
 

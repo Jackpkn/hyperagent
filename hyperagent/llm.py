@@ -17,7 +17,7 @@ from .anthropic_backend import AnthropicBackend, AnthropicError, _recover_xml_pa
 from .anthropic_backend import cost as anthropic_cost
 from .telemetry import invalid_response, model_call, tracked_post
 
-ANTHROPIC_MODELS = "claude-sonnet-5-5,claude-haiku-5-5,claude-opus-5-5"
+ANTHROPIC_MODELS = "claude-haiku-5-5,claude-sonnet-5-5,claude-opus-5-5"  # first is the default planner
 DEFAULT_MODELS = "anthropic/claude-sonnet-5.5,anthropic/claude-haiku-5.5,inception/mercury-2.5,google/gemini-3.7-flash"
 
 
@@ -80,14 +80,15 @@ class LLMClient:
     @model_call
     async def decide(
         self, model: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]],
-        *, force: str | None = None, on_retry: Any = None, on_delta: Any = None,
+        *, force: str | None = None, on_retry: Any = None, on_delta: Any = None, hard: bool = True,
     ) -> Decision:
+        """`hard` turns get native thinking on the Anthropic backend; the OpenAI-compatible path ignores it."""
         if not self.config.api_key:
             raise LLMError("No model API key is configured on the server (set ANTHROPIC_API_KEY or LLM_API_KEY).")
         if self.anthropic:
             try:
                 name, args, tokens_in, tokens_out, spent, cached = await self.anthropic.decide(
-                    model, messages, tools, force=force, on_retry=on_retry, on_delta=on_delta)
+                    model, messages, tools, force=force, on_retry=on_retry, on_delta=on_delta, hard=hard)
             except AnthropicError as exc:
                 raise LLMError(str(exc)) from None
             native_thinking = str(args.pop("_thinking", "") or "").strip()

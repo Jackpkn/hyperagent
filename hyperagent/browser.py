@@ -439,15 +439,16 @@ class BrowserSession:
             raise ActionError(f"Element [{element_id}] no longer exists; the page changed. Re-read the page.")
         return element
 
-    async def _settle(self, page: Page, timeout: int = 6000) -> None:
+    async def _settle(self, page: Page, timeout: int = 6000, *, check_network: bool = False) -> None:
         try:
             await page.wait_for_load_state("domcontentloaded", timeout=timeout)
         except PlaywrightTimeout:
             pass
-        try:
-            await page.wait_for_load_state("networkidle", timeout=min(timeout, 2500))
-        except PlaywrightTimeout:
-            pass
+        if check_network:
+            try:
+                await page.wait_for_load_state("networkidle", timeout=min(timeout, 2000))
+            except PlaywrightTimeout:
+                pass
 
     @bounded(45)
     async def navigate(self, url: str, *, trusted: bool = False) -> str:
@@ -466,7 +467,7 @@ class BrowserSession:
             raise ActionError(f"Timed out loading {url}.") from None
         except PlaywrightError as exc:
             raise ActionError(f"Could not open {url}: {str(exc).splitlines()[0][:160]}") from None
-        await self._settle(page, 4000)
+        await self._settle(page, 4000, check_network=True)
         status = response.status if response else None
         if status and status >= 400:
             return f"Opened {page.url} but the server answered HTTP {status}."
@@ -487,8 +488,8 @@ class BrowserSession:
                 raise ActionError(f"Element [{element_id}] could not be clicked (covered or detached).") from None
         except PlaywrightError as exc:
             raise ActionError(f"Click failed: {str(exc).splitlines()[0][:160]}") from None
-        await asyncio.sleep(0.35)
-        await self._settle(self._active(), 5000)
+        await asyncio.sleep(0.12)
+        await self._settle(self._active(), 3000)
         if len(self._tabs_list()) > before_tabs:
             return "Clicked; a new tab opened and is now active."
         if self._active().url != before_url:
@@ -515,12 +516,12 @@ class BrowserSession:
         if press_enter:
             before = self._active().url
             await handle.press("Enter")
-            await asyncio.sleep(0.4)
-            await self._settle(self._active(), 6000)
+            await asyncio.sleep(0.15)
+            await self._settle(self._active(), 4000)
             if self._active().url != before:
                 return f"Typed and pressed Enter; navigated to {self._active().url}"
             return "Typed and pressed Enter."
-        await asyncio.sleep(0.25)  # let autocomplete suggestions render
+        await asyncio.sleep(0.15)  # let autocomplete suggestions render
         return "Typed."
 
     @bounded(20, mutation=True)
@@ -536,7 +537,8 @@ class BrowserSession:
                 chosen = await handle.select_option(value=option, timeout=3000)
             except PlaywrightError:
                 raise ActionError(f"Option {option!r} is not available in [{element_id}].") from None
-        await self._settle(self._active(), 3000)
+        await asyncio.sleep(0.08)
+        await self._settle(self._active(), 2500)
         return f"Selected {option!r}." if chosen else f"Option {option!r} was not selected."
 
     @bounded(15)

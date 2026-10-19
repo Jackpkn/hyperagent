@@ -52,6 +52,7 @@ A complete step record; sent when created and whenever it changes (same `id`, re
   status: "thinking" | "planned" | "awaiting_approval" | "running" | "ok" | "error" | "rejected" | "skipped",
   thought?: { evaluation: string, memory: string, next_goal: string,
               message?: string,   /* plain narration for the timeline */
+              think?: string,     /* optional deep reasoning scratchpad */
               thinking?: string },
   action?: { name: string, args: object, label: string /* human sentence, e.g. 'Click "Search"' */ },
   target?: { label: string, rect: {x,y,w,h} } /* frame pixel space, if the action targets an element */,

@@ -45,6 +45,8 @@ export interface Thought {
   message?: string;
   /** Native model thinking block (e.g. Claude ThinkingBlock.thinking / OpenRouter reasoning). */
   thinking?: string;
+  /** Optional deep reasoning scratchpad emitted in tool call */
+  think?: string;
 }
 
 export interface StepAction {

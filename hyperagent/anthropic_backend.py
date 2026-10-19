@@ -23,7 +23,7 @@ _XML_PARAM_RE = re.compile(
     r'<parameter\s+name=["\']([^"\']+)["\']\s*>([\s\S]*?)(?:</parameter>|(?=<parameter\b)|$)',
     re.I,
 )
-_XML_TAG_SPLIT_RE = re.compile(r"</(?:evaluation|memory|next_goal|message|plan)>|<parameter\b", re.I)
+_XML_TAG_SPLIT_RE = re.compile(r"</(?:evaluation|memory|think|next_goal|message|plan)>|<parameter\b", re.I)
 _INT_FIELDS = {"element_id", "tab_index", "plan_step"}
 _NUM_FIELDS = {"pages", "seconds"}
 _BOOL_FIELDS = {"press_enter", "irreversible", "success"}
@@ -37,7 +37,8 @@ def _recover_xml_params(inputs: dict[str, Any]) -> dict[str, Any]:
     for key, val in list(out.items()):
         if not isinstance(val, str):
             continue
-        if "<parameter" in val or any(f"</{t}>" in val for t in ("evaluation", "memory", "next_goal", "message")):
+        tracked_tags = ("evaluation", "memory", "think", "next_goal", "message")
+        if "<parameter" in val or any(f"</{t}>" in val for t in tracked_tags):
             for match in _XML_PARAM_RE.finditer(val):
                 pname = match.group(1).strip()
                 raw_pval = re.sub(r"</[a-zA-Z0-9_]+>\s*$", "", match.group(2).strip()).strip()
@@ -71,9 +72,9 @@ def _recover_xml_params(inputs: dict[str, Any]) -> dict[str, Any]:
 
 
 def extract_partial_thought(partial_json: str) -> dict[str, str]:
-    """Extract in-flight evaluation / next_goal strings from a streaming partial JSON buffer."""
+    """Extract in-flight evaluation / next_goal / think / message strings from a streaming partial JSON buffer."""
     out: dict[str, str] = {}
-    for field in ("evaluation", "next_goal", "memory", "message"):
+    for field in ("evaluation", "next_goal", "memory", "think", "message"):
         m = re.search(rf'"{field}"\s*:\s*"((?:[^"\\]|\\.)*)', partial_json)
         if m:
             raw = m.group(1).replace('\\"', '"').replace("\\n", " ").replace("\\\\", "\\")
@@ -119,13 +120,15 @@ def convert_tools(tools: list[dict[str, Any]]) -> list[dict[str, Any]]:
              "input_schema": t["function"]["parameters"]} for t in tools]
 
 
-def speed_settings(model: str, *, for_planner: bool = True) -> dict[str, Any]:
-    """Configure Claude's native adaptive thinking with display='summarized' for the planner."""
-    if not for_planner or os.environ.get("PLANNER_THINKING", "1") == "0":
+def speed_settings(model: str, *, for_planner: bool = True, hard: bool = True) -> dict[str, Any]:
+    """Native thinking only where it pays. PLANNER_THINKING=auto (default) thinks on hard planner turns only
+    (first plan, recovery, final comparison); 1 thinks on every turn; 0 never does."""
+    mode = os.environ.get("PLANNER_THINKING", "auto")
+    if not for_planner or mode == "0" or (mode != "1" and not hard):
         if model.startswith("claude-haiku"):
             return {"thinking": {"type": "disabled"}}
         return {"output_config": {"effort": "low"}}
-    effort = os.environ.get("PLANNER_EFFORT", "high")
+    effort = os.environ.get("PLANNER_EFFORT", "medium")
     return {
         "thinking": {"type": "adaptive", "display": "summarized"},
         "output_config": {"effort": effort},
@@ -152,7 +155,7 @@ class AnthropicBackend:
     @model_call
     async def decide(
         self, model: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]], *,
-        force: str | None = None, on_retry: Any = None, on_delta: Any = None,
+        force: str | None = None, on_retry: Any = None, on_delta: Any = None, hard: bool = True,
     ) -> tuple[str, dict[str, Any], int, int, float, int]:
         """(tool name, arguments, input tokens incl. cache, output tokens, cost, of which read from cache)."""
         system, converted = convert_messages(messages)
@@ -168,7 +171,7 @@ class AnthropicBackend:
                         model=model, max_tokens=4096, system=_cached_system(system), messages=converted,
                         tools=convert_tools(tools),
                         tool_choice={"type": "auto", "disable_parallel_tool_use": True},
-                        **speed_settings(model, for_planner=True),
+                        **speed_settings(model, for_planner=True, hard=hard),
                     )
                     if on_delta is not None and hasattr(self.client.messages, "stream"):
                         thinking_buf = ""

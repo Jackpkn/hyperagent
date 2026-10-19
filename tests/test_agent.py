@@ -176,7 +176,7 @@ async def test_result_normalises_rows_and_rejects_non_http_sources():
                                  sources=[{"title": "bad", "url": "javascript:alert(1)"}], issues=[])])
     result = await agent.run()
     assert result["columns"] == ["x", "y"] and result["rows"] == [{"x": "1", "y": ""}]
-    assert result["sources"] == []
+    assert all(s["url"].startswith("https://") for s in result["sources"])
 
 
 async def test_stop_while_awaiting_approval_ends_cleanly_without_acting():
@@ -334,7 +334,8 @@ async def test_extract_model_failure_is_a_visible_step_error():
     agent.llm.json_replies = [LLMError("The extraction model failed (HTTP 500).")]
     await agent.run()
     step = rec.last_step("s1")
-    assert step["status"] == "error" and "Extraction failed" in step["error"] and agent.findings == []
+    assert step["status"] == "error" and "Extraction failed" in step["error"]
+    assert not any(f.get("step_id") == "s1" for f in agent.findings)
 
 
 async def test_extract_without_fields_does_nothing():
@@ -442,3 +443,34 @@ async def test_pages_with_nothing_to_save_are_still_listed_as_checked():
     assert "<pages_checked>" in context
     assert "- https://shop.test/page-3: checked, nothing on it to record" in context
     assert "- https://shop.test/page-4: extracted title → 0 rows" in context
+
+
+async def test_table_read_off_the_page_is_saved_as_findings_with_evidence():
+    browser = FakeBrowser()
+    browser.text += "\nSpiceJet 5:45 AM ₹12,765"
+    table = decision("done", success=True, summary="Cheapest flight", columns=["airline", "price"],
+                     rows=[{"airline": "SpiceJet", "price": "₹12,765"}, {"airline": "IndiGo", "price": "₹9,999"}],
+                     sources=[], issues=[], checklist=[])
+    agent, _, rec = make([table], browser=browser)
+    await agent.run()
+    assert [f["data"]["airline"] for f in agent.findings] == ["SpiceJet", "IndiGo"]
+    assert all(f["source_url"] == "https://shop.test/" for f in agent.findings)
+    assert "unverified" not in agent.findings[0] and agent.findings[1]["unverified"] == ["airline", "price"]
+
+
+async def test_done_does_not_duplicate_findings_already_saved():
+    agent, _, rec = make([decision("record_findings", items=[{"a": "Example"}], source_url="https://shop.test/"),
+                          DONE])
+    await agent.run()
+    assert [f["data"] for f in agent.findings] == [{"a": "Example"}]
+
+
+async def test_continued_chat_still_saves_this_turns_table_as_findings():
+    browser = FakeBrowser()
+    browser.text += "\nSpiceJet ₹12,765"
+    table = decision("done", success=True, summary="Cheapest", columns=["airline", "price"],
+                     rows=[{"airline": "SpiceJet", "price": "₹12,765"}], sources=[], issues=[], checklist=[])
+    agent, _, rec = make([table], browser=browser)
+    agent.findings = [{"source_url": "https://other.test/", "data": {"flight": "43"}}]  # the previous turn's rows
+    await agent.run()
+    assert [f["data"] for f in agent.findings] == [{"flight": "43"}, {"airline": "SpiceJet", "price": "₹12,765"}]

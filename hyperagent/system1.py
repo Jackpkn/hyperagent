@@ -17,7 +17,7 @@ from .tools import needs_approval
 if TYPE_CHECKING:
     from .agent import Agent
 
-FAST_MAX_ACTIONS = 15
+FAST_MAX_ACTIONS = 25
 NO_CHANGE_LIMIT = 3
 OPERATION_TOOLS = {"CLICK": "click", "TYPE_TEXT": "type_text", "SELECT": "select_option",
                    "SCROLL_DOWN": "scroll", "SCROLL_UP": "scroll"}
@@ -184,6 +184,10 @@ class FastLoopMixin:
         if episode is not None:
             episode.reason = code
             episode.completion_claimed = code == "claimed_done"
+        if code != "claimed_done":
+            self._recovery_turns = 2
+        else:
+            self._recovery_turns = 0
         count = sum(not entry.startswith("Skipped:") for entry in log)
         done = f"Jev took {count} action{'s' if count != 1 else ''}"
         detail = (": " + "; ".join(log[-8:])) if log else ""

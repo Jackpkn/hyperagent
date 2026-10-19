@@ -1,4 +1,5 @@
 import json
+import re
 
 import httpx
 import pytest
@@ -25,9 +26,26 @@ def test_labels_are_plain_language():
 
 def test_every_tool_requires_public_reasoning():
     for tool in TOOLS:
-        assert {"evaluation", "memory", "next_goal"} <= set(tool["function"]["parameters"]["required"])
+        required = set(tool["function"]["parameters"]["required"])
+        assert {"evaluation", "memory", "message"} <= required and "think" not in required
     assert missing_args("navigate", {"url": ""}) == ["url"]
     assert missing_args("click", {"element_id": 0}) == []
+    # Clearing a field and an unfiltered extract are deliberate empty strings.
+    assert missing_args("type_text", {"element_id": 1, "text": "", "press_enter": False}) == []
+    assert missing_args("extract", {"fields": ["title"], "instruction": ""}) == []
+
+
+def test_planner_thinks_only_on_hard_turns(monkeypatch):
+    from hyperagent.anthropic_backend import speed_settings
+
+    monkeypatch.delenv("PLANNER_THINKING", raising=False)
+    monkeypatch.delenv("PLANNER_EFFORT", raising=False)
+    assert speed_settings("claude-haiku-5-5", hard=False) == {"thinking": {"type": "disabled"}}
+    assert speed_settings("claude-haiku-5-5", hard=True)["thinking"]["type"] == "adaptive"
+    monkeypatch.setenv("PLANNER_THINKING", "1")
+    assert speed_settings("claude-haiku-5-5", hard=False)["thinking"]["type"] == "adaptive"
+    monkeypatch.setenv("PLANNER_THINKING", "0")
+    assert speed_settings("claude-haiku-5-5", hard=True) == {"thinking": {"type": "disabled"}}
 
 
 def tool_reply(name, args, cost=0.002):
@@ -92,7 +110,7 @@ def test_internal_hosts_are_not_public():
 def test_action_parameters_precede_the_plan():
     for tool in TOOLS:
         keys = list(tool["function"]["parameters"]["properties"])
-        assert keys[-1] == "plan" and keys[:3] == ["evaluation", "memory", "next_goal"], keys
+        assert keys[-1] == "plan" and keys[:4] == ["evaluation", "memory", "think", "message"], keys
 
 
 async def test_text_only_models_get_screenshots_stripped():
@@ -176,3 +194,19 @@ def test_start_command_bounds_conversation_and_memory():
         Command.model_validate({"type": "start", "goal": "x", "user_memory": ["m" * 300]})
     with pytest.raises(ValidationError):
         Command.model_validate({"type": "start", "goal": "x", "conversation": [{"goal": "g"}] * 13})
+
+
+def test_compact_page_text_keeps_values_states_and_links():
+    from hyperagent.prompts import compact_page_text
+
+    text = ('Flights\n[15]<input role=combobox type=text value="Jaipur" expanded=false>Where from?</input>\n'
+            '[23]<button role=tab selected=true>Jaipur</button>  [24]<button disabled>Swap</button>\n'
+            '[30]<a href="/next/2">Next page</a> (below)\n'
+            '[31]<div role=link>' + "From 12765 Indian rupees. Nonstop flight with SpiceJet. " * 3 + '</div>\n'
+            '[32]<input type=password empty>Password</input>\n'
+            '[33]<input type=checkbox checked>Nonstop only</input>')
+    out = compact_page_text(text)
+    assert "[Where from? =\"Jaipur\"]" in out and "[Jaipur · selected]" in out and "[Swap · disabled]" in out
+    assert "[Next page](/next/2) (below)" in out and "[Password · empty]" in out and "[Nonstop only · checked]" in out
+    assert "From 12765 Indian rupees" in out and len(out.split("\n")[4]) <= 62
+    assert not re.search(r"\[\d+\]<", out)

@@ -16,8 +16,10 @@ type SortState = { column: string; direction: "asc" | "desc" } | null;
 // Rows that are themselves totals (from a receipt or order summary) must not be summed again.
 const SUMMARY_ROW_RE = /^\s*(sub\s*-?\s*total|item\s+total|grand\s+total|total|tax(es)?|vat|gst|shipping|delivery|fees?|discount)\b/i;
 
+// Columns whose values add up to something meaningful. Prices, fares and scores of competing options are left
+// out: summing five flights' prices is not a figure anyone asked for.
 const QUANTITATIVE_COL_RE =
-  /price|cost|amount|total|subtotal|fee|tax|payout|balance|revenue|margin|qty|quantity|count|stock|score|points|comments/i;
+  /amount|total|subtotal|tax|payout|balance|revenue|margin|qty|quantity|line\s*cost|units/i;
 
 function parseNumericCell(raw: string): { num: number; prefix: string } | null {
   const clean = raw.trim();
@@ -96,7 +98,7 @@ export function DataTable({
       }
       if (parsed.length < 2) continue;
       const hasCurrency = parsed.some((p) => p.prefix !== "");
-      if (!hasCurrency && !QUANTITATIVE_COL_RE.test(col)) continue;
+      if (!QUANTITATIVE_COL_RE.test(col)) continue;
       const sum = parsed.reduce((acc, p) => acc + p.num, 0);
       const avg = sum / parsed.length;
       const prefix = parsed.find((p) => p.prefix)?.prefix ?? "";

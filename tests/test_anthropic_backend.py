@@ -70,7 +70,7 @@ async def test_decide_uses_auto_tool_choice_and_retries_without_tool_call():
     first = calls.calls[0]
     assert first["tool_choice"] == {"type": "auto", "disable_parallel_tool_use": True}
     assert first["thinking"] == {"type": "adaptive", "display": "summarized"}
-    assert first["output_config"] == {"effort": "high"}
+    assert first["output_config"] == {"effort": "medium"}
     assert calls.calls[1]["messages"][-1]["content"][0]["text"].startswith("Call exactly one tool")
 
 

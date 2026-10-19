@@ -67,7 +67,7 @@ class FakeBrowser:
 
 
 def decision(name: str, **args: Any) -> Decision:
-    reasoning = {"evaluation": "ok", "memory": "m", "next_goal": f"do {name}"}
+    reasoning = {"evaluation": "ok", "memory": "m", "next_goal": f"do {name}", "message": f"do {name}"}
     return Decision(name=name, args={**reasoning, **args}, input_tokens=10, output_tokens=5, cost_usd=0.001)
 
 
@@ -94,8 +94,8 @@ class ScriptedLLM:
         return item, 100, 20, 0.0001
 
     async def decide(self, model: str, messages: list, tools: list, *, force: str | None = None,
-                     on_retry: Any = None, on_delta: Any = None) -> Decision:
-        self.requests.append({"messages": messages, "force": force, "tools": tools})
+                     on_retry: Any = None, on_delta: Any = None, hard: bool = True) -> Decision:
+        self.requests.append({"messages": messages, "force": force, "tools": tools, "hard": hard})
         if force == "done":
             return decision("done", success=True, summary="Partial summary", columns=[], rows=[], sources=[],
                             issues=["model issue"])

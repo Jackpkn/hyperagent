@@ -40,6 +40,8 @@ import { PastTurns } from "./PastTurns";
 import { ResultsPanel } from "./ResultsPanel";
 import { Timeline } from "./Timeline";
 
+const MODEL_STORAGE_KEY = "hyperagent.plannerModel.v1";
+
 const CONNECTION_TEXT: Record<AgentState["connection"], string> = {
   connecting: "Connecting…",
   open: "Connected",
@@ -84,6 +86,8 @@ export function AgentApp() {
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("steps");
   const [resultExpanded, setResultExpanded] = useState(false);
   const [sidebarWidth, setSidebarWidth] = useState<number>(540);
+  // The planner model the operator last picked; follow-ups in the chat keep using it.
+  const [chosenModel, setChosenModel] = useState("");
   const [isResizing, setIsResizing] = useState(false);
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
   const [composerSeed, setComposerSeed] = useState<{ text: string; nonce: number } | null>(null);
@@ -103,6 +107,11 @@ export function AgentApp() {
     setProfile(loadOperatorProfile());
     setPersistSession(loadPersistSession());
     setNavigationOpen(window.innerWidth > 760);
+    try {
+      setChosenModel(window.localStorage.getItem(MODEL_STORAGE_KEY) ?? "");
+    } catch {
+      // Ignore storage access errors
+    }
     try {
       const savedWidth = Number(window.localStorage.getItem("hyperagent.sidebarWidth.v1"));
       if (Number.isFinite(savedWidth) && savedWidth >= 380 && savedWidth <= 1100) {
@@ -274,7 +283,18 @@ export function AgentApp() {
     [...chats.pastTurns].reverse().find((t) => (t.result?.rows.length ?? 0) > 0)?.result ?? null;
 
   // Every run carries the open chat's earlier turns and long-term memory.
+  const sessionModels = state.session?.models ?? [];
+  const plannerModel = sessionModels.includes(chosenModel) ? chosenModel : state.session?.model ?? "";
+
   const start = (options: StartOptions): boolean => {
+    if (options.model && options.model !== chosenModel) {
+      setChosenModel(options.model);
+      try {
+        window.localStorage.setItem(MODEL_STORAGE_KEY, options.model);
+      } catch {
+        // Ignore storage access errors
+      }
+    }
     setActiveTab("steps");
     setSelectedStepId(null);
     return agent.startRun({
@@ -517,12 +537,12 @@ export function AgentApp() {
                     goal: followUpGoal,
                     startUrl: "",
                     mode: state.mode,
-                    model: state.session?.model ?? "",
+                    model: plannerModel,
                     continueSession: true,
                   })
                 }
                 onStartNewTask={(newGoal) =>
-                  start({ goal: newGoal, startUrl: "", mode: state.mode, model: state.session?.model ?? "" })
+                  start({ goal: newGoal, startUrl: "", mode: state.mode, model: plannerModel })
                 }
               />
             </Tabs.Root>
@@ -601,7 +621,7 @@ export function AgentApp() {
           <Launcher
             connected={connected}
             models={state.session?.models ?? []}
-            defaultModel={state.session?.model ?? ""}
+            defaultModel={plannerModel}
             fastModel={state.session?.fast_model}
             persistSession={persistSession}
             hasSavedSession={state.session?.has_saved_session}

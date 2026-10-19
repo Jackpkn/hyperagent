@@ -7,6 +7,8 @@ import { ValueEvidence, type EvidenceContext } from "./ValueEvidence";
 
 // Steps that hand control around rather than act on the page.
 const NOT_ACTIONS = new Set(["done", "delegate", "subgoal_done", "stuck", "unsure"]);
+// A step's url is the page it started on; for these that is the page being left, e.g. the blank start page.
+const LEAVES_PAGE = new Set(["navigate", "search"]);
 const MAX_PATH_PAGES = 4;
 
 interface StepLinkProps {
@@ -65,10 +67,11 @@ export function RunRecap({ steps }: { steps: StepRecord[] }) {
   const visited = new Set<string>();
   for (const s of ordered) {
     const background = s.action?.args?.urls;
-    for (const url of [s.url, ...(Array.isArray(background) ? background : [])]) {
+    const own = LEAVES_PAGE.has(s.action?.name ?? "") ? [] : [s.url];
+    for (const url of [...own, ...(Array.isArray(background) ? background : [])]) {
       if (typeof url === "string" && /^https?:\/\//i.test(url)) visited.add(url.split("#")[0].replace(/\/$/, ""));
     }
-    if (!s.url || !/^https?:\/\//i.test(s.url)) continue;
+    if (!s.url || !/^https?:\/\//i.test(s.url) || LEAVES_PAGE.has(s.action?.name ?? "")) continue;
     const name = pageName(s.url.split("#")[0]);
     if (pages[pages.length - 1] !== name) pages.push(name);
   }

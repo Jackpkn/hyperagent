@@ -150,7 +150,7 @@ async def test_low_confidence_returns_control_without_acting():
 
 async def test_fast_irreversible_click_still_needs_approval():
     agent, browser, rec = make([fast("CLICK", 2, irreversible=0.9), fast("SUBGOAL_DONE")],
-                               [decision("delegate", subgoal="Place the order"), DONE], browser=counter_browser())
+                               [decision("delegate", subgoal="Continue"), DONE], browser=counter_browser())
     task = asyncio.create_task(agent.run())
     await wait_for(lambda: rec.of("approval"))
     assert browser.calls == []
@@ -158,6 +158,17 @@ async def test_fast_irreversible_click_still_needs_approval():
     await task
     assert browser.calls == [] and "you rejected an action" in rec.last_step("s1")["result"]
     assert rec.last_step("s1")["delegation"]["reason"] == "rejected"
+
+
+async def test_risky_delegate_subgoal_waits_for_approval_before_jev_starts():
+    agent, browser, rec = make([fast("CLICK", 2)], [decision("delegate", subgoal="Place the order"), DONE],
+                               browser=counter_browser())
+    task = asyncio.create_task(agent.run())
+    await wait_for(lambda: rec.of("approval"))
+    assert agent.fast.subgoals == [] and browser.calls == []
+    agent.resolve_approval(rec.of("approval")[0]["step_id"], False, "not yet")
+    await task
+    assert agent.fast.subgoals == [] and browser.calls == []
 
 
 @pytest.mark.parametrize("interrupt", ["guide", "pause"])
@@ -236,11 +247,12 @@ def offered(agent, turn=0):
 
 
 @pytest.mark.parametrize("configured", [True, False])
-async def test_planner_keeps_direct_ui_available_with_optional_jev(configured):
+async def test_planner_gets_direct_ui_only_without_jev(configured):
     agent, browser, rec = make([], [decision("click", element_id=1), DONE], mode="never", configured=configured)
     await agent.run()
     routine = {"click", "type_text", "select_option", "scroll"}
-    assert routine <= offered(agent)
+    # With Jev the planner cannot drift into clicking step by step; on-page work goes through delegate.
+    assert bool(routine & offered(agent)) != configured
     assert ("delegate" in offered(agent)) == configured
     assert {"navigate", "search", "press_key", "go_back", "switch_tab", "close_tab", "read_page",
             "extract", "record_findings", "ask_user", "done"} <= offered(agent)
@@ -317,19 +329,24 @@ async def test_jev_inability_allows_multiple_explicit_recovery_decisions(inabili
     agent, browser, rec = make([inability], [decision("delegate", subgoal="Continue"),
                               decision("click", element_id=1), decision("click", element_id=1), DONE], mode="never")
     await agent.run()
-    assert "click" in offered(agent, 0)
+    assert "click" not in offered(agent, 0)
     assert "click" in offered(agent, 1)
     assert "click" in offered(agent, 2)
     assert browser.calls == [("click", 1), ("click", 1)]
     assert not any(s["status"] == "error" for s in rec.of("step") if s.get("system") == "planner")
 
 
-async def test_successful_jev_handback_keeps_direct_actions_available():
+async def test_successful_jev_handback_keeps_planner_on_delegate():
     agent, browser, rec = make([fast("SUBGOAL_DONE")], [decision("delegate", subgoal="Check fields"),
-                              decision("click", element_id=1), DONE], mode="never")
+                              decision("read_page"), DONE], mode="never")
     await agent.run()
-    assert "click" in offered(agent, 1)
-    assert browser.calls == [("click", 1)]
+    assert "click" not in offered(agent, 1) and "delegate" in offered(agent, 1)
+
+
+async def test_password_page_offers_direct_typing_with_jev():
+    agent, browser, rec = make([], [DONE], browser=FormBrowser(password=True), mode="never")
+    await agent.run()
+    assert "type_text" in offered(agent, 0)
 
 
 async def test_direct_password_typing_still_requires_approval_with_jev():
@@ -526,3 +543,35 @@ async def test_guidance_during_fast_error_handback_does_not_execute_an_action():
     await agent.run()
     assert "click" in offered(agent, 1)
     assert browser.calls == []
+
+
+def page_text(agent, turn=0):
+    return agent.llm.requests[turn]["messages"][1]["content"][0]["text"]
+
+
+async def test_planner_reads_compact_page_only_while_it_has_no_direct_ui(monkeypatch):
+    monkeypatch.delenv("PLANNER_PAGE_VIEW", raising=False)
+    agent, browser, rec = make([fast("STUCK")], [decision("delegate", subgoal="Continue"),
+                              decision("click", element_id=1), DONE], mode="never")
+    await agent.run()
+    assert "view: compact" in page_text(agent, 0) and "[1]<" not in page_text(agent, 0)
+    assert "view: compact" not in page_text(agent, 1) and "[1]<" in page_text(agent, 1)  # recovery keeps ids
+
+
+async def test_full_page_view_can_be_forced(monkeypatch):
+    monkeypatch.setenv("PLANNER_PAGE_VIEW", "full")
+    agent, browser, rec = make([], [DONE], mode="never")
+    await agent.run()
+    assert "view: compact" not in page_text(agent, 0) and "[1]<" in page_text(agent, 0)
+
+
+async def test_request_caps_each_target_head_keeping_on_screen_elements():
+    page = await FakeBrowser().observe()
+    # An open date picker: 300 cells below the fold plus the on-screen controls.
+    for i in range(3, 303):
+        page.elements[i] = {"id": i, "tag": "div", "label": f"Day {i}", "role": "button",
+                            "rect": {"x": 0, "y": 900 + i, "w": 10, "h": 10}}
+    body, targets, operations = build_request(page, goal="g", subgoal="s", recent=[], guidance=[], model="jev")
+    assert len(targets["CLICK"]) == 255
+    assert {"1", "2"} <= set(targets["CLICK"])  # visible controls are never the ones dropped
+    assert "302" not in targets["CLICK"]  # the farthest off-screen cells are
