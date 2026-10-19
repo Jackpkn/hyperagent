@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import re
 import time
@@ -21,7 +22,7 @@ from .browser import ActionError, BrowserSession, Observation
 from .extract import ExtractMixin, normalize_url, resolve_urls
 from .fast import FastPolicy
 from .llm import Decision, LLMClient, LLMError
-from .prompts import SYSTEM, build_system_prompt, step_context
+from .prompts import CHARS_PER_TOKEN, SYSTEM, build_system_prompt, context_breakdown, step_context
 from .system1 import FastLoopMixin
 from .telemetry import RunLedger
 from .tools import (
@@ -35,6 +36,7 @@ from .tools import (
 )
 
 Emit = Callable[[dict[str, Any]], Awaitable[None]]
+log = logging.getLogger(__name__)
 SEARCH_URL = "https://www.bing.com/search?q={}"
 MAX_CONSECUTIVE_ERRORS = 3
 MAX_CHECKED = 40
@@ -329,7 +331,19 @@ class Agent(FastLoopMixin, ExtractMixin):
             self.paused = True
             return None
         self._count(decision)
+        self._log_call(decision, tools, context, compact)
         return decision
+
+    def _log_call(self, d: Decision, tools: list[dict[str, Any]], context: str, compact: bool) -> None:
+        """One server log line per planner call: estimated tokens per prompt part next to what the API billed, so
+        it is visible what each call is actually spent on."""
+        est = lambda text: round(len(text) / CHARS_PER_TOKEN)  # noqa: E731
+        parts = {"system": est(self.system_prompt), "tools": est(json.dumps(tools)), **context_breakdown(context)}
+        shown = " ".join(f"{k}={v}" for k, v in parts.items())
+        log.info("planner call step=%d model=%s view=%s tools=%d | est tok: %s | est total=%d | actual in=%d "
+                 "(cached %d) out=%d thinking=%s", self.actions_taken + 1, self.model,
+                 "compact" if compact else "full", len(tools), shown, sum(parts.values()), d.input_tokens,
+                 d.cached_tokens, d.output_tokens, "yes" if d.thinking else "no")
 
     async def _until_stopped(self) -> None:
         while not self.stopped:

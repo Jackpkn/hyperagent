@@ -229,3 +229,15 @@ def step_context(
     warnings = [budget, *warnings]
     parts.append("<notes>\n" + "\n".join(f"- {w}" for w in warnings) + "\n</notes>")
     return "\n\n".join(parts)
+
+
+_SECTION_RE = re.compile(r"<(\w+)(?:\s[^>]*)?>\n?(.*?)\n?</\1>", re.S)
+CHARS_PER_TOKEN = 3.6  # rough average for this mix of English, URLs and markup
+
+
+def context_breakdown(context: str) -> dict[str, int]:
+    """Estimated tokens per top-level section of a step context, largest first, to see what a call is spent on."""
+    sizes: dict[str, int] = {}
+    for m in _SECTION_RE.finditer(context):
+        sizes[m.group(1)] = sizes.get(m.group(1), 0) + round(len(m.group(0)) / CHARS_PER_TOKEN)
+    return dict(sorted(sizes.items(), key=lambda kv: -kv[1]))

@@ -474,3 +474,14 @@ async def test_continued_chat_still_saves_this_turns_table_as_findings():
     agent.findings = [{"source_url": "https://other.test/", "data": {"flight": "43"}}]  # the previous turn's rows
     await agent.run()
     assert [f["data"] for f in agent.findings] == [{"flight": "43"}, {"airline": "SpiceJet", "price": "₹12,765"}]
+
+
+async def test_each_planner_call_logs_its_prompt_breakdown(caplog):
+    import logging
+
+    agent, _, _ = make([DONE])
+    with caplog.at_level(logging.INFO, logger="hyperagent.agent"):
+        await agent.run()
+    line = next(r.getMessage() for r in caplog.records if r.getMessage().startswith("planner call"))
+    for part in ("system=", "tools=", "browser_state=", "goal=", "est total=", "actual in=", "view=full"):
+        assert part in line, line
