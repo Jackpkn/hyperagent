@@ -3,7 +3,7 @@
 A dual-system autonomous browser agent with a transparent, steerable 2-pane operator console.
 
 - **System 2 (Planner LLM — Claude Sonnet / Haiku / OpenRouter)** handles high-level strategy: planning, multi-step navigation, parallel multi-tab reading (`read_urls_parallel`), structured data extraction (`record_findings`), and final report synthesis (`done`).
-- **System 1 ([TypeSafe Jev](https://docs.typesafe.ai/introduction) + Haiku text micro-helper)** executes delegated on-page UI subgoals (`delegate(subgoal)`). It picks an operation (`CLICK`, `TYPE_TEXT`, `SELECT`, `SCROLL_*`, `SUBGOAL_DONE`, `STUCK`) and a typed target element `[id]` **without sending screenshots**. Latency varies by request. Run accounting separates model attempts from completed actions and marks unavailable costs as unknown.
+- **System 1 ([TypeSafe Jev](https://docs.typesafe.ai/introduction) + Haiku text micro-helper)** executes delegated on-page UI subgoals (`delegate(subgoal)`). It picks an operation (`CLICK`, `TYPE_TEXT`, `SELECT`, `SCROLL_*`, `WAIT`, `SUBGOAL_DONE`, `STUCK`) and a typed target element `[id]` **without sending screenshots**. Latency varies by request. Run accounting separates model attempts from completed actions and marks unavailable costs as unknown.
 
 Give it any natural-language goal. It drives a real Chromium browser, streams every thought and target bounding box live, pauses before irreversible actions, lets you take over or drop a visual pin on the page to steer it mid-run, and finishes with a verified summary, sortable/diffable table, and CSV/JSON/Markdown exports.
 
@@ -70,12 +70,14 @@ Give it any natural-language goal. It drives a real Chromium browser, streams ev
    - Models only emit integer `element_id`s from the latest observation—never brittle CSS/XPath selectors or arbitrary JS. Stale IDs fail loudly instead of clicking the wrong control.
 
 2. **Speculative Multi-Head System 1 (`hyperagent/fast.py`, `hyperagent/system1.py`)**
-   - Each Jev call sends one multi-question request: an operation head (`CLICK`, `TYPE_TEXT`, `SELECT`, `SCROLL_*`, `SUBGOAL_DONE`, `STUCK`), speculative per-operation target heads (each offering only compatible elements), and an `irreversible` risk head.
+   - Each Jev call sends one multi-question request: an operation head (`CLICK`, `TYPE_TEXT`, `SELECT`, `SCROLL_*`, `WAIT`, `SUBGOAL_DONE`, `STUCK`), speculative per-operation target heads (each offering only compatible elements), and an `irreversible` risk head.
    - Only the chosen operation's target head is consumed, and probability distributions are strictly validated before execution.
 
 3. **Zero Silent Failures & Guaranteed Terminal Result (`hyperagent/agent.py`)**
    - Browser mutations (`click`, `type_text`, `select_option`) are **never** auto-retried; only transient LLM transport errors are retried with visible notices.
    - SHA-1 page-state hashing (`_mark_no_change`), action-signature loop warnings (`_loop_warnings`), and CAPTCHA/bot-wall detection (`_page_warnings`) prevent blind repetition.
+   - After every click, selection or key press the browser waits for the DOM to stop changing (≤1.5 s) before the next observation, so menus, dialogs and date pickers that animate in are seen rather than re-clicked. `navigate` refuses to reload the page it is already on, since a reload discards everything entered so far.
+   - The planner always sees element ids and always has every tool; with Jev configured it additionally gets `delegate`. Nothing is gated behind "recovery turns", so a single confirmation click never has to be improvised with another tool.
    - Every run—even if stopped early or out of steps/budget—synthesizes an honest partial `result` from saved `findings`.
 
 ---

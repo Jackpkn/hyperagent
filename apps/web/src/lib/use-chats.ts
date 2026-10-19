@@ -57,6 +57,10 @@ export interface ChatsApi {
   rememberFromResult: (items: string[]) => string[];
 }
 
+function turnIdFor(runStartedAt: number): string {
+  return `t-${Math.round(runStartedAt * 1000)}`;
+}
+
 function summarize(chats: Chat[]): ChatSummary[] {
   return chats.map((c) => ({ id: c.id, title: c.title, updatedAt: c.updatedAt, turns: c.turns.length }));
 }
@@ -155,7 +159,7 @@ export function useChats(state: AgentState): ChatsApi {
   // A new run is a new turn; the first turn creates the chat.
   useEffect(() => {
     if (!state.runStartedAt || !state.goal) return;
-    const turnId = `t-${Math.round(state.runStartedAt * 1000)}`;
+    const turnId = turnIdFor(state.runStartedAt);
     if (turnId === liveTurnId) return;
     setLiveTurnId(turnId);
     savedFramesRef.current = new Set();
@@ -187,6 +191,9 @@ export function useChats(state: AgentState): ChatsApi {
   useEffect(() => {
     const chat = activeRef.current;
     if (!liveTurnId || !chat || !goal) return;
+    // The render that starts a run already holds the new goal and an empty result while liveTurnId still names the
+    // previous turn; saving then would overwrite that turn's report. The next render, with the new id, saves.
+    if (!runStartedAt || turnIdFor(runStartedAt) !== liveTurnId) return;
     pendingSaveRef.current = {
       chatId: chat.id,
       turn: snapshotTurn({ goal, runStartedAt, run, mode, plan, steps, feed, findings, usage, result },

@@ -163,6 +163,7 @@ def test_grounded_field_verification_checks_page_corpus():
     assert _verify_field("$219", corpus)
     assert _verify_field("Wayfair Accent Chair", corpus)
     assert _verify_field("not_found", corpus)
+    assert _verify_field("(empty)", corpus)  # a blank form field echoed back is not a claim to check
     assert _verify_field("https://wayfair.com/p/1", corpus)
     assert not _verify_field("$999.00", corpus)
     assert not _verify_field("Completely Hallucinated Product", corpus)
@@ -210,3 +211,41 @@ def test_compact_page_text_keeps_values_states_and_links():
     assert "[Next page](/next/2) (below)" in out and "[Password · empty]" in out and "[Nonstop only · checked]" in out
     assert "From 12765 Indian rupees" in out and len(out.split("\n")[4]) <= 62
     assert not re.search(r"\[\d+\]<", out)
+
+
+@pytest.mark.parametrize("label", ["Sorted by top flights, Change sort order.", "Apply filters", "Places to visit",
+                                   "Price", "Nonstop only"])
+def test_everyday_controls_do_not_ask_for_approval(label):
+    assert needs_approval("click", {}, label, "risky") == (False, "")
+    assert needs_approval("delegate", {"subgoal": f'Click "{label}"'}, "", "risky") == (False, "")
+
+
+@pytest.mark.parametrize("label", ["Place order", "Buy now", "Pay ₹12,765", "Proceed to checkout", "Book",
+                                   "Submit", "Delete account", "Purchase Flight", "Confirm booking"])
+def test_committing_controls_still_ask_for_approval(label):
+    assert needs_approval("click", {}, label, "risky")[0]
+
+
+def test_long_conversation_keeps_the_newest_turn_for_follow_ups():
+    from hyperagent.prompts import _conversation_block
+
+    older = [{"goal": f"Old question {i}", "answer": "x" * 1500} for i in range(8)]
+    newest = {"goal": "List invoices over $500", "answer": "Twelve invoices qualify.", "columns": ["invoice", "amount"],
+              "rows": [{"invoice": f"INV-{i}", "amount": "$" + "9" * 280, "note": "n" * 280}
+                       for i in range(20)]}
+    block = _conversation_block([*older, newest])
+    assert len(block) <= 8200
+    assert "List invoices over $500" in block and "INV-0" in block  # what "sort those" refers to survives
+    assert "Old question 0" not in block and "earlier turns omitted" in block
+    assert "rows_omitted" in block
+    for line in block.splitlines()[2:-1]:
+        json.loads(line)  # never cut mid-value
+
+
+def test_findings_context_shows_the_newest_rows():
+    from hyperagent.prompts import _findings_block
+
+    findings = [{"vendor": f"Vendor {i}", "note": "n" * 400} for i in range(40)]
+    block = _findings_block(findings)
+    assert 'count="40"' in block and "Vendor 39" in block and "Vendor 0\"" not in block
+    assert "earlier rows not shown" in block

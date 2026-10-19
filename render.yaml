@@ -47,7 +47,7 @@ services:
       - key: TYPESAFE_MODEL
         value: "jev-latest"
       - key: FAST_MIN_CONFIDENCE
-        value: "0.45"
+        value: "0.4"
 
       # Text helper for Jev's TYPE_TEXT actions: uses Claude Haiku via ANTHROPIC_API_KEY by default.
 

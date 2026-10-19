@@ -119,7 +119,8 @@ async def test_autocomplete_runner_grades_actual_agent_outcome(tmp_path, monkeyp
     monkeypatch.setattr(runner, "BrowserSession", lambda: browser)
     args = options(tmp_path)
     args.eval_case, args.no_fast = "autocomplete", not use_fast
-    actions = iter([("TYPE_TEXT", "Destination"), ("CLICK", "London, United Kingdom (LON)"),
+    actions = iter([("CLICK", "Destination"), ("TYPE_TEXT", "Destination"),
+                    ("CLICK", "London, United Kingdom (LON)"),
                     ("CLICK", "Show routes")])
 
     def next_action(page):
@@ -166,7 +167,7 @@ async def test_autocomplete_runner_grades_actual_agent_outcome(tmp_path, monkeyp
     assert report["grading"]["evidence"]["result_code"] == "LON"
     fixture_hash = hashlib.sha256(runner.CASES["autocomplete"].fixture_path.read_bytes()).hexdigest()
     assert report["fixture_sha256"] == fixture_hash
-    assert report["executed_actions"] == 3
+    assert report["executed_actions"] == 4
 
 
 async def test_autocomplete_rejects_false_completion_claim(tmp_path, monkeypatch):

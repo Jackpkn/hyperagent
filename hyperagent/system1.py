@@ -17,10 +17,34 @@ from .tools import needs_approval
 if TYPE_CHECKING:
     from .agent import Agent
 
-FAST_MAX_ACTIONS = 25
-NO_CHANGE_LIMIT = 3
+FAST_MAX_ACTIONS = 15  # per subgoal; beyond this the planner looks at the page before Jev goes on
+NO_CHANGE_LIMIT = 3  # identical observations in a row before Jev hands back
+JEV_WAIT_SECONDS = 1
 OPERATION_TOOLS = {"CLICK": "click", "TYPE_TEXT": "type_text", "SELECT": "select_option",
-                   "SCROLL_DOWN": "scroll", "SCROLL_UP": "scroll"}
+                   "SCROLL_DOWN": "scroll", "SCROLL_UP": "scroll", "WAIT": "wait"}
+
+
+def pending_autocomplete(page: Any, autocomplete_id: str | None) -> dict[str, Any] | None:
+    """The autocomplete field Jev typed into, while its suggestions are still open. Until one is chosen and the
+    popup closes, the typed query is not a committed value, so nothing else may be touched."""
+    if not autocomplete_id:
+        return None
+    field = next((e for e in page.elements.values() if e.get("autocomplete_id") == autocomplete_id), None)
+    if field and (field.get("expanded") == "true" or field.get("suggestion_ids")):
+        return field
+    return None
+
+
+def allowed_while_pending(d: Any, field: dict[str, Any]) -> bool:
+    """With a suggestion pending, Jev may only work on that field, pick one of its suggestions, wait, scroll or
+    give up: another control or a completion claim would leave the query uncommitted."""
+    if d.operation in ("WAIT", "STUCK", "SCROLL_DOWN", "SCROLL_UP"):
+        return True
+    if d.operation == "TYPE_TEXT":
+        return d.element_id == field["id"]
+    if d.operation == "CLICK":
+        return d.element_id == field["id"] or d.element_id in (field.get("suggestion_ids") or [])
+    return False
 
 
 class FastLoopMixin:
@@ -47,6 +71,7 @@ class FastLoopMixin:
         recent: list[str] = []
         unchanged = 0
         last_sig = None
+        typed_autocomplete: str | None = None
         version = self.guidance_version
         for _ in range(FAST_MAX_ACTIONS):
             if self.stopped or self.paused or self.guidance_version != version:
@@ -92,9 +117,16 @@ class FastLoopMixin:
                 step.update(status="skipped", result=f"Discarded because {why}.", ended_at=time.time())
                 await self.send_step(step)
                 return self._handback(log, why, self._interruption_reason())
+            pending = pending_autocomplete(page, typed_autocomplete)
+            if pending is None:
+                typed_autocomplete = None
+            elif not allowed_while_pending(d, pending):
+                return await self._fast_unconfirmed(step, pending, log)
             outcome = await self._fast_terminal(step, d, log)
             if outcome:
                 return outcome
+            if d.operation == "TYPE_TEXT":
+                typed_autocomplete = page.elements.get(d.element_id, {}).get("autocomplete_id")
             result = await self._fast_act(step, d, page, subgoal, recent, version=version)
             if self.stopped or self.paused or self.guidance_version != version:
                 return self._handback(log, "the operator interrupted the decision", self._interruption_reason())
@@ -111,6 +143,16 @@ class FastLoopMixin:
             log.append(entry)
             recent.append(entry)
         return self._handback(log, f"Jev used its {FAST_MAX_ACTIONS}-attempt budget for this subgoal", "attempt_budget")
+
+    async def _fast_unconfirmed(self: Agent, step: dict[str, Any], field: dict[str, Any], log: list[str]) -> str:
+        label = str(field.get("label") or "this field")[:60]
+        step.update(status="skipped", action={"name": "autocomplete_unconfirmed", "args": {},
+                                              "label": "Autocomplete suggestion not chosen"},
+                    result=f'"{label}" still shows open suggestions; the typed text is not a committed value.',
+                    ended_at=time.time())
+        await self.send_step(step)
+        return self._handback(log, f'the "{label}" autocomplete suggestion was not chosen, so nothing else was '
+                                   "touched", "autocomplete_unconfirmed")
 
     async def _fast_terminal(self: Agent, step: dict[str, Any], d: Any, log: list[str]) -> str | None:
         pct = f"{d.confidence:.0%}"
@@ -148,6 +190,8 @@ class FastLoopMixin:
             step["target"] = {"label": target_label, "rect": rect or element["rect"]}
         if name == "scroll":
             args["direction"] = "down" if d.operation == "SCROLL_DOWN" else "up"
+        elif name == "wait":
+            args["seconds"] = JEV_WAIT_SECONDS
         elif name == "select_option":
             args["option"] = d.option
         elif name == "type_text":
@@ -184,10 +228,6 @@ class FastLoopMixin:
         if episode is not None:
             episode.reason = code
             episode.completion_claimed = code == "claimed_done"
-        if code != "claimed_done":
-            self._recovery_turns = 2
-        else:
-            self._recovery_turns = 0
         count = sum(not entry.startswith("Skipped:") for entry in log)
         done = f"Jev took {count} action{'s' if count != 1 else ''}"
         detail = (": " + "; ".join(log[-8:])) if log else ""

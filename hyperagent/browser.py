@@ -18,7 +18,7 @@ from datetime import datetime
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 from playwright.async_api import Browser, BrowserContext, Page, Playwright, Route, async_playwright
 from playwright.async_api import Error as PlaywrightError
@@ -35,9 +35,84 @@ USER_AGENT = (
 TEXT_BUDGET = 14000
 TIME_SCALE = 1.0  # multiplies every @bounded limit; tests shrink it
 READ_BUDGET = 40000
+SUGGESTION_WAIT_MS = int(os.environ.get("SUGGESTION_WAIT_MS", "2000"))
+AUTOCOMPLETE_STATE_JS = """(field) => {
+  const autocomplete = field.tagName !== 'SELECT' && !field.list && (
+    field.getAttribute('role') === 'combobox' ||
+    ['list', 'both'].includes(field.getAttribute('aria-autocomplete')));
+  const ids = ((field.getAttribute('aria-controls') || '') + ' ' +
+    (field.getAttribute('aria-owns') || '')).split(/\\s+/).filter(Boolean);
+  const owner = field.closest('[role="combobox"]');
+  const roots = ids.length ? ids.map(id => document.getElementById(id)).filter(Boolean) :
+    owner && owner !== field ? [owner] : [];
+  const options = roots.flatMap(r => [...r.querySelectorAll('[role="option"]')]).filter(o => {
+    const b = o.getBoundingClientRect();
+    return b.width && b.height && b.bottom > 0 && b.top < innerHeight &&
+      o.checkVisibility({checkOpacity: true, checkVisibilityCSS: true}) && !o.closest('[aria-hidden="true"]');
+  });
+  return {autocomplete, value: field.value || '',
+    needs_open: autocomplete && field.getAttribute('aria-expanded') === 'false' &&
+      field !== document.activeElement,
+    signature: JSON.stringify(options.map(o => [o.getAttribute('aria-label'), o.textContent])),
+    ready: options.length > 0 && field.getAttribute('aria-busy') !== 'true' &&
+      !roots.some(r => r.getAttribute?.('aria-busy') === 'true')};
+}"""
+
+# Read-only: wait for this field's new options, not an old list or another control's suggestions.
+SUGGESTIONS_JS = """(field, {timeout, before, changed}) => new Promise((resolve) => {
+  const state = """ + AUTOCOMPLETE_STATE_JS + """;
+  let frames = 0, stopped = false, previous = '';
+  const finish = (ready) => { stopped = true; clearTimeout(timer); resolve(ready); };
+  const timer = setTimeout(() => finish(false), timeout);
+  const ready = () => {
+    if (stopped) return;
+    const current = state(field);
+    const fresh = current.ready && (!changed || current.signature !== before);
+    frames = fresh ? (current.signature === previous ? frames + 1 : 1) : 0;
+    previous = current.signature;
+    if (frames >= 2) finish(true); else requestAnimationFrame(ready);
+  };
+  requestAnimationFrame(ready);
+})"""
 
 # Full-page text with link targets and the noise removed, for extraction beyond the viewport.
 READ_PAGE_JS = Path(__file__).with_name("reader.js").read_text()
+
+# After an action, give the page a moment to react and then wait until its DOM stops changing: menus, dialogs
+# and date pickers usually appear a little after the click and finish rendering a few hundred milliseconds
+# later, and an observation taken before that shows the page the action started from, not the one it produced.
+SETTLE_MIN_MS = 300
+SETTLE_QUIET_MS = 150
+SETTLE_TIMEOUT_MS = 1500
+SETTLE_JS = """({min, quiet, timeout}) => new Promise((resolve) => {
+  const started = performance.now();
+  let timer = null, deadline = null, done = false;
+  const finish = () => {
+    if (done) return;
+    done = true; observer.disconnect(); clearTimeout(timer); clearTimeout(deadline); resolve();
+  };
+  const settle = () => {
+    clearTimeout(timer);
+    timer = setTimeout(finish, Math.max(quiet, min - (performance.now() - started)));
+  };
+  const observer = new MutationObserver(settle);
+  observer.observe(document.documentElement, {subtree: true, childList: true, attributes: true, characterData: true});
+  settle();
+  deadline = setTimeout(finish, timeout);
+})"""
+
+
+def normalize_url(url: str) -> str:
+    """Same page, same key: no fragment, no trailing slash, lower-case scheme and host."""
+    parts = urlsplit(str(url).strip())
+    path = parts.path.rstrip("/") or "/"
+    return urlunsplit((parts.scheme.lower(), parts.netloc.lower(), path, parts.query, ""))
+
+
+def reloads(target: str, current: str) -> bool:
+    """True when opening target would reload the page the tab already shows. A URL with a #fragment only moves
+    within the page (to a section or a tab), which keeps everything entered."""
+    return not urlsplit(target).fragment and normalize_url(target) == normalize_url(current)
 
 
 # Native date/time inputs only accept these value formats; typed text is converted to them.
@@ -450,6 +525,14 @@ class BrowserSession:
             except PlaywrightTimeout:
                 pass
 
+    async def _quiesce(self, page: Page) -> None:
+        """Wait for the DOM to stop changing after an action (bounded by SETTLE_TIMEOUT_MS)."""
+        try:
+            await page.evaluate(SETTLE_JS, {"min": SETTLE_MIN_MS, "quiet": SETTLE_QUIET_MS,
+                                            "timeout": SETTLE_TIMEOUT_MS})
+        except PlaywrightError:
+            pass  # the action navigated away; _settle waits for the new document
+
     @bounded(45)
     async def navigate(self, url: str, *, trusted: bool = False) -> str:
         """Open a URL. Model-chosen URLs are restricted to http(s) so file:// or chrome:// stay unreachable."""
@@ -461,6 +544,10 @@ class BrowserSession:
         elif not url.startswith(("http://", "https://")):
             raise ActionError("Only http and https pages can be opened.")
         page = self._active()
+        if not trusted and reloads(url, page.url):
+            # A reload is never a step forward: it discards every value entered and every picker opened so far.
+            raise ActionError("You are already on this page; opening it again would reload it and discard what "
+                              "has been entered. Use the page's own controls, or go_back.")
         try:
             response = await page.goto(url, wait_until="domcontentloaded", timeout=25000)
         except PlaywrightTimeout:
@@ -488,7 +575,7 @@ class BrowserSession:
                 raise ActionError(f"Element [{element_id}] could not be clicked (covered or detached).") from None
         except PlaywrightError as exc:
             raise ActionError(f"Click failed: {str(exc).splitlines()[0][:160]}") from None
-        await asyncio.sleep(0.12)
+        await self._quiesce(page)
         await self._settle(self._active(), 3000)
         if len(self._tabs_list()) > before_tabs:
             return "Clicked; a new tab opened and is now active."
@@ -502,6 +589,10 @@ class BrowserSession:
         kind = await handle.evaluate("(e) => e.type || ''")
         if kind == "password" and not secret_ok:
             raise ActionError("Password fields need the operator's approval first.")
+        autocomplete = await handle.evaluate(AUTOCOMPLETE_STATE_JS)
+        if autocomplete["needs_open"]:
+            raise ActionError("Open this autocomplete with a click first, then re-observe its search field. "
+                              "Nothing was typed.")
         if kind in NATIVE_FORMATS:
             text = normalize_native(kind, text)
         try:
@@ -514,15 +605,33 @@ class BrowserSession:
             except PlaywrightError as exc:
                 raise ActionError(f"Could not type into [{element_id}]: {str(exc).splitlines()[0][:160]}") from None
         if press_enter:
-            before = self._active().url
+            page = self._active()
+            before = page.url
             await handle.press("Enter")
-            await asyncio.sleep(0.15)
+            await self._quiesce(page)
             await self._settle(self._active(), 4000)
             if self._active().url != before:
                 return f"Typed and pressed Enter; navigated to {self._active().url}"
             return "Typed and pressed Enter."
-        await asyncio.sleep(0.15)  # let autocomplete suggestions render
+        if autocomplete["autocomplete"]:
+            await self._await_suggestions(handle, autocomplete, text)
+            return "Typed a query; select the matching autocomplete suggestion to confirm the value."
+        await self._quiesce(self._active())
         return "Typed."
+
+    async def _await_suggestions(self, handle: Any, before: dict[str, Any], text: str) -> None:
+        """Typing has already happened. A wait failure is visible and must never replay the mutation."""
+        try:
+            ready = await handle.evaluate(SUGGESTIONS_JS, {
+                "timeout": SUGGESTION_WAIT_MS, "before": before["signature"], "changed": before["value"] != text,
+            })
+        except PlaywrightError:
+            raise ActionError("Text was entered, but its autocomplete suggestions could not be checked. "
+                              "Re-observe the page; do not repeat typing automatically.") from None
+        if not ready:
+            raise ActionError("Text was entered, but fresh autocomplete suggestions did not appear in time. "
+                              "The value is not confirmed. Re-observe or open the control; do not repeat typing "
+                              "automatically.")
 
     @bounded(20, mutation=True)
     async def select_option(self, element_id: int, option: str) -> str:
@@ -537,7 +646,7 @@ class BrowserSession:
                 chosen = await handle.select_option(value=option, timeout=3000)
             except PlaywrightError:
                 raise ActionError(f"Option {option!r} is not available in [{element_id}].") from None
-        await asyncio.sleep(0.08)
+        await self._quiesce(self._active())
         await self._settle(self._active(), 2500)
         return f"Selected {option!r}." if chosen else f"Option {option!r} was not selected."
 
@@ -616,11 +725,12 @@ class BrowserSession:
 
     @bounded(20, mutation=True)
     async def press_key(self, key: str) -> str:
+        page = self._active()
         try:
-            await self._active().keyboard.press(key)
+            await page.keyboard.press(key)
         except PlaywrightError:
             raise ActionError(f"Unknown key {key!r}.") from None
-        await asyncio.sleep(0.3)
+        await self._quiesce(page)
         await self._settle(self._active(), 3000)
         return f"Pressed {key}."
 
@@ -632,7 +742,7 @@ class BrowserSession:
         if not (0 <= x <= VIEWPORT["width"] and 0 <= y <= VIEWPORT["height"]):
             raise ActionError("Click is outside the page.")
         await page.mouse.click(x, y)
-        await asyncio.sleep(0.3)
+        await self._quiesce(page)
         await self._settle(self._active(), 3000)
         return f"Operator clicked at ({round(x)}, {round(y)})."
 

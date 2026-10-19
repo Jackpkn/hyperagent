@@ -483,5 +483,14 @@ async def test_each_planner_call_logs_its_prompt_breakdown(caplog):
     with caplog.at_level(logging.INFO, logger="hyperagent.agent"):
         await agent.run()
     line = next(r.getMessage() for r in caplog.records if r.getMessage().startswith("planner call"))
-    for part in ("system=", "tools=", "browser_state=", "goal=", "est total=", "actual in=", "view=full"):
+    for part in ("system=", "tools=", "browser_state=", "goal=", "est total=", "actual in="):
         assert part in line, line
+
+
+async def test_plan_items_may_be_plain_strings():
+    agent, _, rec = make([decision("navigate", url="https://shop.test/a", plan=["Open shop", "Read prices"],
+                                   plan_step=1), DONE])
+    await agent.run()
+    assert rec.of("plan")[0]["items"] == [{"text": "Open shop", "status": "pending"},
+                                         {"text": "Read prices", "status": "pending"}]
+    assert [p["status"] for p in rec.of("plan")[1]["items"]] == ["active", "pending"]

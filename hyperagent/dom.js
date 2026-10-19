@@ -2,6 +2,9 @@
 // elements inlined as [id]<tag ...>label</tag>. Element ids are valid for this observation only.
 (budget) => {
   const state = (window.__ha = { nodes: new Map(), next: 1 });
+  const autocompleteIds = (window.__ha_autocomplete ||= {
+    nodes: new WeakMap(), next: 1, document: String(performance.timeOrigin),
+  });
   const INTERACTIVE_ROLES = new Set([
     'button', 'link', 'checkbox', 'radio', 'switch', 'tab', 'menuitem', 'menuitemcheckbox',
     'menuitemradio', 'option', 'combobox', 'textbox', 'searchbox', 'spinbutton', 'slider', 'treeitem',
@@ -99,6 +102,13 @@
       (tag === 'INPUT' && !['checkbox', 'radio', 'button', 'submit', 'reset', 'image', 'file', 'range', 'color']
         .includes(el.type)));
     const f = { role, editable };
+    if (el === document.activeElement) f.focused = true;
+    if (editable && !el.list && (role === 'combobox' ||
+        ['list', 'both'].includes(el.getAttribute('aria-autocomplete')))) {
+      f.autocomplete = true;
+      if (!autocompleteIds.nodes.has(el)) autocompleteIds.nodes.set(el, autocompleteIds.next++);
+      f.autocomplete_id = `${autocompleteIds.document}:${autocompleteIds.nodes.get(el)}`;
+    }
     if (el.type !== 'password' && (tag === 'INPUT' || tag === 'TEXTAREA') && editable) f.value = clean(el.value, 80);
     if (el.type === 'password') f.value = el.value ? '(filled, hidden)' : '';
     if (el.isContentEditable) f.value = clean(el.innerText, 80);
@@ -123,13 +133,24 @@
     line = '';
     if (length > budget) truncated = true;
   };
+  // The budget is a hard cap. One text node or one long inline run can hold a whole document (a raw JSON or text
+  // response, thousands of links in one paragraph), so it is checked on every append, not only between blocks.
+  const append = (s) => {
+    const room = budget - length - line.length;
+    if (s.length > room) {
+      line += s.slice(0, Math.max(room, 0));
+      truncated = true;
+      return;
+    }
+    line += s;
+  };
   const elements = [];
 
   const walk = (node) => {
     if (truncated) return;
     if (node.nodeType === Node.TEXT_NODE) {
       const t = node.textContent.replace(/\s+/g, ' ');
-      if (t.trim()) line += t;
+      if (t.trim()) append(t);
       return;
     }
     if (node.nodeType !== Node.ELEMENT_NODE) return;
@@ -151,7 +172,7 @@
           id, tag: 'label', label: clean(lbl.innerText), type: el.type, ...facts(el), editable: false,
           rect: { x: r.x, y: r.y, w: r.width, h: r.height },
         });
-        line += ` [${id}]<label ${el.type} ${status}>${clean(lbl.innerText)}</label> `;
+        append(` [${id}]<label ${el.type} ${status}>${clean(lbl.innerText)}</label> `);
       }
       return;
     }
@@ -174,16 +195,16 @@
         type: el.type || null, ...facts(el), rect: { x: r.x, y: r.y, w: r.width, h: r.height },
         offscreen: r.bottom < 0 || r.top > vh,
       });
-      line += ' ' + describe(el, id) + ' ';
+      append(' ' + describe(el, id) + ' ');
       if (block) flush();
       return;
     }
     // Ratings are often drawn with icons and encoded only in a class (e.g. "star-rating Three"); surface them.
     const cls = typeof el.className === 'string' ? el.className : '';
-    if (cls.split(/\s+/).some((c) => /rating/i.test(c) || /^stars?$/i.test(c)) && !clean(el.innerText)) line += ` [${clean(cls, 60)}] `;
+    if (cls.split(/\s+/).some((c) => /rating/i.test(c) || /^stars?$/i.test(c)) && !clean(el.innerText)) append(` [${clean(cls, 60)}] `);
     if (el.tagName === 'IMG') {
       const alt = clean(el.getAttribute('alt'), 60);
-      if (alt) line += ` [img: ${alt}] `;
+      if (alt) append(` [img: ${alt}] `);
     }
     if (el.tagName === 'IFRAME') { flush(); out.push('[iframe content not shown]'); return; }
     for (const child of el.shadowRoot ? el.shadowRoot.childNodes : []) walk(child);
@@ -192,6 +213,18 @@
   };
   walk(document.body || document.documentElement);
   flush();
+
+  // Relate suggestions to their field using observed accessibility ownership, with current observation ids.
+  for (const field of elements.filter(e => e.autocomplete)) {
+    const node = state.nodes.get(field.id);
+    const ids = ((node.getAttribute('aria-controls') || '') + ' ' +
+      (node.getAttribute('aria-owns') || '')).split(/\s+/).filter(Boolean);
+    const owner = node.closest('[role="combobox"]');
+    const roots = ids.length ? ids.map(id => document.getElementById(id)).filter(Boolean) :
+      owner && owner !== node ? [owner] : [];
+    field.suggestion_ids = elements.filter(e => e.role === 'option' &&
+      roots.some(root => root.contains(state.nodes.get(e.id)))).map(e => e.id);
+  }
 
   const height = document.documentElement.scrollHeight;
   return {

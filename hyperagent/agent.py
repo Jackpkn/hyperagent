@@ -6,7 +6,6 @@ import asyncio
 import hashlib
 import json
 import logging
-import os
 import re
 import time
 from collections.abc import Awaitable, Callable
@@ -25,15 +24,7 @@ from .llm import Decision, LLMClient, LLMError
 from .prompts import CHARS_PER_TOKEN, SYSTEM, build_system_prompt, context_breakdown, step_context
 from .system1 import FastLoopMixin
 from .telemetry import RunLedger
-from .tools import (
-    TOOL_NAMES,
-    TOOLS,
-    TOOLS_JEV_FIRST,
-    TOOLS_WITH_FAST,
-    label,
-    missing_args,
-    needs_approval,
-)
+from .tools import TOOL_NAMES, TOOLS, TOOLS_WITH_FAST, label, missing_args, needs_approval
 
 Emit = Callable[[dict[str, Any]], Awaitable[None]]
 log = logging.getLogger(__name__)
@@ -64,7 +55,6 @@ class Agent(FastLoopMixin, ExtractMixin):
         self.user_memory = user_memory or []  # facts the operator asked to be remembered across chats
         self.fast = fast if fast and fast.config.enabled else None
         self.system_prompt = build_system_prompt(use_jev=bool(self.fast))
-        self._recovery_turns = 0  # planner turns that may use direct UI tools after Jev ended stuck or unsure
         self.detached = False  # the operator's socket closed; skip anything that only serves them
         self.plan: list[dict[str, str]] = []
         self.history: list[dict[str, Any]] = []
@@ -214,22 +204,18 @@ class Agent(FastLoopMixin, ExtractMixin):
         last = self.history[-1]
         return self._consecutive_errors >= 2 or "did not visibly change" in str(last.get("result", ""))
 
-    def _planner_tools(self, page: Any) -> list[dict[str, Any]]:
-        """In Jev mode the planner gets no direct UI tools, so it cannot drift into clicking step by step. They
-        return for the recovery turns after Jev ends stuck or unsure, and on pages with a password field, which
-        Jev never types into."""
-        if not self.fast:
-            return TOOLS
-        elements = getattr(page, "elements", None) or {}
-        has_password = any(e.get("type") == "password" for e in elements.values())
-        return TOOLS_WITH_FAST if self._recovery_turns or has_password else TOOLS_JEV_FIRST
+    def _planner_tools(self) -> list[dict[str, Any]]:
+        """Every direct tool, always; Jev only adds delegate. The prompt says when to delegate and when a single
+        click is the right call, so the planner never has to improvise around a missing tool."""
+        return TOOLS_WITH_FAST if self.fast else TOOLS
 
     def _hard_turn(self) -> bool:
         """Most steps are obvious, so native thinking is paid for only on the first plan, after a failure or an
         unfinished Jev hand-off, and when saved findings are about to be compared on the plan's last item."""
-        if not self.history or self._consecutive_errors or self._recovery_turns:
+        if not self.history or self._consecutive_errors:
             return True
-        if "did not visibly change" in str(self.history[-1].get("result", "")):
+        last = str(self.history[-1].get("result", ""))
+        if "did not visibly change" in last or _unfinished_handback(last):
             return True
         if len(self.findings) >= 4:
             return True
@@ -280,16 +266,14 @@ class Agent(FastLoopMixin, ExtractMixin):
         events, self.browser.events = self.browser.events, []
         domain = (urlsplit(page.url).hostname or "").lower().removeprefix("www.")
         domain_notes = self.domain_memory.get(domain, []) if domain else []
-        tools = self._planner_tools(page)
-        # Without direct UI tools the planner never uses element ids, so it reads the shorter compact page view.
-        compact = tools is TOOLS_JEV_FIRST and os.environ.get("PLANNER_PAGE_VIEW", "compact") != "full"
+        tools = self._planner_tools()
         context = step_context(
             goal=self.goal, guidance=self.guidance, plan=self.plan, history=self.history, findings=self.findings,
             page=page, read_output=self.read_output, warnings=self._loop_warnings() + _page_warnings(page),
             step=self.actions_taken + 1,
             max_steps=self.max_steps, events=events, memory=self.memory, now=local_now(self.timezone),
             domain_notes=domain_notes, conversation=self.conversation, user_memory=self.user_memory,
-            checked=self.checked, compact=compact,
+            checked=self.checked,
         )
         self.read_output = None
         content: list[dict[str, Any]] = [{"type": "text", "text": context}]
@@ -331,19 +315,19 @@ class Agent(FastLoopMixin, ExtractMixin):
             self.paused = True
             return None
         self._count(decision)
-        self._log_call(decision, tools, context, compact)
+        self._log_call(decision, tools, context)
         return decision
 
-    def _log_call(self, d: Decision, tools: list[dict[str, Any]], context: str, compact: bool) -> None:
+    def _log_call(self, d: Decision, tools: list[dict[str, Any]], context: str) -> None:
         """One server log line per planner call: estimated tokens per prompt part next to what the API billed, so
         it is visible what each call is actually spent on."""
         est = lambda text: round(len(text) / CHARS_PER_TOKEN)  # noqa: E731
         parts = {"system": est(self.system_prompt), "tools": est(json.dumps(tools)), **context_breakdown(context)}
         shown = " ".join(f"{k}={v}" for k, v in parts.items())
-        log.info("planner call step=%d model=%s view=%s tools=%d | est tok: %s | est total=%d | actual in=%d "
-                 "(cached %d) out=%d thinking=%s", self.actions_taken + 1, self.model,
-                 "compact" if compact else "full", len(tools), shown, sum(parts.values()), d.input_tokens,
-                 d.cached_tokens, d.output_tokens, "yes" if d.thinking else "no")
+        log.info("planner call step=%d model=%s tools=%d | est tok: %s | est total=%d | actual in=%d "
+                 "(cached %d) out=%d thinking=%s", self.actions_taken + 1, self.model, len(tools), shown,
+                 sum(parts.values()), d.input_tokens, d.cached_tokens, d.output_tokens,
+                 "yes" if d.thinking else "no")
 
     async def _until_stopped(self) -> None:
         while not self.stopped:
@@ -374,8 +358,10 @@ class Agent(FastLoopMixin, ExtractMixin):
         if args.get("memory"):
             self.memory = _text(args["memory"])[:1500]
         if isinstance(args.get("plan"), list) and args["plan"]:
+            # Plain strings are the schema; objects with a status are still accepted from older models.
             self.plan = [{"text": str(p.get("text", ""))[:160], "status": p.get("status", "pending")}
-                         for p in args["plan"] if isinstance(p, dict)][:10]
+                         if isinstance(p, dict) else {"text": str(p)[:160], "status": "pending"}
+                         for p in args["plan"] if isinstance(p, dict | str) and p][:10]
             await self.emit({"type": "plan", "items": self.plan})
         await self._advance_plan(args.get("plan_step"))
         target_label = ""
@@ -480,8 +466,6 @@ class Agent(FastLoopMixin, ExtractMixin):
                 pass
         self._consecutive_errors = 0
         self.actions_taken += 1
-        if name != "delegate":
-            self._recovery_turns = max(0, self._recovery_turns - 1)
         step.update(status="ok", result=result, ended_at=time.time())
         await self.send_step(step)
         if name == "done":
@@ -808,6 +792,11 @@ def local_now(timezone: str | None) -> str:
     return now.strftime("%A %d %B %Y, %H:%M") + f" ({timezone if zone else now.tzname()})"
 
 
+def _unfinished_handback(result: str) -> bool:
+    """A delegate result where Jev gave the page back without claiming the subgoal is done."""
+    return "Returned control because" in result and "subgoal is done" not in result
+
+
 def _browser_error(exc: Exception) -> str:
     if isinstance(exc, ActionError):
         return str(exc)
@@ -880,7 +869,9 @@ def _verify_field(value: str, corpus: str) -> bool:
     clean = value.strip().lower()
     if not clean or not corpus.strip():
         return True
-    if clean in ("not_found", "not found", "n/a", "na", "none", "null", "unknown", "true", "false", "-", "—"):
+    # Placeholders for a missing or blank value have nothing to match on the page.
+    if clean in ("not_found", "not found", "n/a", "na", "none", "null", "unknown", "true", "false", "-", "—",
+                 "empty", "(empty)", "blank", "(blank)", "(none)", "not collected"):
         return True
     if clean.startswith(("http://", "https://")):
         return True

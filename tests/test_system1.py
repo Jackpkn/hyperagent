@@ -18,6 +18,99 @@ def fast(op, element_id=None, confidence=0.95, irreversible=0.0):
                         alternatives=[{"label": op, "p": confidence}], irreversible=irreversible, latency_ms=150)
 
 
+async def test_closed_unfocused_autocomplete_is_clickable_but_not_a_typing_target():
+    page = await FakeBrowser().observe()
+    page.elements[1].update(role="combobox", editable=True, expanded="false", focused=False)
+    _, targets, operations = build_request(page, goal="Choose a location", subgoal="Choose a location",
+                                           recent=[], guidance=[], model="test")
+    assert "1" in targets["CLICK"]
+    assert "TYPE_TEXT" not in operations
+    page.elements[1]["focused"] = True
+    _, targets, operations = build_request(page, goal="Choose a location", subgoal="Choose a location",
+                                           recent=[], guidance=[], model="test")
+    assert "1" in targets["TYPE_TEXT"]
+    assert "TYPE_TEXT" in operations
+
+
+class AutocompleteBrowser(FakeBrowser):
+    def __init__(self, *, closes=True, empties=False):
+        super().__init__()
+        self.query = ""
+        self.selected = False
+        self.closes = closes
+        self.empties = empties
+        self.clicked_suggestion = False
+
+    async def observe(self, *, screenshot=False):
+        page = await super().observe(screenshot=screenshot)
+        page.elements[1].update(label="Location", role="combobox", editable=True, autocomplete=True,
+                                autocomplete_id="location-1",
+                                value=self.query, expanded="false" if self.selected else "true",
+                                suggestion_ids=[] if self.selected or self.empties and self.clicked_suggestion else [3])
+        page.elements[2]["label"] = "Other field"
+        page.elements[3] = {"id": 3, "tag": "li", "role": "option", "label": "North Harbor (NTH)",
+                            "rect": {"x": 1, "y": 30, "w": 100, "h": 20}}
+        page.text += str((self.query, self.selected, len(self.calls)))
+        return page
+
+    async def type_text(self, eid, text, press_enter, *, secret_ok=False):
+        result = await super().type_text(eid, text, press_enter, secret_ok=secret_ok)
+        self.query = text
+        return result
+
+    async def click(self, eid):
+        result = await super().click(eid)
+        if eid == 3:
+            self.clicked_suggestion = True
+            self.selected = self.closes
+        return result
+
+
+@pytest.mark.parametrize("already_typed", [False, True])
+@pytest.mark.parametrize("next_decision", [fast("CLICK", 2), fast("SUBGOAL_DONE")])
+async def test_unconfirmed_autocomplete_blocks_other_fields_and_completion(next_decision, already_typed):
+    browser = AutocompleteBrowser()
+    if already_typed:
+        browser.query = "Ada"
+    agent, _, rec = make([fast("TYPE_TEXT", 1), next_decision],
+                         [decision("delegate", subgoal="Choose a location then continue"), DONE], browser=browser)
+    await agent.run()
+    assert browser.calls == ([] if already_typed else [("type_text", 1, "Ada", False)])
+    assert not browser.selected
+    assert rec.last_step("s3")["status"] == "skipped"
+    assert rec.last_step("s1")["delegation"]["reason"] == "autocomplete_unconfirmed"
+    assert "suggestion" in rec.last_step("s1")["result"]
+
+
+@pytest.mark.parametrize("closes,empties", [(True, False), (False, False), (False, True)])
+async def test_autocomplete_must_close_after_selection_before_moving_on(closes, empties):
+    browser = AutocompleteBrowser(closes=closes, empties=empties)
+    script = [fast("TYPE_TEXT", 1), fast("CLICK", 3), fast("CLICK", 2), fast("SUBGOAL_DONE")]
+    agent, _, rec = make(script, [decision("delegate", subgoal="Choose a location then continue"), DONE],
+                         browser=browser)
+    await agent.run()
+    assert ("click", 3) in browser.calls
+    assert (("click", 2) in browser.calls) is closes
+    reason = rec.last_step("s1")["delegation"]["reason"]
+    assert reason == ("claimed_done" if closes else "autocomplete_unconfirmed")
+
+
+async def test_autocomplete_guard_distinguishes_fields_with_the_same_label():
+    class RepeatedLocations(AutocompleteBrowser):
+        async def observe(self, *, screenshot=False):
+            page = await super().observe(screenshot=screenshot)
+            page.elements[4] = {**page.elements[1], "id": 4, "autocomplete_id": "location-2"}
+            page.elements[1].update(expanded="false", suggestion_ids=[])
+            return page
+
+    browser = RepeatedLocations()
+    agent, _, rec = make([fast("TYPE_TEXT", 4), fast("CLICK", 3), fast("CLICK", 2), fast("SUBGOAL_DONE")],
+                         [decision("delegate", subgoal="Choose a location then continue"), DONE], browser=browser)
+    await agent.run()
+    assert browser.calls == [("type_text", 4, "Ada", False), ("click", 3), ("click", 2)]
+    assert rec.last_step("s1")["delegation"]["reason"] == "claimed_done"
+
+
 class ScriptedFast:
     def __init__(self, script, text="Ada"):
         self.config = CONFIG
@@ -220,7 +313,7 @@ async def test_policy_validates_jev_answers():
         return httpx.MockTransport(lambda request: httpx.Response(200, json={"answers": answers}))
 
     good = {"operation": {"choice": "CLICK", "confidence": 0.9, "probabilities": {
-        "CLICK": 0.9, "TYPE_TEXT": 0.05, "SUBGOAL_DONE": 0.03, "STUCK": 0.02}},
+        "CLICK": 0.9, "TYPE_TEXT": 0.05, "WAIT": 0.0, "SUBGOAL_DONE": 0.03, "STUCK": 0.02}},
         "click_target": {"choice": "2", "confidence": 0.8, "probabilities": {"1": 0.2, "2": 0.8}},
         "irreversible": {"noul": 0.7}}
     d = await FastPolicy(CONFIG, transport=reply(good)).decide(page, goal="g", subgoal="s", recent=[], guidance=[])
@@ -247,15 +340,14 @@ def offered(agent, turn=0):
 
 
 @pytest.mark.parametrize("configured", [True, False])
-async def test_planner_gets_direct_ui_only_without_jev(configured):
+async def test_planner_keeps_every_direct_tool_with_or_without_jev(configured):
     agent, browser, rec = make([], [decision("click", element_id=1), DONE], mode="never", configured=configured)
     await agent.run()
-    routine = {"click", "type_text", "select_option", "scroll"}
-    # With Jev the planner cannot drift into clicking step by step; on-page work goes through delegate.
-    assert bool(routine & offered(agent)) != configured
+    # Jev adds delegate; it never takes the direct tools away, so a single confirmation click or a widget Jev
+    # left unfinished can always be handled with an id from the current page instead of a workaround.
+    assert {"click", "type_text", "select_option", "scroll", "switch_tab", "navigate", "search", "press_key",
+            "go_back", "close_tab", "read_page", "extract", "record_findings", "ask_user", "done"} <= offered(agent)
     assert ("delegate" in offered(agent)) == configured
-    assert {"navigate", "search", "press_key", "go_back", "switch_tab", "close_tab", "read_page",
-            "extract", "record_findings", "ask_user", "done"} <= offered(agent)
     assert browser.calls == [("click", 1)]
     assert rec.last_step("s1")["status"] == "ok"
 
@@ -329,18 +421,17 @@ async def test_jev_inability_allows_multiple_explicit_recovery_decisions(inabili
     agent, browser, rec = make([inability], [decision("delegate", subgoal="Continue"),
                               decision("click", element_id=1), decision("click", element_id=1), DONE], mode="never")
     await agent.run()
-    assert "click" not in offered(agent, 0)
     assert "click" in offered(agent, 1)
     assert "click" in offered(agent, 2)
     assert browser.calls == [("click", 1), ("click", 1)]
     assert not any(s["status"] == "error" for s in rec.of("step") if s.get("system") == "planner")
 
 
-async def test_successful_jev_handback_keeps_planner_on_delegate():
+async def test_jev_claiming_done_leaves_the_planner_every_tool():
     agent, browser, rec = make([fast("SUBGOAL_DONE")], [decision("delegate", subgoal="Check fields"),
                               decision("read_page"), DONE], mode="never")
     await agent.run()
-    assert "click" not in offered(agent, 1) and "delegate" in offered(agent, 1)
+    assert {"click", "delegate"} <= offered(agent, 1)
 
 
 async def test_password_page_offers_direct_typing_with_jev():
@@ -549,20 +640,13 @@ def page_text(agent, turn=0):
     return agent.llm.requests[turn]["messages"][1]["content"][0]["text"]
 
 
-async def test_planner_reads_compact_page_only_while_it_has_no_direct_ui(monkeypatch):
-    monkeypatch.delenv("PLANNER_PAGE_VIEW", raising=False)
+async def test_planner_always_sees_element_ids_with_jev():
     agent, browser, rec = make([fast("STUCK")], [decision("delegate", subgoal="Continue"),
                               decision("click", element_id=1), DONE], mode="never")
     await agent.run()
-    assert "view: compact" in page_text(agent, 0) and "[1]<" not in page_text(agent, 0)
-    assert "view: compact" not in page_text(agent, 1) and "[1]<" in page_text(agent, 1)  # recovery keeps ids
-
-
-async def test_full_page_view_can_be_forced(monkeypatch):
-    monkeypatch.setenv("PLANNER_PAGE_VIEW", "full")
-    agent, browser, rec = make([], [DONE], mode="never")
-    await agent.run()
-    assert "view: compact" not in page_text(agent, 0) and "[1]<" in page_text(agent, 0)
+    # The ids are what every direct tool addresses, so no planner turn is ever shown a page without them.
+    assert "[1]<" in page_text(agent, 0) and "[1]<" in page_text(agent, 1)
+    assert "view: compact" not in page_text(agent, 0)
 
 
 async def test_request_caps_each_target_head_keeping_on_screen_elements():
@@ -575,3 +659,37 @@ async def test_request_caps_each_target_head_keeping_on_screen_elements():
     assert len(targets["CLICK"]) == 255
     assert {"1", "2"} <= set(targets["CLICK"])  # visible controls are never the ones dropped
     assert "302" not in targets["CLICK"]  # the farthest off-screen cells are
+
+
+@pytest.mark.parametrize("env, provider", [
+    ({"ANTHROPIC_API_KEY": "a"}, "anthropic"),                                     # Claude only: Haiku types
+    ({"ANTHROPIC_API_KEY": "a", "TEXT_MODEL_API_KEY": "t"}, "anthropic"),          # a key alone switches nothing
+    ({"ANTHROPIC_API_KEY": "a", "TEXT_MODEL_API_KEY": "t", "TEXT_MODEL_PROVIDER": "openrouter"}, "openrouter"),
+    ({"TEXT_MODEL_API_KEY": "t"}, "openrouter"),
+])
+def test_text_helper_provider_is_a_setting(monkeypatch, env, provider):
+    for key in ("ANTHROPIC_API_KEY", "TEXT_MODEL_API_KEY", "TEXT_MODEL_PROVIDER", "LLM_API_KEY",
+                "OPENROUTER_API_KEY", "FAST_MIN_CONFIDENCE"):
+        monkeypatch.delenv(key, raising=False)
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    config = FastConfig.from_env()
+    assert (config.text_provider or "openrouter") == provider
+    assert config.min_confidence == 0.4
+
+
+async def test_jev_can_wait_for_loading_results_without_handing_back():
+    agent, browser, rec = make([fast("WAIT"), fast("CLICK", 2), fast("SUBGOAL_DONE")],
+                               [decision("delegate", subgoal="Search and wait for results"), DONE], mode="never")
+    await agent.run()
+    assert "Wait for the page" in rec.last_step("s1")["result"] and browser.calls == [("click", 2)]
+    assert rec.last_step("s1")["delegation"]["reason"] == "claimed_done"
+
+
+async def test_jev_page_context_keeps_a_dialog_rendered_at_the_end():
+    page = await FakeBrowser().observe()
+    page.text = "Results\n" + "\n".join(f"Flight {i} ₹{1000 + i}" for i in range(2000)) + "\nStops dialog: Nonstop only"
+    body, _, operations = build_request(page, goal="g", subgoal="s", recent=[], guidance=[], model="jev")
+    text = body["state"]["page"]["text"]
+    assert len(text) <= 8100 and text.startswith("Results") and text.endswith("Stops dialog: Nonstop only")
+    assert "WAIT" in operations

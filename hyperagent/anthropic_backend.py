@@ -147,6 +147,11 @@ def _cached_system(system: str) -> list[dict[str, Any]] | str:
     return [{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}] if system else system
 
 
+# Thinking counts toward the output limit, and a final reply can carry a whole results table, so 4k was cut off in
+# practice. Only generated tokens are billed. Kept under the SDK's ~21k ceiling for non-streamed requests.
+PLANNER_MAX_TOKENS = 16000
+
+
 class AnthropicBackend:
     def __init__(self, api_key: str, client: Any = None):
         # The agent reports each retry to the operator, so the SDK's silent retries are turned off.
@@ -168,7 +173,7 @@ class AnthropicBackend:
             try:
                 with ProviderAttempt("anthropic", model) as measured:
                     req_kwargs = dict(
-                        model=model, max_tokens=4096, system=_cached_system(system), messages=converted,
+                        model=model, max_tokens=PLANNER_MAX_TOKENS, system=_cached_system(system), messages=converted,
                         tools=convert_tools(tools),
                         tool_choice={"type": "auto", "disable_parallel_tool_use": True},
                         **speed_settings(model, for_planner=True, hard=hard),
@@ -226,6 +231,15 @@ class AnthropicBackend:
             else:
                 if response.stop_reason == "refusal":
                     raise AnthropicError("Claude declined this step for safety reasons.")
+                if response.stop_reason == "max_tokens":
+                    # Cut off mid-reply: the tool call may be partial (half a results table, a missing element id),
+                    # so it is never acted on. Ask again, nudging toward a shorter reply.
+                    invalid_response()
+                    last = "the reply was cut off at the output limit"
+                    note = {"type": "text", "text": "Your previous reply hit the output limit before its action was "
+                                                    "complete. Keep any thinking short and call exactly one tool now."}
+                    converted = [*converted[:-1], {**converted[-1], "content": [*converted[-1]["content"], note]}]
+                    continue
                 usage = response.usage
                 cache_write = getattr(usage, "cache_creation_input_tokens", 0) or 0
                 cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0

@@ -135,7 +135,7 @@ export interface DelegationRecord {
   ended_at: number;
   reason: "claimed_done" | "stuck" | "low_confidence" | "no_change" | "attempt_budget" |
     "action_budget" | "observation_error" | "model_error" | "action_error" | "rejected" |
-    "paused" | "stopped" | "guidance_changed";
+    "paused" | "stopped" | "guidance_changed" | "autocomplete_unconfirmed";
   completion_claimed: boolean;
   jev_attempts: number;
   text_attempts: number;

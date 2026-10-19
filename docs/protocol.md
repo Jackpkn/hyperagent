@@ -82,6 +82,13 @@ return control to the planner. Recovery is explicitly chosen from fresh observat
 replay of a browser mutation. Pausing or new guidance still discards pending decisions.
 Jev's completion step remains a claim for the planner to check against the current page.
 
+Closed, unfocused autocomplete fields must be opened with an explicit click before typing. Typing waits up to
+`SUGGESTION_WAIT_MS` (default 2000 ms) for fresh suggestions belonging to that field; it does not select one.
+A timeout is a visible step error that says text was already entered, without replaying the mutation. While
+an autocomplete selection is pending, Jev cannot move to an unrelated field or claim completion: that decision
+is skipped and control returns to the planner with reason `autocomplete_unconfirmed`. After a suggestion click,
+the next observation must show selection or popup closure before Jev continues. Existing event shapes apply.
+
 ### `plan`
 `{ type, items: { text: string, status: "pending" | "active" | "done" | "skipped" }[] }`: the agent's own evolving plan.
 
@@ -155,7 +162,7 @@ A delegate parent step has optional `delegation` metadata, also present in final
 `episode_id`, `run_id`, `parent_step_id`, `started_at`, `ended_at`, `reason`, `completion_claimed`,
 `jev_attempts`, `text_attempts`, `executed_actions`, and `skipped_actions`. Reasons are `claimed_done`,
 `stuck`, `low_confidence`, `no_change`, `attempt_budget`, `action_budget`, `observation_error`, `model_error`,
-`action_error`, `rejected`, `paused`, `stopped`, or `guidance_changed`. Executed actions count successful
+`action_error`, `rejected`, `paused`, `stopped`, `guidance_changed`, or `autocomplete_unconfirmed`. Executed actions count successful
 browser operations; skips exclude terminal/uncertainty decisions. Metadata does not enter model prompts or
 change completion verification, approvals, interruption handling, limits, or planner fallback.
 

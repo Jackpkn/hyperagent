@@ -87,6 +87,17 @@ async def test_forced_done_is_an_instruction_and_credit_errors_are_clear():
         await b.decide("claude-haiku-5-5", [{"role": "user", "content": "x"}], TOOLS)
 
 
+async def test_reply_cut_off_at_the_output_limit_is_never_acted_on():
+    cut = reply(block(type="tool_use", name="done", input={"success": True, "rows": [{"a": "1"}]}), stop="max_tokens")
+    full = reply(block(type="tool_use", name="done", input={"success": True, "rows": [{"a": "1"}, {"a": "2"}]}))
+    b, calls = backend([cut, full])
+    name, args, *_ = await b.decide("claude-haiku-5-5", [{"role": "user", "content": "x"}], TOOLS)
+    assert name == "done" and args["rows"] == [{"a": "1"}, {"a": "2"}]  # the half table was never used
+    assert calls.calls[0]["max_tokens"] >= 16000
+    assert "output limit" in str(calls.calls[1]["messages"][-1]["content"])
+    assert "output limit" not in str(calls.calls[0]["messages"][-1]["content"])  # the first request is untouched
+
+
 def test_recover_xml_params_and_extract_partial_thought():
     leaked = {
         "evaluation": (

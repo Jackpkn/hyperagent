@@ -32,15 +32,8 @@ REASONING = {
     "plan": {
         "type": "array",
         "description": "The full updated plan (3-7 short items). Required on step 1; afterwards ONLY when the plan "
-                       "changes.",
-        "items": {
-            "type": "object",
-            "properties": {
-                "text": {"type": "string"},
-                "status": {"type": "string", "enum": ["pending", "active", "done", "skipped"]},
-            },
-            "required": ["text", "status"],
-        },
+                       "changes. Progress comes from plan_step.",
+        "items": {"type": "string"},
     },
 }
 
@@ -97,16 +90,15 @@ ELEMENT = {"element_id": {"type": "integer", "description": "The [id] of an elem
 ROW = {"type": "object", "additionalProperties": {"type": "string"}}
 
 TOOLS = [
-    _tool("search", "Discover websites using a web search engine; this leaves the current page. "
-          "To use a search bar on the current website, use delegate (or type_text/click).",
+    _tool("search", "Web search for discovery; leaves the current page. Not for a site's own search box.",
           {"query": {"type": "string"}}, ["query"]),
-    _tool("navigate", "Open a known top-level domain or an exact URL copied from the page in the current tab.",
+    _tool("navigate", "Open a named site or an exact URL read from the page.",
           {"url": {"type": "string"}}, ["url"]),
-    _tool("click", "Click an element [id]. When delegate is available, prefer delegate for forms, filters, "
-          "and multi-step UI flows; use click only for recovery or single isolated navigation.",
+    _tool("click", "Click an element [id]. With delegate available, prefer it for a group of related actions; "
+          "click directly for a single button, a confirmation, or to finish a widget after Jev hands back.",
           ELEMENT, ["element_id"], risk=True),
     _tool("type_text", "Replace the text of an input field [id], optionally pressing Enter afterwards. "
-          "When delegate is available, prefer delegate; use type_text only for passwords or recovery.",
+          "Use directly for a single field, a password, or to finish after Jev hands back.",
           {**ELEMENT, "text": {"type": "string"}, "press_enter": {"type": "boolean"}},
           ["element_id", "text", "press_enter"], risk=True),
     _tool("select_option", "Choose an option of a <select> dropdown by its visible label.",
@@ -119,77 +111,52 @@ TOOLS = [
     _tool("go_back", "Go back to the previous page in this tab.", {}, []),
     _tool("switch_tab", "Switch to another open tab.", {"tab_index": {"type": "integer"}}, ["tab_index"]),
     _tool("close_tab", "Close the current tab.", {}, []),
-    _tool("read_page", "Read the FULL text of the current page including below-the-fold content and link URLs. "
-          "Shown once in the next step only; record needed facts immediately after.", {}, []),
-    _tool("read_urls_parallel", "Open 2 to 4 URLs in background tabs and read their full text once. Only for "
-          "understanding pages whose fields you cannot name yet; to collect structured data use extract(urls=...).",
-          {"urls": {"type": "array", "maxItems": 4, "items": {"type": "string"},
-                    "description": "2 to 4 http(s) URLs to read concurrently."}},
+    _tool("read_page", "Full page text with links, shown once in the next step only.", {}, []),
+    _tool("read_urls_parallel", "Read 2-4 URLs in background tabs once; for data use extract(urls).",
+          {"urls": {"type": "array", "maxItems": 4, "items": {"type": "string"}}},
           ["urls"]),
-    _tool("extract", "Pull structured rows from the current page, or from 1-8 URLs/hrefs in parallel, and "
-          "save them directly to findings_saved in one step. Prefer over read_page + record_findings for "
-          "lists, tables, search results, and product/listing details.",
-          {"fields": {"type": "array", "maxItems": 12, "items": {"type": "string"},
-                      "description": "Column names to fill for every item, e.g. [\"title\", \"price\", \"link\"]."},
-           "instruction": {"type": "string", "description": "Filter rule, e.g. 'only nonstop flights under $300'. "
-                           "Leave empty to keep every item."},
+    _tool("extract", "Save structured rows from this page, or 1-8 URLs/hrefs in parallel, as findings in one step.",
+          {"fields": {"type": "array", "maxItems": 12, "items": {"type": "string"}, "description": "Column names."},
+           "instruction": {"type": "string", "description": "Which items to keep; empty keeps all."},
            "urls": {"type": "array", "maxItems": 8, "items": {"type": "string"},
-                    "description": "Optional URLs or relative hrefs copied from the page; empty means current page."}},
+                    "description": "Empty means the current page."}},
           ["fields"]),
-    _tool("record_findings", "Save structured facts verified on the current page. Use flat objects with consistent "
-          "keys. Pass items=[] to mark a page checked when nothing on it qualifies.",
-          {"items": {"type": "array", "items": ROW},
-           "source_url": {"type": "string", "description": "URL of the page the facts were read from."}},
+    _tool("record_findings", "Save facts verified on this page as flat rows; items=[] marks it checked.",
+          {"items": {"type": "array", "items": ROW}, "source_url": {"type": "string"}},
           ["items", "source_url"]),
-    _tool("wait", "Wait for the page to finish loading or updating.",
-          {"seconds": {"type": "number", "description": "1-10"}}, []),
-    _tool("ask_user", "Pause and ask the operator when you need credentials, personal/payment details, "
-          "a decision on ambiguous choices, or human takeover for a CAPTCHA.",
+    _tool("wait", "Wait 1-10 s for the page to load.", {"seconds": {"type": "number"}}, []),
+    _tool("ask_user", "Ask the operator for details, a decision, or a takeover; the task pauses.",
           {"question": {"type": "string"}}, ["question"]),
-    _tool("done", "Finish the task and deliver the final verified result.",
+    _tool("done", "Finish with the verified result (see Finishing).",
           {"success": {"type": "boolean"},
-           "summary": {"type": "string", "description": "Markdown answer for the user: lead with the direct answer."},
-           "columns": {"type": "array", "items": {"type": "string"},
-                       "description": "Table columns if the result is tabular, else []."},
-           "rows": {"type": "array", "items": ROW, "description": "Table rows keyed by column name, else []."},
+           "summary": {"type": "string"},
+           "columns": {"type": "array", "items": {"type": "string"}},
+           "rows": {"type": "array", "items": ROW},
            "sources": {"type": "array", "items": {"type": "object", "properties": {
                "title": {"type": "string"}, "url": {"type": "string"}}, "required": ["title", "url"]}},
-           "issues": {"type": "array", "items": {"type": "string"},
-                      "description": "Anything unverified, missing, or uncertain."},
-           "checklist": {"type": "array", "description": "2-6 distinct requirements from the user's goal.",
-                         "items": {"type": "object", "properties": {
-                             "requirement": {"type": "string"},
-                             "met": {"type": "boolean"},
-                             "evidence": {"type": "string", "description": "Brief proof from the page (no step #s)."},
-                             "step": {"type": "integer", "description": "Step number where evidence was seen."}},
-                             "required": ["requirement", "met", "evidence"]}},
-           "assumptions": {"type": "array", "items": {"type": "string"},
-                           "description": "Interpretations chosen where the goal was ambiguous."},
-           "follow_ups": {"type": "array", "maxItems": 3, "items": {"type": "string"},
-                          "description": "Up to 3 short next goals this user might plausibly want."},
+           "issues": {"type": "array", "items": {"type": "string"}},
+           "checklist": {"type": "array", "items": {"type": "object", "properties": {
+               "requirement": {"type": "string"}, "met": {"type": "boolean"}, "evidence": {"type": "string"},
+               "step": {"type": "integer"}}, "required": ["requirement", "met", "evidence"]}},
+           "assumptions": {"type": "array", "items": {"type": "string"}},
+           "follow_ups": {"type": "array", "maxItems": 3, "items": {"type": "string"}},
            "remember": {"type": "array", "maxItems": 3, "items": {"type": "string"},
-                        "description": "Lasting preferences/facts the user stated about themselves. Usually []."}},
+                        "description": "Lasting facts the user stated about themselves; usually []."}},
           ["success", "summary", "columns", "rows", "sources", "issues", "checklist"]),
 ]
 
 DELEGATE = _tool(
     "delegate",
-    "Hand on-page UI work (forms, clicks, typing, dropdowns, date pickers, filters, sorting, scrolling, popups) "
-    "to Jev, the fast UI classifier (~0.4 s/action, zero planner tokens). Batch the whole stretch of UI work up "
-    "to your next extraction or decision checkpoint into ONE subgoal. Jev cannot invent text, open external URLs, "
-    "extract data, or type passwords.",
-    {"subgoal": {"type": "string", "description": "The target outcome, EVERY exact literal string to type or select "
-                 "in quotes, settings already correct to leave untouched, and the visible stopping condition. "
-                 "Exclude passwords and unrequested irreversible commits."}},
+    "Hand one group of related on-page actions to Jev, the fast UI executor: fields to fill, suggestions to "
+    "choose, dates to pick, filters to set, popups to dismiss. Jev cannot invent text, open URLs, read data or "
+    "type passwords.",
+    {"subgoal": {"type": "string", "description": "The outcome, every exact string to type or select in quotes, "
+                 "what is already correct and must stay, and the visible stopping condition."}},
     ["subgoal"],
-    risk=True,  # Jev can click buttons that submit/commit; allow planner to flag irreversible=True
+    risk=True,  # Jev can click buttons that submit/commit; the planner flags irreversible=True
 )
 
 TOOLS_WITH_FAST = [*TOOLS[:2], DELEGATE, *TOOLS[2:]]
-DIRECT_UI_TOOLS = frozenset({"click", "type_text", "select_option", "scroll"})
-# What the planner sees in Jev mode: no direct UI tools, so on-page work goes through delegate. The agent offers
-# TOOLS_WITH_FAST again for a few recovery turns after Jev ends stuck or unsure.
-TOOLS_JEV_FIRST = [t for t in TOOLS_WITH_FAST if t["function"]["name"] not in DIRECT_UI_TOOLS]
 TOOL_NAMES = {t["function"]["name"] for t in TOOLS_WITH_FAST}
 _REQUIRED = {t["function"]["name"]: t["function"]["parameters"]["required"] for t in TOOLS_WITH_FAST}
 
@@ -214,7 +181,7 @@ MUTATING = {
     "press_key", "go_back", "close_tab", "delegate",
 }
 
-# Tightened regex: avoids false triggers on "Order Status", "Sort by Order", "Market Place", or "Apply Filters"
+# Word-bounded so "Order Status", "Sort by Order", "Market Place" or "Apply Filters" do not ask for approval.
 RISKY_WORDS = re.compile(
     r"\b(submit|buy|purchase|pay\b|place (?:an? |the |my |your )?order|checkout|check out|confirm|"
     r"delete|remove|send|book\b|reserve|subscribe|sign ?up|register|publish|post\b|transfer|"
