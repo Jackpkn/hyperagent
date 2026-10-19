@@ -16,6 +16,7 @@ import {
 import type { Finding, RunResult, StepRecord, Usage } from "@/lib/protocol";
 import { copyText, downloadText, resultToCsv, resultToMarkdown } from "@/lib/export";
 import { domainOf, formatCell, formatCost } from "@/lib/format";
+import { fastUsage, usageCost } from "@/lib/usage";
 import { matchRowToFinding } from "@/lib/findings";
 import { DataTable } from "./DataTable";
 import { Markdown } from "./Markdown";
@@ -60,9 +61,10 @@ export function ResultReport({
   const [showDiff, setShowDiff] = useState(false);
   const hasTable = result.columns.length > 0 && result.rows.length > 0;
   const canDiff = Boolean(hasTable && previousResult && previousResult.rows.length > 0);
-  const fastCalls = usage?.fast_calls ?? 0;
-  const avgFastMs = fastCalls > 0 ? Math.round((usage?.fast_ms_total ?? 0) / fastCalls) : 0;
-  const estTokensSaved = fastCalls * 4000;
+  const accounting = result.accounting ?? usage?.accounting;
+  const cost = usageCost(usage, accounting);
+  const fast = fastUsage(usage, accounting);
+  const fastCalls = fast.calls;
   const unverifiedValues = new Set<string>();
   for (const f of findings ?? []) {
     for (const k of f.unverified ?? []) {
@@ -167,33 +169,39 @@ export function ResultReport({
         </div>
       </div>
 
-      {usage && (usage.llm_calls > 0 || fastCalls > 0) ? (
-        <div className="efficiency-strip" aria-label="Token and dual-system efficiency">
-          <span className="efficiency-item">
-            <strong>Planner (System 2):</strong> {usage.llm_calls}{" "}
-            {usage.llm_calls === 1 ? "turn" : "turns"}
-            {usage.input_tokens + usage.output_tokens > 0
-              ? ` · ${(usage.input_tokens + usage.output_tokens).toLocaleString()} tok`
-              : ""}
-            {usage.cached_input_tokens ? (
-              <span title="Read from the prompt cache: the unchanging instructions and tool list, billed at a tenth of the normal rate">
-                {` (${usage.cached_input_tokens.toLocaleString()} cached)`}
+      {usage || accounting ? (
+        <div className="efficiency-strip" aria-label="Model usage and cost">
+          {accounting ? (
+            <span className="efficiency-item">
+              <strong>Model calls:</strong> {accounting.by_purpose.planner.attempts} planner
+              {` · ${accounting.by_purpose.extract.attempts} extraction · ${accounting.by_purpose.text.attempts} text`}
+              {` · ${(accounting.summary.input_tokens + accounting.summary.output_tokens).toLocaleString()} recorded tok`}
+              {accounting.summary.unknown_usage_count > 0 ? " (partial usage)" : ""}
+              {accounting.summary.cache_read_tokens > 0
+                ? ` (${accounting.summary.cache_read_tokens.toLocaleString()} cached)` : ""}
+              <span title={cost.description}>
+                {` · ${cost.label}: ${formatCost(cost.amount ?? 0)}`}
               </span>
-            ) : null}
-            {usage.cost_usd > 0 ? ` · ${formatCost(usage.cost_usd)}` : ""}
-            {usage.extract_calls
-              ? ` (incl. ${usage.extract_calls} page ${usage.extract_calls === 1 ? "extraction" : "extractions"})`
-              : ""}
-          </span>
+            </span>
+          ) : usage ? (
+            <span className="efficiency-item" title={cost.description}>
+              <strong>Planner + extraction:</strong> {usage.llm_calls} planner calls
+              {usage.extract_calls ? ` · ${usage.extract_calls} extractions` : ""}
+              {` · ${(usage.input_tokens + usage.output_tokens).toLocaleString()} recorded tok`}
+              {usage.cached_input_tokens ? ` (${usage.cached_input_tokens.toLocaleString()} cached)` : ""}
+              {` · Legacy subtotal: ${formatCost(usage.cost_usd)}`}
+            </span>
+          ) : null}
           {fastCalls > 0 ? (
             <span className="efficiency-item efficiency-highlight">
               <Zap size={12} aria-hidden="true" />
-              <strong>Fast (System 1):</strong> {fastCalls}{" "}
-              {fastCalls === 1 ? "action" : "actions"} ({avgFastMs}ms avg) ·{" "}
-              <strong>~{estTokensSaved.toLocaleString()} tokens saved</strong> (no screenshots)
+              <strong>Jev (System 1):</strong> {fastCalls} {fastCalls === 1 ? "call" : "calls"}
+              {` (${fast.avgMs}ms avg)`}
+              {fast.actions !== undefined ? ` · ${fast.actions} completed actions` : ""}
+              {" · no screenshots"}
             </span>
           ) : fastModel ? (
-            <span className="efficiency-item" title="The planner only delegates multi-step on-page UI work to Jev">
+            <span className="efficiency-item" title="The planner can delegate focused on-page UI work to Jev">
               <Zap size={12} aria-hidden="true" />
               <strong>Jev (System 1):</strong> not used. The planner did every action itself.
             </span>

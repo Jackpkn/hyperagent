@@ -10,6 +10,8 @@ from typing import Any
 
 import anthropic
 
+from .telemetry import ProviderAttempt, invalid_response, model_call
+
 # USD per million tokens (input, output), Claude API first-party rates.
 PRICES = {
     "claude-haiku-5-5": (0.10, 0.50),
@@ -147,6 +149,7 @@ class AnthropicBackend:
         # The agent reports each retry to the operator, so the SDK's silent retries are turned off.
         self.client = client or anthropic.AsyncAnthropic(api_key=api_key, max_retries=0, timeout=90)
 
+    @model_call
     async def decide(
         self, model: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]], *,
         force: str | None = None, on_retry: Any = None, on_delta: Any = None,
@@ -160,40 +163,44 @@ class AnthropicBackend:
         wait = 0.0
         for attempt in range(5):
             try:
-                req_kwargs = dict(
-                    model=model, max_tokens=4096, system=_cached_system(system), messages=converted,
-                    tools=convert_tools(tools),
-                    tool_choice={"type": "auto", "disable_parallel_tool_use": True},
-                    **speed_settings(model, for_planner=True),
-                )
-                if on_delta is not None and hasattr(self.client.messages, "stream"):
-                    thinking_buf = ""
-                    text_buf = ""
-                    json_buf = ""
-                    async with self.client.messages.stream(**req_kwargs) as stream:
-                        async for event in stream:
-                            if getattr(event, "type", None) == "content_block_delta":
-                                delta = getattr(event, "delta", None)
-                                dtype = getattr(delta, "type", None)
-                                if dtype == "thinking_delta":
-                                    thinking_buf += getattr(delta, "thinking", "") or ""
-                                elif dtype == "text_delta":
-                                    text_buf += getattr(delta, "text", "") or ""
-                                elif dtype == "input_json_delta":
-                                    json_buf += getattr(delta, "partial_json", "") or ""
-                                else:
-                                    continue
-                                partial_thought = extract_partial_thought(json_buf)
-                                combined_thinking = "\n\n".join(
-                                    p.strip() for p in (thinking_buf, text_buf) if p and p.strip()
-                                )
-                                if combined_thinking:
-                                    partial_thought["thinking"] = combined_thinking
-                                if partial_thought:
-                                    await on_delta(partial_thought)
-                        response = await stream.get_final_message()
-                else:
-                    response = await self.client.messages.create(**req_kwargs)
+                with ProviderAttempt("anthropic", model) as measured:
+                    req_kwargs = dict(
+                        model=model, max_tokens=4096, system=_cached_system(system), messages=converted,
+                        tools=convert_tools(tools),
+                        tool_choice={"type": "auto", "disable_parallel_tool_use": True},
+                        **speed_settings(model, for_planner=True),
+                    )
+                    if on_delta is not None and hasattr(self.client.messages, "stream"):
+                        thinking_buf = ""
+                        text_buf = ""
+                        json_buf = ""
+                        async with self.client.messages.stream(**req_kwargs) as stream:
+                            async for event in stream:
+                                if getattr(event, "type", None) == "message_start":
+                                    measured.capture_native_partial(getattr(event, "message", None))
+                                if getattr(event, "type", None) == "content_block_delta":
+                                    delta = getattr(event, "delta", None)
+                                    dtype = getattr(delta, "type", None)
+                                    if dtype == "thinking_delta":
+                                        thinking_buf += getattr(delta, "thinking", "") or ""
+                                    elif dtype == "text_delta":
+                                        text_buf += getattr(delta, "text", "") or ""
+                                    elif dtype == "input_json_delta":
+                                        json_buf += getattr(delta, "partial_json", "") or ""
+                                    else:
+                                        continue
+                                    partial_thought = extract_partial_thought(json_buf)
+                                    combined_thinking = "\n\n".join(
+                                        p.strip() for p in (thinking_buf, text_buf) if p and p.strip()
+                                    )
+                                    if combined_thinking:
+                                        partial_thought["thinking"] = combined_thinking
+                                    if partial_thought:
+                                        await on_delta(partial_thought)
+                            response = await stream.get_final_message()
+                    else:
+                        response = await self.client.messages.create(**req_kwargs)
+                    measured.capture_native(response)
             except anthropic.AuthenticationError:
                 raise AnthropicError("Anthropic rejected the API key.") from None
             except anthropic.PermissionDeniedError:
@@ -240,6 +247,7 @@ class AnthropicBackend:
                     if native_thinking:
                         inputs["_thinking"] = native_thinking
                     return call.name, inputs, tokens_in, usage.output_tokens, spent, cache_read
+                invalid_response()
                 last = "the reply did not choose an action"
                 converted = [*converted,
                              {"role": "assistant", "content": [b.model_dump(exclude_none=True)
@@ -256,14 +264,17 @@ class AnthropicBackend:
                 await asyncio.sleep(delay)
         raise AnthropicError(f"Claude did not respond after 5 attempts: {last}")
 
+    @model_call
     async def complete_json(self, model: str, system: str, user: str, *,
                             max_tokens: int = 400) -> tuple[dict[str, Any], int, int]:
         """One JSON answer (the text helper and the extract tool)."""
         try:
-            response = await self.client.messages.create(
-                model=model, max_tokens=max_tokens, system=system, messages=[{"role": "user", "content": user}],
-                **speed_settings(model, for_planner=False),
-            )
+            with ProviderAttempt("anthropic", model) as measured:
+                response = await self.client.messages.create(
+                    model=model, max_tokens=max_tokens, system=system, messages=[{"role": "user", "content": user}],
+                    **speed_settings(model, for_planner=False),
+                )
+                measured.capture_native(response)
         except anthropic.APIError as exc:
             raise AnthropicError(f"The text helper failed: {type(exc).__name__}") from None
         text = "".join(b.text for b in response.content if b.type == "text")

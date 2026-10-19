@@ -22,6 +22,7 @@ from .fast import FastPolicy
 from .llm import Decision, LLMClient, LLMError
 from .prompts import SYSTEM, SYSTEM_FAST, step_context
 from .system1 import FastLoopMixin
+from .telemetry import RunLedger
 from .tools import TOOL_NAMES, TOOLS, TOOLS_WITH_FAST, label, missing_args, needs_approval
 
 Emit = Callable[[dict[str, Any]], Awaitable[None]]
@@ -72,6 +73,7 @@ class Agent(FastLoopMixin, ExtractMixin):
         self.actions_taken = 0
         self.usage = {"llm_calls": 0, "input_tokens": 0, "cached_input_tokens": 0, "output_tokens": 0, "cost_usd": 0.0,
                       "fast_calls": 0, "fast_ms_total": 0, "text_calls": 0, "extract_calls": 0}
+        self.ledger = RunLedger()
         self.started = time.time()
         self.result: dict[str, Any] | None = None
         self._last_page_sig: str | None = None
@@ -149,11 +151,13 @@ class Agent(FastLoopMixin, ExtractMixin):
         await self.emit({"type": "notice", "level": level, "message": message})
 
     async def send_step(self, step: dict[str, Any]) -> None:
+        self.ledger.note_step(step)
         await self.emit({"type": "step", **step})
 
     async def send_usage(self) -> None:
         await self.emit({"type": "usage", **self.usage, "cost_usd": round(self.usage["cost_usd"], 5),
-                         "elapsed_s": round(time.time() - self.started, 1)})
+                         "elapsed_s": round(time.time() - self.started, 1),
+                         "accounting": self.ledger.snapshot(details=False)})
 
     # ---------- main loop ----------
 
@@ -221,16 +225,19 @@ class Agent(FastLoopMixin, ExtractMixin):
         if decision is None:
             step.update(status="skipped", result="Could not reach the model.", ended_at=time.time())
             await self.send_step(step)
+            await self.send_usage()
             return
         if self.stopped:
             step.update(status="skipped", result="Stopped before acting.", ended_at=time.time())
             await self.send_step(step)
+            await self.send_usage()
             raise Stopped()
         if self.guidance_version != version or self.paused:
             why = "New guidance arrived; re-planning with it." if self.guidance_version != version else \
                 "Paused before acting; this decision was discarded so nothing stale runs."
             step.update(status="skipped", result=why, ended_at=time.time())
             await self.send_step(step)
+            await self.send_usage()
             return
         await self._handle(step, decision, page, version=version)
 
@@ -264,9 +271,10 @@ class Agent(FastLoopMixin, ExtractMixin):
             step["thought"] = {**step.get("thought", {}), **partial}
             await self.send_step(step)
 
-        call = asyncio.create_task(
-            self.llm.decide(self.model, messages, self.tools, on_retry=self._retry_notice, on_delta=_on_delta)
-        )
+        with self.ledger.scope("planner", step.get("id") if step else None):
+            call = asyncio.create_task(
+                self.llm.decide(self.model, messages, self.tools, on_retry=self._retry_notice, on_delta=_on_delta)
+            )
         stop_watch = asyncio.create_task(self._until_stopped())
         try:
             done, _ = await asyncio.wait({call, stop_watch}, return_when=asyncio.FIRST_COMPLETED)
@@ -274,6 +282,7 @@ class Agent(FastLoopMixin, ExtractMixin):
             stop_watch.cancel()
             if not call.done():
                 call.cancel()  # never leave a billed request running for a decision nobody will use
+                await asyncio.gather(call, return_exceptions=True)  # settle accounting before publishing the result
         if call not in done:
             return None
         try:
@@ -667,6 +676,7 @@ class Agent(FastLoopMixin, ExtractMixin):
         return out[:8]
 
     async def _publish_result(self) -> None:
+        self.result["accounting"] = self.ledger.snapshot()
         await self.emit({"type": "result", **self.result})
         await self.send_usage()
 
@@ -683,7 +693,8 @@ class Agent(FastLoopMixin, ExtractMixin):
                        "summarising only what the findings and history support.")
             messages = [{"role": "system", "content": SYSTEM}, {"role": "user", "content": context}]
             try:
-                decision = await self.llm.decide(self.model, messages, TOOLS, force="done")
+                with self.ledger.scope("planner"):
+                    decision = await self.llm.decide(self.model, messages, TOOLS, force="done")
                 self._count(decision)
                 args = decision.args
             except LLMError as exc:

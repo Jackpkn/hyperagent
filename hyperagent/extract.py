@@ -14,9 +14,12 @@ from urllib.parse import urljoin, urlsplit, urlunsplit
 
 from .browser import ActionError
 from .llm import LLMError
+from .telemetry import model_call
 
 if TYPE_CHECKING:
-    from .agent import Agent
+    from .browser import BrowserSession
+    from .llm import LLMClient
+    from .telemetry import RunLedger
 
 MAX_FIELDS = 12
 MAX_ROWS = 60
@@ -49,16 +52,30 @@ def resolve_urls(base: str, urls: list[Any], limit: int = MAX_URLS) -> list[str]
 class ExtractMixin:
     """Mixed into Agent."""
 
-    def _pages_with_findings(self: Agent) -> set[str]:
+    if TYPE_CHECKING:
+        # Agent supplies these members; no runtime stubs or state are added by the mixin.
+        browser: BrowserSession
+        llm: LLMClient
+        ledger: RunLedger
+        goal: str
+        findings: list[dict[str, Any]]
+        extracted: set[tuple[str, frozenset[str]]]
+        usage: dict[str, Any]
+
+        def _remember_text(self, text: str) -> None: ...
+        def _mark_checked(self, url: str, note: str) -> None: ...
+        async def _record(self, args: dict[str, Any], step: dict[str, Any] | None = None) -> str: ...
+
+    def _pages_with_findings(self) -> set[str]:
         return {normalize_url(f["source_url"]) for f in self.findings if f.get("source_url")}
 
-    def _split_already_read(self: Agent, urls: list[str]) -> tuple[list[str], list[str]]:
+    def _split_already_read(self, urls: list[str]) -> tuple[list[str], list[str]]:
         """URLs worth fetching vs. ones whose facts are already saved as findings (re-reading them is waste)."""
         saved = self._pages_with_findings()
         fresh = [u for u in urls if normalize_url(u) not in saved]
         return fresh, [u for u in urls if u not in fresh]
 
-    async def _extract(self: Agent, args: dict[str, Any], step: dict[str, Any]) -> str:
+    async def _extract(self, args: dict[str, Any], step: dict[str, Any]) -> str:
         raw_fields = args.get("fields") if isinstance(args.get("fields"), list) else []
         fields = list(dict.fromkeys(str(f).strip()[:60] for f in raw_fields if str(f).strip()))[:MAX_FIELDS]
         if not fields:
@@ -89,8 +106,9 @@ class ExtractMixin:
         for _, text in pages:
             self._remember_text(text)
 
-        answers = await asyncio.gather(*(self._extract_page(fields, instruction, text) for _, text in pages),
-                                       return_exceptions=True)
+        with self.ledger.scope("extract", step.get("id")):
+            answers = await asyncio.gather(*(self._extract_page(fields, instruction, text) for _, text in pages),
+                                           return_exceptions=True)
         saved_notes: list[str] = []
         total = 0
         failures = list(unreadable)
@@ -125,7 +143,8 @@ class ExtractMixin:
             summary += f". Only the first {MAX_URLS} URLs were read; {skipped} skipped, extract them in another call"
         return summary + "."
 
-    async def _extract_page(self: Agent, fields: list[str], instruction: str, text: str) -> list[dict[str, str]]:
+    @model_call
+    async def _extract_page(self, fields: list[str], instruction: str, text: str) -> list[dict[str, str]]:
         request = json.dumps({"keys": fields, "instruction": instruction or "every item", "goal": self.goal,
                               "page_text": text}, ensure_ascii=False)
         output, tokens_in, tokens_out, spent = await self.llm.complete_json(EXTRACT_RULES, request)

@@ -98,6 +98,36 @@ async def test_refresh_keeps_partial_findings_in_main_stream(console):
     await expect(page.get_by_text("Refresh test item", exact=True)).to_be_visible()
 
 
+async def test_accounting_survives_refresh_without_savings_claims(console):
+    from hyperagent.telemetry import CallRecord, RunLedger
+
+    ledger = RunLedger()
+    for purpose, cost in (("planner", 0.25), ("jev", None), ("text", 0.01)):
+        ledger.record(CallRecord(run_id=ledger.run_id, purpose=purpose, step_id="s1", parent_step_id=None,
+                                 logical_call_id=purpose, attempt_id=purpose, attempt=1,
+                                 provider="typesafe" if purpose == "jev" else "openrouter", requested_model="test",
+                                 input_tokens=100, output_tokens=10, cost_usd=cost,
+                                 cost_basis="unknown" if cost is None else "provider"))
+    page, sockets = console
+    ws = sockets[-1]
+    accounting = ledger.snapshot()
+    usage = {"type": "usage", "llm_calls": 1, "input_tokens": 100, "output_tokens": 10,
+             "cost_usd": 0.25, "elapsed_s": 1, "fast_calls": 1, "fast_ms_total": 100,
+             "text_calls": 1, "accounting": ledger.snapshot(details=False)}
+    ws.send(json.dumps(usage))
+    ws.send(json.dumps({**RESULT, "accounting": accounting}))
+    ws.send(json.dumps({"type": "status", "state": "done", "step": 2}))
+    await expect(page.get_by_text("Catalog comparison complete.", exact=True)).to_be_visible()
+    turn = await wait_saved(page, lambda turn: turn and turn["result"] is not None)
+    assert turn["usage"].get("accounting") == usage["accounting"]
+    assert turn["result"].get("accounting") == accounting
+    await page.reload()
+    await expect(page.locator('.telemetry-chip[title^="Known cost"]')).to_contain_text("$0.26")
+    await expect(page.locator(".efficiency-strip")).to_contain_text("1 call")
+    assert "tokens saved" not in await page.locator("body").inner_text()
+    assert (await saved_turn(page))["result"]["accounting"] == accounting
+
+
 async def test_refresh_flushes_latest_running_update(console):
     page, sockets = console
     ws = sockets[-1]

@@ -15,6 +15,7 @@ import httpx
 
 from .anthropic_backend import AnthropicBackend, AnthropicError, _recover_xml_params
 from .anthropic_backend import cost as anthropic_cost
+from .telemetry import invalid_response, model_call, tracked_post
 
 ANTHROPIC_MODELS = "claude-sonnet-5-5,claude-haiku-5-5,claude-opus-5-5"
 DEFAULT_MODELS = "anthropic/claude-sonnet-5.5,anthropic/claude-haiku-5.5,inception/mercury-2.5,google/gemini-3.7-flash"
@@ -76,6 +77,7 @@ class LLMClient:
         self.anthropic = AnthropicBackend(config.api_key) if config.provider == "anthropic" and config.api_key \
             else None
 
+    @model_call
     async def decide(
         self, model: str, messages: list[dict[str, Any]], tools: list[dict[str, Any]],
         *, force: str | None = None, on_retry: Any = None, on_delta: Any = None,
@@ -107,7 +109,8 @@ class LLMClient:
         last = "unknown error"
         for attempt in range(4):
             try:
-                response = await self.http.post(f"{self.config.base_url}/chat/completions", json=body, headers=headers)
+                response = await tracked_post(self.http, f"{self.config.base_url}/chat/completions",
+                                              provider=self.config.provider, json=body, headers=headers)
             except httpx.HTTPError as exc:
                 last = f"connection error ({type(exc).__name__})"
             else:
@@ -115,6 +118,7 @@ class LLMClient:
                     try:
                         return parse_decision(response.json())
                     except LLMError as exc:
+                        invalid_response()
                         last = str(exc)
                         # A malformed tool call is retried with a corrective note; nothing was executed.
                         body["messages"] = [*messages, {"role": "user", "content": f"Your last reply was invalid: "
@@ -140,6 +144,7 @@ class LLMClient:
                 await asyncio.sleep(1.5 * 2**attempt)
         raise LLMError(f"The model did not respond after 4 attempts: {last}")
 
+    @model_call
     async def complete_json(self, system: str, user: str, *, max_tokens: int = 4000) -> tuple[dict[str, Any], int,
                                                                                          int, float]:
         """One JSON answer from the extraction model: (object, input tokens, output tokens, cost in USD)."""
@@ -158,7 +163,8 @@ class LLMClient:
                 "messages": [{"role": "system", "content": system}, {"role": "user", "content": user}]}
         headers = {"Authorization": f"Bearer {self.config.api_key}", "X-Title": "HyperAgent"}
         try:
-            response = await self.http.post(f"{self.config.base_url}/chat/completions", json=body, headers=headers)
+            response = await tracked_post(self.http, f"{self.config.base_url}/chat/completions",
+                                              provider=self.config.provider, json=body, headers=headers)
         except httpx.HTTPError as exc:
             raise LLMError(f"Could not reach the extraction model ({type(exc).__name__}).") from None
         if response.status_code >= 400:

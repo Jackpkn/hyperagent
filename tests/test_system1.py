@@ -86,6 +86,60 @@ async def test_delegation_runs_fast_actions_then_hands_back():
     assert "Jev took 1 action" in agent.llm.requests[1]["messages"][1]["content"][0]["text"]
 
 
+@pytest.mark.parametrize("script, reason, count", [
+    ([fast("TYPE_TEXT", 1), fast("SUBGOAL_DONE")], "claimed_done", 1),
+    ([fast("STUCK")], "stuck", 0),
+    ([fast("CLICK", 1, confidence=0.1)], "low_confidence", 0),
+    ([FastError("unavailable")], "model_error", 0),
+])
+async def test_delegation_exports_reason_without_changing_handoff(script, reason, count):
+    agent, browser, rec = make(script, [decision("delegate", subgoal="Fill name"), DONE],
+                               browser=counter_browser())
+    result = await agent.run()
+    episodes = result["accounting"]["delegations"]
+    assert len(episodes) == 1
+    assert episodes[0]["reason"] == reason
+    assert episodes[0]["executed_actions"] == count == len(browser.calls)
+    assert episodes[0]["completion_claimed"] is (reason == "claimed_done")
+    assert rec.last_step("s1")["delegation"] == episodes[0]
+    context = agent.llm.requests[1]["messages"][1]["content"][0]["text"]
+    assert "episode_id" not in context and "completion_claimed" not in context
+
+
+async def test_cancelled_delegation_records_episode_without_executing():
+    gate = asyncio.Event()
+    agent, browser, _ = make([gate, fast("CLICK", 1)], [decision("delegate", subgoal="Click")])
+    task = asyncio.create_task(agent._step())
+    await wait_for(lambda: agent.fast.subgoals)
+    agent.stopped = True
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert browser.calls == []
+    episodes = agent.ledger.snapshot()["delegations"]
+    assert len(episodes) == 1 and episodes[0]["reason"] == "stopped"
+
+
+@pytest.mark.parametrize("reason", ["paused", "action_budget", "observation_error"])
+async def test_delegation_early_exit_is_measured_without_calling_models(reason):
+    from hyperagent.browser import ActionError
+
+    agent, browser, _ = make([], [])
+    if reason == "paused":
+        agent.paused = True
+    elif reason == "action_budget":
+        agent.actions_taken = agent.max_steps
+    else:
+        async def observe(**kwargs):
+            raise ActionError("Page unavailable")
+        browser.observe = observe
+    parent = {"id": "s1"}
+    await agent._delegate("Continue", parent)
+    assert browser.calls == [] and agent.fast.subgoals == []
+    assert parent["delegation"]["reason"] == reason
+    assert len(agent.ledger.snapshot()["delegations"]) == 1
+
+
 async def test_low_confidence_returns_control_without_acting():
     agent, browser, rec = make([fast("CLICK", 2, confidence=0.3)],
                                [decision("delegate", subgoal="Click something"), DONE])
@@ -103,6 +157,7 @@ async def test_fast_irreversible_click_still_needs_approval():
     agent.resolve_approval(rec.of("approval")[0]["step_id"], False, "not yet")
     await task
     assert browser.calls == [] and "you rejected an action" in rec.last_step("s1")["result"]
+    assert rec.last_step("s1")["delegation"]["reason"] == "rejected"
 
 
 @pytest.mark.parametrize("interrupt", ["guide", "pause"])
@@ -120,6 +175,7 @@ async def test_interruption_during_fast_decision_discards_it_and_returns_to_plan
     await task
     assert browser.calls == [] and "new guidance arrived" in rec.last_step("s1")["result"]
     assert "click" in offered(agent, 1)
+    assert rec.last_step("s1")["delegation"]["reason"] == "guidance_changed"
 
 
 async def test_fast_failure_and_no_change_hand_back():
@@ -130,6 +186,7 @@ async def test_fast_failure_and_no_change_hand_back():
                                mode="never")
     await agent.run()
     assert len(browser.calls) == 3 and "did not change the page" in rec.last_step("s1")["result"]
+    assert rec.last_step("s1")["delegation"]["reason"] == "no_change"
 
 
 async def test_request_offers_only_compatible_targets():
@@ -335,6 +392,7 @@ async def test_failed_fast_mutation_is_not_replayed_on_handback():
     await agent.run()
     assert browser.calls == [("click", 1)]
     assert rec.last_step("s2")["status"] == "error"
+    assert rec.last_step("s1")["delegation"]["reason"] == "action_error"
     assert "click" in offered(agent, 1)
 
 
@@ -429,6 +487,7 @@ async def test_fast_action_budget_returns_control_without_replaying_actions(monk
     await agent.run()
     assert len(browser.calls) == 2
     assert "budget" in rec.last_step("s1")["result"]
+    assert rec.last_step("s1")["delegation"]["reason"] == "attempt_budget"
     assert "click" in offered(agent, 1)
 
 

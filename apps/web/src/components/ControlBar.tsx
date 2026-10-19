@@ -23,6 +23,7 @@ import {
 import type { ApprovalMode, Question, RunState, Usage } from "@/lib/protocol";
 import type { ConnectionState } from "@/lib/agent-state";
 import { formatCost, formatDuration } from "@/lib/format";
+import { fastUsage, usageCost } from "@/lib/usage";
 
 interface ControlBarProps {
   goal: string;
@@ -107,6 +108,8 @@ export function ControlBar(props: ControlBarProps) {
   } = props;
   const [confirmStop, setConfirmStop] = useState(false);
   const [goalExpanded, setGoalExpanded] = useState(false);
+  const cost = usageCost(usage);
+  const fast = fastUsage(usage);
 
   const paused = run === "paused";
   const canControl = !finished && run !== "idle";
@@ -186,18 +189,18 @@ export function ControlBar(props: ControlBarProps) {
                 <Clock size={13} aria-hidden="true" />
                 <strong>{formatDuration(usage?.elapsed_s ?? elapsedS)}</strong>
               </span>
-              <span className="telemetry-chip" title="Estimated LLM cost">
+              <span className="telemetry-chip" title={cost.description}>
                 <Coins size={13} aria-hidden="true" />
-                <strong>{usage ? formatCost(usage.cost_usd) : "–"}</strong>
+                <strong>{cost.amount !== undefined ? `${cost.label === "Known cost" ? "Known " : cost.label === "Legacy subtotal" ? "Subtotal " : ""}${formatCost(cost.amount)}` : "–"}</strong>
               </span>
-              {usage?.fast_calls ? (
+              {fast.calls > 0 ? (
                 <span
                   className="telemetry-chip telemetry-fast"
-                  title={`Fast Executor (System 1) ran ${usage.fast_calls} calibrated UI actions without frontier LLM turns (~${(usage.fast_calls * 4000).toLocaleString()} tokens saved; ${Math.round((usage.fast_ms_total ?? 0) / usage.fast_calls)}ms average)`}
+                  title={`Jev: ${fast.calls} model calls (${fast.avgMs}ms average per attempt)${fast.actions === undefined ? "" : `; ${fast.actions} completed browser actions`}. Text-helper calls are counted separately.`}
                 >
                   <Zap size={13} aria-hidden="true" />
                   <strong>
-                    {usage.fast_calls} Fast
+                    {fast.calls} Fast calls
                   </strong>
                 </span>
               ) : null}

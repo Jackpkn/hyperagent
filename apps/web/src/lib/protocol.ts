@@ -83,6 +83,73 @@ export interface StepRecord {
   confidence?: number;
   alternatives?: { label: string; p: number }[];
   latency_ms?: number;
+  delegation?: DelegationRecord;
+}
+
+export type ModelPurpose = "planner" | "extract" | "jev" | "text";
+export type CostBasis = "provider" | "estimate" | "unknown";
+
+export interface AccountingSummary {
+  attempts: number;
+  successful_responses: number;
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_tokens: number;
+  cache_write_tokens: number;
+  duration_ms: number;
+  known_cost_usd: number;
+  total_cost_usd: number | null;
+  unknown_cost_count: number;
+  unknown_usage_count: number;
+  cost_basis: CostBasis;
+}
+
+export interface ModelCallRecord {
+  run_id: string;
+  purpose: ModelPurpose;
+  step_id: string | null;
+  parent_step_id: string | null;
+  logical_call_id: string;
+  attempt_id: string;
+  attempt: number;
+  provider: string;
+  requested_model: string;
+  resolved_model: string | null;
+  duration_ms: number;
+  outcome: "success" | "invalid_response" | "provider_error" | "transport_error" | "cancelled";
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cache_read_tokens: number | null;
+  cache_write_tokens: number | null;
+  cost_usd: number | null;
+  cost_basis: CostBasis;
+}
+
+export interface DelegationRecord {
+  episode_id: string;
+  run_id: string;
+  parent_step_id: string;
+  started_at: number;
+  ended_at: number;
+  reason: "claimed_done" | "stuck" | "low_confidence" | "no_change" | "attempt_budget" |
+    "action_budget" | "observation_error" | "model_error" | "action_error" | "rejected" |
+    "paused" | "stopped" | "guidance_changed";
+  completion_claimed: boolean;
+  jev_attempts: number;
+  text_attempts: number;
+  executed_actions: number;
+  skipped_actions: number;
+}
+
+export interface RunAccounting {
+  schema_version: 1;
+  run_id: string;
+  summary: AccountingSummary;
+  by_purpose: Record<ModelPurpose, AccountingSummary>;
+  executed_fast_actions: number;
+  /** Included only in final Audit JSON; live usage carries rollups. */
+  records?: ModelCallRecord[];
+  delegations?: DelegationRecord[];
 }
 
 export interface PlanItem {
@@ -114,6 +181,7 @@ export interface Question {
 }
 
 export interface Usage {
+  accounting?: RunAccounting;
   llm_calls: number;
   input_tokens: number;
   output_tokens: number;
@@ -143,6 +211,7 @@ export interface ChecklistItem {
 }
 
 export interface RunResult {
+  accounting?: RunAccounting;
   success: boolean;
   summary: string;
   columns: string[];

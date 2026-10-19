@@ -89,10 +89,58 @@ Jev's completion step remains a claim for the planner to check against the curre
 `{ type, level: "info" | "warn" | "error", message }`: recoveries, retries, loop detection, LLM errors, guidance acknowledged.
 
 ### `usage`
-`{ type, llm_calls, input_tokens, cached_input_tokens, output_tokens, cost_usd, elapsed_s, fast_calls, fast_ms_total, text_calls, extract_calls }`
+`{ type, llm_calls, input_tokens, cached_input_tokens, output_tokens, cost_usd, elapsed_s, fast_calls, fast_ms_total, text_calls, extract_calls, accounting? }`
+The legacy fields retain their meanings for old clients and budget checks.
 (`cost_usd` covers the planner and the extract model; TypeSafe responses carry token counts but no price.
 `extract_calls` counts page-to-rows calls by the `extract` tool; `cached_input_tokens` is the part of
 `input_tokens` read from the prompt cache, billed at a tenth of the input rate.)
+
+`accounting` is an optional, versioned measurement snapshot:
+
+```ts
+{
+  schema_version: 1,
+  run_id: string,                 // unique for each turn, not the whole chat
+  summary: AccountingSummary,
+  by_purpose: { planner: AccountingSummary, extract: AccountingSummary,
+                jev: AccountingSummary, text: AccountingSummary },
+  executed_fast_actions: number   // successful browser actions, excluding completion claims and skips
+}
+```
+
+Each `AccountingSummary` contains `attempts`, `successful_responses`, `input_tokens`, `output_tokens`,
+`cache_read_tokens`, `cache_write_tokens`, `duration_ms`, `known_cost_usd`, `total_cost_usd: number | null`,
+`unknown_cost_count`, `unknown_usage_count`, and `cost_basis: "provider" | "estimate" | "unknown"`.
+Tokens are available counts, not estimates for missing responses. Input totals already include cache tokens;
+do not add the cache fields again. Duration is summed request time, not run wall time (calls may overlap).
+Attempts include retries, errors, invalid replies, and cancellations. A successful response is not proof of a
+successful browser action. Existing `fast_calls` counts usable Jev decisions; it is not an action count.
+
+Unknown costs remain null per attempt. `known_cost_usd` sums available provider costs and configured-rate
+estimates. `total_cost_usd` is null if any attempt lacks a cost. A complete configured-rate estimate is labeled
+`estimate`, not a provider bill. TypeSafe cost remains unknown. Cancellation without a returned usage report
+has unknown usage and cost, since cancellation does not prove the provider performed no work.
+
+Usage events carry rollups only. The final `result.accounting` additionally contains `records` and
+`delegations`, persisted with the chat and included in Audit JSON. Old chats without accounting continue to
+show their legacy subtotal; they are not assigned fabricated historical usage.
+
+Each call record contains `run_id`, `purpose`, nullable `step_id`/`parent_step_id`, `logical_call_id`,
+`attempt_id`, one-based `attempt`, `provider`, `requested_model`, nullable `resolved_model`, `duration_ms`,
+`outcome` (`success`, `invalid_response`, `provider_error`, `transport_error`, or `cancelled`), nullable
+`input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens`, `cost_usd`, and `cost_basis`.
+Records contain no prompts, typed field values, API keys, or full provider responses.
+
+A delegate parent step has optional `delegation` metadata, also present in final accounting's `delegations`:
+`episode_id`, `run_id`, `parent_step_id`, `started_at`, `ended_at`, `reason`, `completion_claimed`,
+`jev_attempts`, `text_attempts`, `executed_actions`, and `skipped_actions`. Reasons are `claimed_done`,
+`stuck`, `low_confidence`, `no_change`, `attempt_budget`, `action_budget`, `observation_error`, `model_error`,
+`action_error`, `rejected`, `paused`, `stopped`, or `guidance_changed`. Executed actions count successful
+browser operations; skips exclude terminal/uncertainty decisions. Metadata does not enter model prompts or
+change completion verification, approvals, interruption handling, limits, or planner fallback.
+
+The existing cost limit still checks the legacy planner/extraction subtotal between planner steps. It is
+not a hard limit on total provider spend. Accounting does not change that policy.
 
 ### `result`
 ```
@@ -113,7 +161,8 @@ Jev's completion step remains a claim for the planner to check against the curre
   }[],
   assumptions: string[],     /* interpretations chosen where the goal was ambiguous */
   follow_ups: string[],      /* up to 3 suggested next goals; the UI only pre-fills them, never runs them */
-  remember: string[]         /* ≤3 lasting facts/preferences, kept only if grounded in the operator's own words */
+  remember: string[],        /* ≤3 lasting facts/preferences, kept only if grounded in the operator's own words */
+  accounting?: object       /* versioned snapshot above, including detailed records and delegations */
 }
 ```
 `success` is forced to `false` (with an issue) when any checklist item is unmet.

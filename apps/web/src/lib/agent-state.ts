@@ -251,6 +251,7 @@ function handleServer(state: AgentState, message: ServerMessage): AgentState {
           fast_ms_total: message.fast_ms_total,
           text_calls: message.text_calls,
           extract_calls: message.extract_calls,
+          accounting: message.accounting,
         },
       };
     case "result":
@@ -267,6 +268,7 @@ function handleServer(state: AgentState, message: ServerMessage): AgentState {
           assumptions: message.assumptions ?? [],
           follow_ups: message.follow_ups ?? [],
           remember: message.remember ?? [],
+          accounting: message.accounting,
         },
       };
   }

@@ -17,6 +17,7 @@ import httpx
 
 from .anthropic_backend import AnthropicBackend, AnthropicError
 from .browser import Observation
+from .telemetry import model_call, tracked_post
 
 JEV_URL = "https://api.typesafe.ai/v1/systemone"
 
@@ -179,6 +180,7 @@ class FastPolicy:
         self.anthropic = AnthropicBackend(config.text_api_key) \
             if config.text_provider == "anthropic" and config.text_api_key else None
 
+    @model_call
     async def decide(self, page: Observation, *, goal: str, subgoal: str, recent: list[str],
                      guidance: list[str]) -> FastDecision:
         body, targets, operations = build_request(page, goal=goal, subgoal=subgoal, recent=recent,
@@ -212,6 +214,7 @@ class FastPolicy:
                             alternatives=alternatives, irreversible=irreversible,
                             latency_ms=round((time.perf_counter() - started) * 1000), usage=result.get("usage", {}))
 
+    @model_call
     async def write_text(self, *, goal: str, subgoal: str, field: dict[str, Any], page: Observation,
                          recent: list[str]) -> tuple[str, int]:
         if not self.config.text_api_key:
@@ -246,7 +249,8 @@ class FastPolicy:
     async def _post(self, url: str, key: str, body: dict[str, Any]) -> dict[str, Any]:
         for attempt in range(3):
             try:
-                response = await self.http.post(url, json=body, headers={"Authorization": f"Bearer {key}"})
+                response = await tracked_post(self.http, url, provider="typesafe" if url == JEV_URL else "openrouter",
+                                              json=body, headers={"Authorization": f"Bearer {key}"})
             except httpx.HTTPError as exc:
                 if attempt == 2:
                     raise FastError(f"Could not reach the fast model ({type(exc).__name__}).") from None
