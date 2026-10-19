@@ -25,6 +25,7 @@ Give it any natural-language goal. It drives a real Chromium browser, streams ev
 | **Persistent Login Sessions & Autofill Profile** | Save authenticated cookies/`localStorage` across runs (`.hyperagent/storage_state.json`) via **Save login** / **Use saved login session**, and configure a local **Operator Profile** (`Profile` modal) for zero-typing form autofill. |
 | **Parallel Multi-Tab Research & Self-Improving Domain Memory** | `read_urls_parallel` opens and extracts up to 4 `http(s)` URLs concurrently in background tabs without stealing focus. Successful runs automatically distill concise domain workflow hints into `.hyperagent/domain_memory.json`. |
 | **Clean Final Result & Run-to-Run Table Diff** | Produces a verified Markdown summary, sortable data table, one-click **Diff vs previous run** (`New` row badges + `old → new` cell diffs), verified source links, open caveats, and **Copy MD / CSV / JSON** exports—plus a **History** drawer of recent runs. |
+| **Evidence beside result values** | Expand a table value's **Evidence** control (also available in single-item answers) to see its matching saved finding, source URL, recording step, time, and available step capture. Exact field/value matching avoids attaching another row's source through a shared price or substring. Missing and ambiguous matches stay explicit; unverified fields keep their warning. Captures provide step context, not independent proof, and background-page sources never borrow the active tab's capture. No additional model calls. |
 
 ---
 

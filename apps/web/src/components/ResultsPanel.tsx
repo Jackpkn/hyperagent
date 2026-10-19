@@ -13,6 +13,7 @@ interface ResultsPanelProps {
   mode?: "findings" | "result";
   goal?: string;
   steps?: StepRecord[];
+  captureStepIds?: string[];
   selectedStepId?: string | null;
   onInspectStep?: (stepId: string | null) => void;
   onUseFollowUp?: (text: string) => void;
@@ -30,6 +31,7 @@ export function ResultsPanel({
   mode = "result",
   goal,
   steps,
+  captureStepIds,
   selectedStepId,
   onInspectStep,
   onUseFollowUp,
@@ -75,6 +77,7 @@ export function ResultsPanel({
           findings={findings}
           goal={goal}
           steps={steps}
+          captureStepIds={captureStepIds}
           selectedStepId={selectedStepId}
           onInspectStep={onInspectStep}
           onUseFollowUp={onUseFollowUp}

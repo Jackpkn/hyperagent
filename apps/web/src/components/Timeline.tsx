@@ -367,6 +367,7 @@ export function Timeline({
                   findings={findings}
                   goal={goal}
                   steps={steps}
+                  captureStepIds={Object.keys(stepFrames ?? {})}
                   selectedStepId={selectedStepId}
                   onInspectStep={onSelectStep}
                   onUseFollowUp={onUseFollowUp}

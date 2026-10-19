@@ -1,19 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { Eye } from "lucide-react";
-import type { Finding } from "@/lib/protocol";
 import { formatCell } from "@/lib/format";
-import { matchRowToFinding } from "@/lib/findings";
+import { ValueEvidence, type EvidenceContext } from "./ValueEvidence";
 
-interface DataTableProps {
+interface DataTableProps extends EvidenceContext {
   columns: string[];
   rows: Record<string, unknown>[];
   compareRows?: Record<string, unknown>[];
   unverifiedValues?: Set<string>;
-  findings?: Finding[];
-  selectedStepId?: string | null;
-  onInspectStep?: (stepId: string | null) => void;
 }
 
 type SortState = { column: string; direction: "asc" | "desc" } | null;
@@ -60,6 +55,8 @@ export function DataTable({
   compareRows,
   unverifiedValues,
   findings,
+  steps,
+  captureStepIds,
   selectedStepId,
   onInspectStep,
 }: DataTableProps) {
@@ -150,13 +147,9 @@ export function DataTable({
               ? (keyVal && compareLookup.byKey.get(keyVal)) ?? compareLookup.byIndex[rowIndex]
               : undefined;
             const isNewRow = Boolean(compareLookup && !prevRow);
-            const matchedFinding = matchRowToFinding(row, findings);
-            const receiptStepId = matchedFinding?.step_id;
-            const receiptStepN = matchedFinding?.step_n;
-            const isReceiptActive = Boolean(receiptStepId && selectedStepId === receiptStepId);
 
             return (
-              <tr key={rowIndex} className={isNewRow ? "is-diff-new-row" : undefined}>
+              <tr key={rows.indexOf(row)} className={isNewRow ? "is-diff-new-row" : undefined}>
                 {columns.map((column, colIdx) => {
                   const currText = formatCell(row[column]);
                   const prevText = prevRow ? formatCell(prevRow[column]) : "";
@@ -183,7 +176,7 @@ export function DataTable({
                           <span className="diff-curr">{currText || "–"}</span>
                         </span>
                       ) : (
-                        currText
+                        <span>{currText}</span>
                       )}
                       {isSuspect ? (
                         <span
@@ -193,17 +186,8 @@ export function DataTable({
                           ⚠ unverified
                         </span>
                       ) : null}
-                      {colIdx === 0 && receiptStepId && onInspectStep ? (
-                        <button
-                          type="button"
-                          className={`step-inspect-btn receipt-inline-btn${isReceiptActive ? " is-active" : ""}`}
-                          onClick={() => onInspectStep(isReceiptActive ? null : receiptStepId)}
-                          title={`Click to view the exact browser screenshot (Step #${receiptStepN ?? receiptStepId}) where this row was captured`}
-                        >
-                          <Eye size={10} aria-hidden="true" />
-                          <span>{isReceiptActive ? "Viewing" : `Receipt #${receiptStepN ?? ""}`}</span>
-                        </button>
-                      ) : null}
+                      <ValueEvidence row={row} column={column} findings={findings} steps={steps}
+                        captureStepIds={captureStepIds} selectedStepId={selectedStepId} onInspectStep={onInspectStep} />
                     </td>
                   );
                 })}

@@ -493,6 +493,7 @@ export function AgentApp() {
                   endedWithoutResult={restored ? null : endedWithoutResult}
                   goal={shown.goal}
                   steps={shown.steps}
+                  captureStepIds={restored ? restored.frameSteps : Object.keys(state.stepFrames)}
                   selectedStepId={shownSelectedStepId}
                   onInspectStep={inspectShown}
                   onUseFollowUp={prefillFollowUp}

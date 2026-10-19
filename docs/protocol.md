@@ -77,7 +77,17 @@ Jev's completion step remains a claim for the planner to check against the curre
 `{ type, items: { text: string, status: "pending" | "active" | "done" | "skipped" }[] }`: the agent's own evolving plan.
 
 ### `findings`
-`{ type, items: { source_url: string, data: object, unverified?: string[], step_id?: string, step_n?: number }[] }`: the full list of structured data recorded so far (replace, don't append). `unverified` lists any field keys whose extracted values could not be verified directly against the observed page text; `step_id` / `step_n` link each finding to the exact step snapshot where it was recorded.
+`{ type, items: { source_url: string, data: object, unverified?: string[], step_id?: string, step_n?: number }[] }`: the full list of structured data recorded so far (replace, don't append). `unverified` lists field keys whose values could not be matched against the observed page text; this check is not independent source verification. `step_id` / `step_n` identify the recording step. Its optional viewport capture may not show the field or the source page, especially for background extraction.
+
+The console's per-value evidence disclosure uses these existing fields and the turn's steps/capture index;
+there is no new server event or model request. Every nonempty result-row field must match a finding by
+field name (trimmed, case-insensitive) and value (trimmed, otherwise exact). Reworded, derived or missing
+values remain unlinked; multiple matching findings remain ambiguous. A unique match shows its source,
+unverified-field warning, and the recording step's end time (start time if no end time exists), labelled
+"Recorded at", not a source-observation timestamp. Capture inspection requires a successful step, a saved
+capture entry, and matching step/source URLs (ignoring fragments only). These links survive normal chat
+restoration and table sorting. Older reports without findings or recording metadata show unavailable
+evidence rather than inferred provenance. Audit JSON already includes the findings and steps used here.
 
 ### `approval`
 `{ type, step_id, reason, action_label, target_label?, args }`: a risky step waits. Cleared by a later `step` update for that id.

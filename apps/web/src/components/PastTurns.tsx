@@ -121,6 +121,7 @@ function PastTurn({
             findings={turn.findings}
             goal={turn.goal}
             steps={turn.steps}
+            captureStepIds={turn.frameSteps}
             selectedStepId={selectedStepId}
             onInspectStep={inspect}
             onUseFollowUp={onUseFollowUp}

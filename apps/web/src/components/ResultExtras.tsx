@@ -1,8 +1,9 @@
 "use client";
 
 import { ArrowRight, Check, Eye, Lightbulb, Route, X, Zap } from "lucide-react";
-import type { ChecklistItem, Finding, StepRecord } from "@/lib/protocol";
+import type { ChecklistItem, StepRecord } from "@/lib/protocol";
 import { formatCell, formatDuration } from "@/lib/format";
+import { ValueEvidence, type EvidenceContext } from "./ValueEvidence";
 
 // Steps that hand control around rather than act on the page.
 const NOT_ACTIONS = new Set(["done", "delegate", "subgoal_done", "stuck", "unsure"]);
@@ -141,13 +142,10 @@ export function Checklist({ items, selectedStepId, onInspectStep }: ChecklistPro
   );
 }
 
-interface AnswerCardProps {
+interface AnswerCardProps extends EvidenceContext {
   columns: string[];
   row: Record<string, unknown>;
   unverifiedValues: Set<string>;
-  finding?: Finding;
-  selectedStepId?: string | null;
-  onInspectStep?: (stepId: string | null) => void;
 }
 
 /** A single-item result reads better as labelled facts than as a one-row table. */
@@ -155,7 +153,9 @@ export function AnswerCard({
   columns,
   row,
   unverifiedValues,
-  finding,
+  findings,
+  steps,
+  captureStepIds,
   selectedStepId,
   onInspectStep,
 }: AnswerCardProps) {
@@ -163,12 +163,6 @@ export function AnswerCard({
     <div className="result-section">
       <div className="result-section-head">
         <h3 className="section-label eyebrow">Answer</h3>
-        <StepLink
-          stepId={finding?.step_id}
-          stepN={finding?.step_n}
-          selectedStepId={selectedStepId}
-          onInspectStep={onInspectStep}
-        />
       </div>
       <dl className="answer-card">
         {columns.map((column) => {
@@ -184,6 +178,8 @@ export function AnswerCard({
                     ⚠ unverified
                   </span>
                 ) : null}
+                <ValueEvidence row={row} column={column} findings={findings} steps={steps}
+                  captureStepIds={captureStepIds} selectedStepId={selectedStepId} onInspectStep={onInspectStep} />
               </dd>
             </div>
           );

@@ -17,7 +17,6 @@ import type { Finding, RunResult, StepRecord, Usage } from "@/lib/protocol";
 import { copyText, downloadText, resultToCsv, resultToMarkdown } from "@/lib/export";
 import { domainOf, formatCell, formatCost } from "@/lib/format";
 import { fastUsage, usageCost } from "@/lib/usage";
-import { matchRowToFinding } from "@/lib/findings";
 import { DataTable } from "./DataTable";
 import { Markdown } from "./Markdown";
 import { AnswerCard, Assumptions, Checklist, FollowUps, RunRecap } from "./ResultExtras";
@@ -31,6 +30,7 @@ interface ResultReportProps {
   findings?: Finding[];
   goal?: string;
   steps?: StepRecord[];
+  captureStepIds?: string[];
   selectedStepId?: string | null;
   onInspectStep?: (stepId: string | null) => void;
   /** Pre-fills the message box with a suggested follow-up; never starts a run by itself. */
@@ -53,6 +53,7 @@ export function ResultReport({
   findings,
   goal,
   steps,
+  captureStepIds,
   selectedStepId,
   onInspectStep,
   onUseFollowUp,
@@ -226,7 +227,9 @@ export function ResultReport({
           columns={result.columns}
           row={result.rows[0]}
           unverifiedValues={unverifiedValues}
-          finding={matchRowToFinding(result.rows[0], findings)}
+          findings={findings}
+          steps={steps}
+          captureStepIds={captureStepIds}
           selectedStepId={selectedStepId}
           onInspectStep={onInspectStep}
         />
@@ -254,6 +257,8 @@ export function ResultReport({
             compareRows={showDiff && previousResult ? previousResult.rows : undefined}
             unverifiedValues={unverifiedValues}
             findings={findings}
+            steps={steps}
+            captureStepIds={captureStepIds}
             selectedStepId={selectedStepId}
             onInspectStep={onInspectStep}
           />

@@ -1,28 +1,37 @@
 import type { Finding } from "./protocol";
 import { formatCell } from "./format";
 
-/** The saved finding (with a step snapshot) that best matches a result row, for click-to-verify receipts. */
-export function matchRowToFinding(
-  row: Record<string, unknown>,
-  findings: Finding[] | undefined,
-): Finding | undefined {
-  if (!findings || findings.length === 0) return undefined;
-  const rowStrings = Object.values(row)
-    .map((v) => formatCell(v).trim().toLowerCase())
-    .filter((s) => s.length >= 3);
-  if (rowStrings.length === 0) return undefined;
-  let best: Finding | undefined;
-  let bestScore = 0;
-  for (const f of findings) {
-    if (!f.step_id) continue;
-    const fVals = Object.values(f.data).map((v) => formatCell(v).trim().toLowerCase());
-    const score = rowStrings.filter((rv) =>
-      fVals.some((fv) => fv && (fv === rv || fv.includes(rv) || rv.includes(fv))),
-    ).length;
-    if (score > bestScore) {
-      bestScore = score;
-      best = f;
-    }
+const fieldKey = (key: string) => key.trim().toLowerCase();
+
+/** All nonempty result fields must match by key AND value. A shared price or substring
+ * cannot identify a row. Reworded/derived values stay unlinked; ties remain ambiguous.
+ */
+export function cellFindings(
+  row: Record<string, unknown>, column: string, findings: Finding[] = [],
+): Finding[] {
+  if (!formatCell(row[column]).trim()) return [];
+  const entries = Object.entries(row).filter(([, value]) => formatCell(value).trim());
+  return findings.filter((finding) => entries.every(([key, value]) => {
+    const fields = Object.keys(finding.data).filter((candidate) => fieldKey(candidate) === fieldKey(key));
+    return fields.length === 1 && formatCell(finding.data[fields[0]]).trim() === formatCell(value).trim();
+  }));
+}
+
+export function isUnverifiedField(finding: Finding, column: string): boolean {
+  return Boolean(finding.unverified?.some((key) => fieldKey(key) === fieldKey(column)));
+}
+
+export function webUrl(value: string | undefined): string | null {
+  try {
+    const url = new URL(value ?? "");
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : null;
+  } catch {
+    return null;
   }
-  return best;
+}
+
+export function sameSourcePage(a: string | undefined, b: string | undefined): boolean {
+  const first = webUrl(a);
+  const second = webUrl(b);
+  return Boolean(first && second && first.split("#")[0] === second.split("#")[0]);
 }

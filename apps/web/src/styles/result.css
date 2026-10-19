@@ -231,3 +231,46 @@
 .md-table tr:last-child td {
   border-bottom: 0;
 }
+
+/* Evidence stays in the result's flow, including narrow panes and keyboard navigation. */
+.value-evidence {
+  margin-top: 6px;
+  font-size: 11px;
+  font-weight: 400;
+  white-space: normal;
+}
+
+.value-evidence > summary {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  width: fit-content;
+  max-width: 100%;
+  padding: 3px 0;
+  color: var(--muted);
+  cursor: pointer;
+  list-style: none;
+  white-space: nowrap;
+}
+
+.value-evidence > summary::-webkit-details-marker { display: none; }
+.value-evidence > summary svg { flex: none; }
+.value-evidence > summary:hover,
+.value-evidence[open] > summary { color: var(--signal); }
+.value-evidence > summary:focus-visible { outline: 2px solid var(--signal); outline-offset: 3px; }
+
+.value-evidence-body {
+  width: min(280px, 50vw);
+  max-width: 100%;
+  padding: 10px;
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius-xs);
+  background: var(--surface-sunk);
+  color: var(--ink-soft);
+  overflow-wrap: anywhere;
+  line-height: 1.6;
+}
+
+.value-evidence-body p { margin: 0 0 7px; }
+.value-evidence-source { display: block; margin-bottom: 7px; color: var(--signal); }
+.value-evidence-source svg { display: inline; margin-left: 4px; }

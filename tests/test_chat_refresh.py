@@ -98,6 +98,72 @@ async def test_refresh_keeps_partial_findings_in_main_stream(console):
     await expect(page.get_by_text("Refresh test item", exact=True)).to_be_visible()
 
 
+async def test_result_value_evidence_survives_sorting_and_refresh(console):
+    page, sockets = console
+    ws = sockets[-1]
+    image = base64.b64encode((WEB / "scripts/mock-frames/frame-1.jpg").read_bytes()).decode()
+    ws.send(json.dumps({"type": "frame", "image": image, "url": FINDING["source_url"],
+                        "title": "Catalog", "w": 1280, "h": 800, "tabs": []}))
+    step = {"id": "s1", "n": 1, "status": "ok", "url": FINDING["source_url"],
+            "started_at": 1792350000, "ended_at": 1792350001,
+            "action": {"name": "record_findings", "args": {}, "label": "Save catalog findings"}}
+    ws.send(json.dumps({"type": "step", **step}))
+    ws.send(json.dumps({"type": "findings", "items": [{**FINDING, "step_id": "s1", "step_n": 1}]}))
+    ws.send(json.dumps({**RESULT, "rows": [RESULT["rows"][0], {"Item": "Second item", "Price": "$25"}]}))
+    ws.send(json.dumps({"type": "status", "state": "done", "step": 1}))
+    await wait_saved(page, lambda turn: turn and turn["result"] and "s1" in turn["frameSteps"])
+
+    for reload in (False, True):
+        if reload:
+            await page.reload()
+        await page.get_by_role("tab", name="Report Only").click()
+        await page.get_by_role("button", name="Price", exact=False).first.click()
+        row = page.get_by_role("row").filter(has_text="Refresh test item")
+        await row.get_by_label("Evidence for Price: $25", exact=True).click()
+        panel = row.locator(".value-evidence[open]")
+        await expect(panel.get_by_role("link", name="https://example.com/catalog", exact=True)).to_be_visible()
+        await expect(panel.get_by_text("Recorded at", exact=False)).to_be_visible()
+        await panel.get_by_role("button", name="View step capture").click()
+        await expect(page.get_by_text("Step #1 snapshot", exact=True)).to_be_visible()
+        await panel.get_by_role("button", name="Back to live").click()
+        # The second row must not borrow the first row's source merely because it is in this report.
+        other = page.get_by_role("row").filter(has_text="Second item")
+        await other.get_by_label("Evidence for Price: $25", exact=True).click()
+        await expect(other.locator(".value-evidence[open]").get_by_text(
+            "No matching saved finding for this value.", exact=True)).to_be_visible()
+
+
+@pytest.mark.parametrize("variant", ["ambiguous", "unverified", "background", "missing_capture"])
+async def test_result_evidence_does_not_overclaim(console, variant):
+    page, sockets = console
+    ws = sockets[-1]
+    finding = {**FINDING, "step_id": "s1", "step_n": 1}
+    step = {"id": "s1", "n": 1, "status": "ok", "url": FINDING["source_url"],
+            "started_at": 1792350000, "ended_at": 1792350001,
+            "action": {"name": "extract", "args": {}, "label": "Extract catalog"}}
+    if variant == "unverified":
+        finding["unverified"] = ["Price"]
+    if variant == "background":
+        step["url"] = "https://example.com/another-page"
+    findings = [finding]
+    if variant == "ambiguous":
+        findings.append({**finding, "source_url": "https://example.com/second-source"})
+    ws.send(json.dumps({"type": "step", **step}))
+    ws.send(json.dumps({"type": "findings", "items": findings}))
+    # A one-row answer must offer the same evidence controls as a multi-row table.
+    ws.send(json.dumps({**RESULT, "rows": RESULT["rows"][:1]}))
+    ws.send(json.dumps({"type": "status", "state": "done", "step": 1}))
+    await page.get_by_label("Evidence for Price: $25", exact=True).click()
+    panel = page.locator(".value-evidence[open]")
+    message = {"ambiguous": "Multiple saved findings match; no single source has been selected.",
+               "unverified": "This field was flagged as unverified when saved.",
+               "background": ("This step's browser page differs from the finding's source; "
+                              "its capture is not source evidence."),
+               "missing_capture": "No saved capture is available for this step."}[variant]
+    await expect(panel.get_by_text(message, exact=True)).to_be_visible()
+    await expect(panel.get_by_role("button", name="View step capture")).to_have_count(0)
+
+
 async def test_accounting_survives_refresh_without_savings_claims(console):
     from hyperagent.telemetry import CallRecord, RunLedger
 
