@@ -35,6 +35,14 @@ All messages are JSON objects with a `type` field. The server never sends secret
 `{ type, image: string /* base64 jpeg */, url, title, w, h, tabs: {index, title, url, active}[] }`
 Sent continuously (~2–3 fps) while the browser exists, including while paused.
 
+### `browser_session`
+`{ type, active: boolean }`: `active: false` is sent after the browser closes, including idle expiry,
+and when a takeover command reaches an already closed session. The UI retains the last image as a
+read-only saved view, disables takeover and "Continue here", and explains that a new message opens a
+fresh browser. Incoming live frames establish an active browser; disconnects clear that state.
+Takeover still requires pause/user-input or a terminal run state, and an active browser. A terminal
+run can accept takeover during final session cleanup; an expired session reports "closed", not "pause".
+
 ### `step`
 A complete step record; sent when created and whenever it changes (same `id`, replace fields).
 ```
@@ -81,7 +89,8 @@ Jev's completion step remains a claim for the planner to check against the curre
 
 The console's per-value evidence disclosure uses these existing fields and the turn's steps/capture index;
 there is no new server event or model request. Every nonempty result-row field must match a finding by
-field name (trimmed, case-insensitive) and value (trimmed, otherwise exact). Reworded, derived or missing
+field name (trimmed, case-insensitive) and value (trimmed, otherwise exact). The `Source URL` / `source_url`
+column matches the finding's top-level `source_url` metadata as a validated HTTP(S) URL. Reworded, derived or missing
 values remain unlinked; multiple matching findings remain ambiguous. A unique match shows its source,
 unverified-field warning, and the recording step's end time (start time if no end time exists), labelled
 "Recorded at", not a source-observation timestamp. Capture inspection requires a successful step, a saved

@@ -12,6 +12,11 @@ export function cellFindings(
   if (!formatCell(row[column]).trim()) return [];
   const entries = Object.entries(row).filter(([, value]) => formatCell(value).trim());
   return findings.filter((finding) => entries.every(([key, value]) => {
+    // The source is metadata, not normally a field inside finding.data.
+    if (/^source[\s_]*url$/i.test(key.trim())) {
+      const source = webUrl(finding.source_url);
+      return Boolean(source && webUrl(formatCell(value).trim()) === source);
+    }
     const fields = Object.keys(finding.data).filter((candidate) => fieldKey(candidate) === fieldKey(key));
     return fields.length === 1 && formatCell(finding.data[fields[0]]).trim() === formatCell(value).trim();
   }));

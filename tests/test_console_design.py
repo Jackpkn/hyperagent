@@ -56,6 +56,41 @@ async def start_task(page, goal="Compare the catalog items"):
     await page.get_by_role("button", name="Start agent", exact=True).click()
 
 
+async def test_expired_browser_keeps_image_but_blocks_takeover_messages(design_console):
+    page, sockets, messages = design_console
+    await start_task(page)
+    ws = sockets[-1]
+    image = base64.b64encode((WEB / "scripts/mock-frames/frame-1.jpg").read_bytes()).decode()
+    ws.send(json.dumps({"type": "frame", "image": image, "url": "https://example.com/catalog",
+                        "title": "Catalog", "w": 1280, "h": 800, "tabs": [
+                            {"index": 0, "title": "Catalog", "url": "https://example.com/catalog", "active": True},
+                            {"index": 1, "title": "Second tab", "url": "https://example.com/second", "active": False},
+                        ]}))
+    ws.send(json.dumps({"type": "status", "state": "done", "step": 1}))
+    shot = page.get_by_role("img", name="Screenshot of Catalog")
+    await shot.click(position={"x": 20, "y": 20})
+    await expect(page.get_by_role("tab", name="Second tab", exact=True)).to_be_enabled()
+    assert messages[-1]["type"] == "takeover_click"
+    ws.send(json.dumps({"type": "status", "state": "thinking", "step": 2}))
+    await expect(page.get_by_role("tab", name="Second tab", exact=True)).to_be_disabled()
+    before = len(messages)
+    await shot.click(position={"x": 20, "y": 20})
+    await shot.dispatch_event("wheel", {"deltaY": 200})
+    assert messages[before:] == []
+    ws.send(json.dumps({"type": "status", "state": "done", "step": 2}))
+    await expect(page.get_by_role("tab", name="Second tab", exact=True)).to_be_enabled()
+    ws.send(json.dumps({"type": "browser_session", "active": False}))
+    await expect(page.get_by_role("tab", name="Second tab", exact=True)).to_be_disabled()
+    before = len(messages)
+    for _ in range(3):
+        await shot.click(position={"x": 20, "y": 20})
+        await shot.dispatch_event("wheel", {"deltaY": 200})
+    await expect(page.get_by_text("This is a saved screenshot; the browser is closed, so it cannot scroll. "
+                                  "Send a message to open a fresh browser.", exact=True)).to_be_visible()
+    await expect(shot).to_be_visible()
+    assert messages[before:] == []
+
+
 async def screenshot(page, name):
     if directory := os.environ.get("CONSOLE_SCREENSHOTS"):
         await page.screenshot(path=str(Path(directory) / f"{name}.png"), full_page=True, animations="disabled")

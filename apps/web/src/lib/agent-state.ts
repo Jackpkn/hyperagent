@@ -40,6 +40,8 @@ export interface AgentState {
   approvals: Record<string, Approval>;
   questions: Record<string, Question>;
   frame: Frame | null;
+  /** A retained frame can outlive the live browser session. */
+  browserActive: boolean;
   stepFrames: Record<string, Frame>;
   findings: Finding[];
   usage: Usage | null;
@@ -66,6 +68,7 @@ export const initialAgentState: AgentState = {
   approvals: {},
   questions: {},
   frame: null,
+  browserActive: false,
   stepFrames: {},
   findings: [],
   usage: null,
@@ -162,6 +165,8 @@ function handleServer(state: AgentState, message: ServerMessage): AgentState {
       };
     case "status":
       return handleStatus(state, message);
+    case "browser_session":
+      return { ...state, browserActive: message.active };
     case "frame": {
       const nextFrame: Frame = {
         image: message.image,
@@ -179,6 +184,7 @@ function handleServer(state: AgentState, message: ServerMessage): AgentState {
       return {
         ...state,
         frame: nextFrame,
+        browserActive: true,
         stepFrames,
       };
     }
@@ -280,6 +286,7 @@ export function agentReducer(state: AgentState, action: AgentAction): AgentState
       return {
         ...state,
         connection: action.connection,
+        browserActive: action.connection === "open" && state.browserActive,
         reconnectAttempt: action.attempt ?? state.reconnectAttempt,
       };
     case "server":
@@ -301,6 +308,7 @@ export function agentReducer(state: AgentState, action: AgentAction): AgentState
         approvals: {},
         questions: {},
         frame: action.continueSession ? state.frame : null,
+        browserActive: Boolean(action.continueSession && state.browserActive),
         stepFrames: {},
         findings: action.continueSession ? state.findings : [],
         usage: null,

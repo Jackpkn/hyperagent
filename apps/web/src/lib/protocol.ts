@@ -271,6 +271,7 @@ export type ServerMessage =
   | ({ type: "hello" } & Hello)
   | ({ type: "status" } & StatusMessage)
   | ({ type: "frame" } & Frame)
+  | { type: "browser_session"; active: boolean }
   | ({ type: "step" } & StepRecord)
   | { type: "plan"; items: PlanItem[] }
   | { type: "findings"; items: Finding[] }
@@ -351,6 +352,7 @@ export function parseServerMessage(raw: string): ServerMessage | null {
     case "hello":
     case "status":
     case "frame":
+    case "browser_session":
     case "step":
     case "plan":
     case "findings":
@@ -360,6 +362,7 @@ export function parseServerMessage(raw: string): ServerMessage | null {
     case "usage":
     case "result":
       if (data.type === "status" && !isRunState(data.state)) return null;
+      if (data.type === "browser_session" && typeof data.active !== "boolean") return null;
       if (data.type === "step" && (typeof data.id !== "string" || typeof data.n !== "number")) {
         return null;
       }

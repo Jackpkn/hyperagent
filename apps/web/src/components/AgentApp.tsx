@@ -78,6 +78,7 @@ export function AgentApp() {
   // A chat reopened (or restored after a reload) has no live run: treat it like a finished one.
   const idleChat = showRun && state.run === "idle";
   const finished = isRunFinished(state.run) || idleChat;
+  const hasLiveBrowser = connected && state.browserActive && Boolean(state.frame);
   const now = useNow(showRun && !finished);
 
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("steps");
@@ -503,7 +504,7 @@ export function AgentApp() {
               <GuidanceComposer
                 question={question}
                 finished={finished}
-                hasLiveBrowser={Boolean(state.frame)}
+                hasLiveBrowser={hasLiveBrowser}
                 seed={composerSeed}
                 pinnedPoint={pinnedPoint}
                 onClearPin={() => {
@@ -541,18 +542,18 @@ export function AgentApp() {
                 frame={selectedStepFrame ?? state.frame ?? stored.restoredFrame}
                 target={target}
                 statusText={
-                  !state.frame && stored.restoredFrame && !selectedStepFrame
+                  !hasLiveBrowser && (state.frame || stored.restoredFrame) && !selectedStepFrame
                     ? "Saved view · your next message opens a fresh browser"
                     : statusText
                 }
                 paused={state.run === "paused"}
                 takeoverEnabled={
-                  state.run === "paused" ||
+                  hasLiveBrowser && (state.run === "paused" ||
                   state.run === "awaiting_user" ||
-                  (finished && Boolean(state.frame))
+                  finished)
                 }
                 blockedHint={
-                  state.frame
+                  hasLiveBrowser
                     ? "The agent is driving the browser. Press Pause, then scroll or click the page yourself."
                     : "This is a saved screenshot; the browser is closed, so it cannot scroll. Send a message to open a fresh browser."
                 }

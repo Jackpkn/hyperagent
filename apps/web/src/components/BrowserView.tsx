@@ -165,6 +165,7 @@ export function BrowserView({
                 className="tab"
                 aria-selected={tab.active}
                 aria-current={tab.active ? "true" : "false"}
+                disabled={!takeoverEnabled}
                 title={tab.url ? `Switch to ${tab.title || tab.url}` : "Switch tab"}
                 onClick={() => {
                   if (!tab.active && onSwitchTab) onSwitchTab(tab.index);

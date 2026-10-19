@@ -233,7 +233,12 @@ class Session:
     async def takeover(self, cmd: Command) -> None:
         agent, browser = self.agent, self.browser
         # Allowed when paused, waiting for user input, or after the run has finished while the browser stays open.
-        if browser is None or (self.running and agent is not None and agent.state not in ("paused", "awaiting_user")):
+        if browser is None:
+            await self.send({"type": "browser_session", "active": False})
+            await self.error("The browser session has closed. Send a new message to open a fresh browser.")
+            return
+        if self.running and (agent is None or agent.state not in
+                             ("paused", "awaiting_user", "done", "failed", "stopped")):
             await self.error("Pause the agent before taking over the browser.")
             return
         try:
@@ -383,6 +388,7 @@ class Session:
         if self.browser:
             await self.browser.close()
             self.browser = None
+            await self.send({"type": "browser_session", "active": False})
 
     async def close(self) -> None:
         self.closed = True

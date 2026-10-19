@@ -109,7 +109,10 @@ async def test_result_value_evidence_survives_sorting_and_refresh(console):
             "action": {"name": "record_findings", "args": {}, "label": "Save catalog findings"}}
     ws.send(json.dumps({"type": "step", **step}))
     ws.send(json.dumps({"type": "findings", "items": [{**FINDING, "step_id": "s1", "step_n": 1}]}))
-    ws.send(json.dumps({**RESULT, "rows": [RESULT["rows"][0], {"Item": "Second item", "Price": "$25"}]}))
+    ws.send(json.dumps({**RESULT, "columns": [*RESULT["columns"], "Source URL"], "rows": [
+        {**RESULT["rows"][0], "Source URL": FINDING["source_url"]},
+        {"Item": "Second item", "Price": "$25", "Source URL": FINDING["source_url"]},
+    ]}))
     ws.send(json.dumps({"type": "status", "state": "done", "step": 1}))
     await wait_saved(page, lambda turn: turn and turn["result"] and "s1" in turn["frameSteps"])
 
@@ -133,7 +136,7 @@ async def test_result_value_evidence_survives_sorting_and_refresh(console):
             "No matching saved finding for this value.", exact=True)).to_be_visible()
 
 
-@pytest.mark.parametrize("variant", ["ambiguous", "unverified", "background", "missing_capture"])
+@pytest.mark.parametrize("variant", ["ambiguous", "unverified", "background", "missing_capture", "wrong_source"])
 async def test_result_evidence_does_not_overclaim(console, variant):
     page, sockets = console
     ws = sockets[-1]
@@ -151,7 +154,10 @@ async def test_result_evidence_does_not_overclaim(console, variant):
     ws.send(json.dumps({"type": "step", **step}))
     ws.send(json.dumps({"type": "findings", "items": findings}))
     # A one-row answer must offer the same evidence controls as a multi-row table.
-    ws.send(json.dumps({**RESULT, "rows": RESULT["rows"][:1]}))
+    row = RESULT["rows"][0]
+    if variant == "wrong_source":
+        row = {**row, "Source URL": "https://example.com/wrong"}
+    ws.send(json.dumps({**RESULT, "rows": [row]}))
     ws.send(json.dumps({"type": "status", "state": "done", "step": 1}))
     await page.get_by_label("Evidence for Price: $25", exact=True).click()
     panel = page.locator(".value-evidence[open]")
@@ -159,7 +165,8 @@ async def test_result_evidence_does_not_overclaim(console, variant):
                "unverified": "This field was flagged as unverified when saved.",
                "background": ("This step's browser page differs from the finding's source; "
                               "its capture is not source evidence."),
-               "missing_capture": "No saved capture is available for this step."}[variant]
+               "missing_capture": "No saved capture is available for this step.",
+               "wrong_source": "No matching saved finding for this value."}[variant]
     await expect(panel.get_by_text(message, exact=True)).to_be_visible()
     await expect(panel.get_by_role("button", name="View step capture")).to_have_count(0)
 
